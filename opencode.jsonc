@@ -1,10 +1,31 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan",
+  "subagent_depth": 1,
   "share": "disabled",
   "instructions": [
     "AGENTS.md"
   ],
+  "agent": {
+    "build": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "ui-engineer": "allow",
+          "backend-mentor": "allow",
+          "task-reviewer": "allow"
+        },
+        "bash": {
+          "git switch*": "ask",
+          "git checkout*": "ask",
+          "git add*": "ask",
+          "git commit*": "ask",
+          "git push*": "ask",
+          "gh pr create*": "ask"
+        }
+      }
+    }
+  },
   "permission": {
     "external_directory": "deny",
     "skill": "allow",

@@ -89,10 +89,12 @@ See [tasks/ROADMAP.md](tasks/ROADMAP.md) for dependencies and completion rules.
 
 ## OpenCode workflow
 
-TenantForge includes two project agents:
+TenantForge includes two implementation agents and one read-only reviewer:
 
 - `ui-engineer` owns the frontend, browser states, responsiveness and visual verification.
 - `backend-mentor` implements only the backend required by the active slice, tests it, and explains it.
+- `task-reviewer` checks the finished diff against visible behavior, scope,
+  security, tests and the learning goal without editing files.
 
 OpenCode loads their definitions from `.opencode/agents/`. Project-specific skills live in `.opencode/skills/`.
 
@@ -102,13 +104,31 @@ Start OpenCode from the repository root:
 opencode
 ```
 
-Use the built-in Plan agent to inspect a task, then select or mention the appropriate TenantForge agent.
-
-Example:
+Use `/task` as the normal entry point. It synchronizes `main`, selects one
+runnable roadmap slice, prepares a bounded plan, waits for approval, invokes the
+correct implementation agent phases, validates the browser-visible result and
+stops again for review before delivery.
 
 ```text
-@ui-engineer implement tasks/000-ui-foundation.md and stop after its acceptance criteria are met.
+/task                         # next runnable roadmap slice
+/task S00                     # an explicit slice
+/task 00                      # numeric shorthand
+/task tasks/000-ui-foundation.md
 ```
+
+If an approved session is interrupted after its branch has been created, resume
+it without hiding or resetting partial work:
+
+```text
+/task-run S00
+```
+
+The older focused commands remain useful for read-only planning and review:
+
+- `/start-slice tasks/000-ui-foundation.md` inspects one task without editing;
+- `/review-slice tasks/000-ui-foundation.md` reviews the current worktree;
+- `@ui-engineer` and `@backend-mentor` can still be invoked manually for a
+  narrowly-scoped phase.
 
 Install the optional upstream UI skills locally in this repository:
 

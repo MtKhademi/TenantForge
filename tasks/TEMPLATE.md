@@ -4,6 +4,10 @@
 
 `Planned`
 
+Allowed values are `Planned` and `Done`. A task becomes `Done` only in its
+delivery commit after validation, review and final user approval; keep the task
+file in the repository.
+
 ## Owner
 
 `ui-engineer`, `backend-mentor`, or an explicit sequence of both.

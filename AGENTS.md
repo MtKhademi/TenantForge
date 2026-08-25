@@ -4,10 +4,14 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 
 ## Before changing files
 
-1. Read the active task completely.
-2. Read only the product, architecture or design documents referenced by that task.
-3. State the visible outcome, files you expect to touch and what remains out of scope.
-4. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
+1. Start normal roadmap work with `/task`; use `/task-run` only to recover an
+   interrupted, already-approved slice branch.
+2. Read the active task completely.
+3. Read only the product, architecture or design documents referenced by that task.
+4. State the visible outcome, files you expect to touch and what remains out of scope.
+5. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
+6. Wait for explicit plan approval before editing, installing packages, creating
+   a branch or running implementation commands.
 
 ## Scope discipline
 
@@ -83,11 +87,16 @@ Do not turn the learning note into framework documentation. Explain only the cod
 
 ## Git safety
 
-- Work on a task-specific branch or worktree.
+- Synchronize a clean `main`, then work on `slice/<slice-id>-<slug>` after plan
+  approval.
 - Show `git status` and `git diff` before proposing a commit.
 - Never force-push, rewrite shared history or push directly to `main`.
 - Do not commit secrets, local credentials, database data or generated browser artifacts.
 - Keep `main` runnable and demoable.
+- Do not delete completed task files. Mark their status and roadmap row `Done`
+  in the delivery commit so the public learning history remains readable.
+- Require a second user approval after validation and review before commit,
+  push and pull-request creation.
 
 ## Security baseline
 
