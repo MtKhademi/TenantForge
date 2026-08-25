@@ -1,8 +1,9 @@
 # S00 — UI foundation
 
-## Status
+## Executable tasks
 
-`Planned`
+- Front: `F001`
+- Backend: None
 
 ## Owner
 

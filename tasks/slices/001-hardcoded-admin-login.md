@@ -1,8 +1,9 @@
 # S01 — Development-only hardcoded admin login
 
-## Status
+## Executable tasks
 
-`Planned`
+- Backend: `B001`
+- Front: `F002`
 
 ## Owner
 

@@ -3,7 +3,8 @@ description: Review the active TenantForge slice against its task and visible-fi
 agent: plan
 ---
 
-Review the working tree against the task path supplied in `$ARGUMENTS` and `AGENTS.md`.
+Review the current clone against the executable task path supplied in
+`$ARGUMENTS`, its source slice and `AGENTS.md`.
 
 Check:
 
@@ -15,5 +16,8 @@ Check:
 - speculative abstractions or future-slice work;
 - learning-note clarity;
 - accidental changes outside task ownership.
+- changes to the static roadmap, sibling queue tasks or forbidden front/backend
+  paths.
 
-Return findings ordered by severity. Do not modify files.
+Return findings ordered by severity. Do not modify files or inspect sibling
+clones.

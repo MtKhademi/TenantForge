@@ -62,8 +62,10 @@ Versions are introduced and locked by the task that first needs them. The bootst
 ## Delivery principles
 
 1. **Visible first** — every slice changes something a person can see or exercise in the browser.
-2. **One active slice** — no agent starts the next feature before the current slice is reviewed and complete.
-3. **No speculative backend** — an endpoint needs a UI consumer in the current slice.
+2. **One active task per clone** — front and backend may overlap only where the
+   explicit dependency graph allows it.
+3. **No speculative backend** — an endpoint needs a named current or immediately
+   dependent front consumer in the roadmap.
 4. **Small contracts** — a slice normally adds no more than one or two endpoints.
 5. **Teach through the code** — backend slices include a concise learning note under `docs/learning/`.
 6. **Secure by environment** — temporary shortcuts such as the hardcoded admin are development-only and must fail closed in production.
@@ -98,35 +100,48 @@ TenantForge includes two implementation agents and one read-only reviewer:
 
 OpenCode loads their definitions from `.opencode/agents/`. Project-specific skills live in `.opencode/skills/`.
 
-Start OpenCode from the repository root:
-
-```bash
-opencode
-```
-
-Use `/task` as the normal entry point. It synchronizes `main`, selects one
-runnable roadmap slice, prepares a bounded plan, waits for approval, invokes the
-correct implementation agent phases, validates the browser-visible result and
-stops again for review before delivery.
+Use three independent clones of the same repository:
 
 ```text
-/task                         # next runnable roadmap slice
-/task S00                     # an explicit slice
-/task 00                      # numeric shorthand
-/task tasks/000-ui-foundation.md
+TenantForge-workspace/
+├── main/       # status, coordination and merged truth
+├── front/      # UI task branches
+└── backend/    # backend task branches
 ```
 
-If an approved session is interrupted after its branch has been created, resume
-it without hiding or resetting partial work:
+These are normal Git clones, not worktrees. Full setup and daily usage are in
+[the three-clone workflow](docs/three-clone-workflow.md).
+
+Open OpenCode separately in each folder. From `main/`, inspect the two queues:
 
 ```text
-/task-run S00
+/task
 ```
 
-The older focused commands remain useful for read-only planning and review:
+From `front/`, execute only frontend work:
 
-- `/start-slice tasks/000-ui-foundation.md` inspects one task without editing;
-- `/review-slice tasks/000-ui-foundation.md` reviews the current worktree;
+```text
+/front-task
+/front-task F001
+```
+
+From `backend/`, execute only backend work:
+
+```text
+/backend-task
+/backend-task B001
+```
+
+Each command selects the first runnable task from its own folder, checks
+cross-queue dependencies, prepares a bounded plan, waits for approval, invokes
+the responsible agent, validates the result and stops again before delivery.
+If a session is interrupted on an existing task branch, run `/task-run F001` or
+`/task-run B001` in that same clone.
+
+Focused read-only commands also remain available:
+
+- `/start-slice tasks/front/F001-ui-foundation.md` inspects one task;
+- `/review-slice tasks/backend/B001-development-login-api.md` reviews one diff;
 - `@ui-engineer` and `@backend-mentor` can still be invoked manually for a
   narrowly-scoped phase.
 
@@ -154,11 +169,14 @@ Review third-party skill contents and licenses before committing copied files. T
 ```text
 .
 ├── .opencode/
-│   ├── agents/          # UI engineer and backend mentor
-│   ├── commands/        # Repeatable slice commands
+│   ├── agents/          # UI engineer, backend mentor and reviewer
+│   ├── commands/        # /task, /front-task and /backend-task
 │   └── skills/          # TenantForge-specific workflows
 ├── docs/                # Product, architecture and UI direction
-├── tasks/               # Ordered vertical slices
+├── tasks/
+│   ├── front/           # Executable F tasks
+│   ├── backend/         # Executable B tasks
+│   └── slices/          # Complete product/API specifications
 ├── AGENTS.md            # Shared rules for every coding agent
 ├── CONTRIBUTING.md
 └── opencode.jsonc       # Safe project-level OpenCode configuration

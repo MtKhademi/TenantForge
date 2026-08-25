@@ -1,8 +1,8 @@
 # S05 — Seeded platform administrator
 
-## Status
+## Executable tasks
 
-`Planned`
+- Backend: `B005`
 
 ## Owner
 

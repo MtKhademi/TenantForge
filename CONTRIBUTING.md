@@ -4,21 +4,27 @@ TenantForge welcomes focused contributions that preserve its visible-first learn
 
 ## Start with a task
 
-Every product change should map to one vertical-slice task under `tasks/`. Before writing code:
+Every product change should map to one executable task under `tasks/front/` or
+`tasks/backend/` and one source specification under `tasks/slices/`.
 
-1. run `/task` or explicitly select a slice such as `/task S01`;
-2. review the generated plan and approve it before any implementation begins;
-3. confirm its visible outcome and demo steps;
-4. keep its explicit out-of-scope list intact;
-5. work on the generated focused branch such as
-   `slice/s01-hardcoded-admin-login`.
+1. use the `main` clone and `/task` to see runnable work;
+2. run `/front-task Fxxx` in the `front` clone or `/backend-task Bxxx` in the
+   `backend` clone;
+3. review and approve the generated plan before implementation;
+4. keep the source slice contract and out-of-scope list intact;
+5. work only on `front/fxxx-<slug>` or `backend/bxxx-<slug>` in that clone.
 
 The workflow requires a second approval after tests and browser verification.
-Only then does it mark the task and roadmap row `Done`, commit, push and prepare
-the pull request. Completed task files remain in the repository as learning
-material.
+Only then does it mark that one task `done`, commit, push and prepare the pull
+request. Do not edit the static roadmap or another queue's task to record
+progress. Completed tasks remain as learning material.
 
-If a change does not fit an existing task, propose a task using `tasks/TEMPLATE.md` before implementing it.
+Do not use Git worktrees and do not reach into a sibling clone. Front and backend
+share work only through merged pull requests and updated `main`.
+
+If a change does not fit an existing task, propose a source slice with
+`tasks/slices/TEMPLATE.md` and an executable task with `tasks/TEMPLATE.md` before
+implementing it.
 
 ## Pull requests
 

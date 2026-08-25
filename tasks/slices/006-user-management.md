@@ -1,8 +1,10 @@
 # S06 — User management
 
-## Status
+## Executable tasks
 
-`Planned`
+- Front contract and mock: `F006`
+- Backend: `B006`
+- Front integration: `F007`
 
 ## Owner
 

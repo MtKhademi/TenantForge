@@ -1,92 +1,86 @@
 ---
 name: vertical-slice-delivery
-description: Plan, implement, verify and teach one small TenantForge vertical slice with an immediate browser outcome, fixed API contract, minimal backend, integration tests and a backend learning note. Use whenever starting, changing, reviewing or completing any task under tasks/.
+description: Plan, implement, verify and teach one TenantForge front or backend task in the three-clone workflow, preserving a visible vertical slice, fixed API contract, strict ownership, automated checks and user approval gates. Use for any executable task under tasks/front or tasks/backend.
 ---
 
 # Vertical slice delivery
 
-## Task entry
+## Three-clone boundary
 
-Use `/task` for normal work and `/task-run` only to recover an interrupted,
-already-approved slice branch. The roadmap is the single ordered queue. Keep
-completed task files as public learning artifacts; mark their `Status` and
-roadmap row `Done` only in the delivery commit.
+Use one normal Git clone per responsibility:
 
-Before implementation, require a clean, current `main`, deterministic task
-selection and explicit user approval of the plan. Create the slice branch only
-after that approval. Do not edit, install dependencies or run implementation
-commands during the planning gate.
+- `main`: run `/task` for read-only coordination and review;
+- `front`: run `/front-task` and edit frontend-owned files;
+- `backend`: run `/backend-task` and edit backend-owned files.
+
+Never create or use Git worktrees. Never read, edit or run commands in a sibling
+clone. Synchronize only the current clone from `main` before selection.
+
+## Task model
+
+Treat `tasks/front/F*.md` and `tasks/backend/B*.md` as executable queues. Read the
+referenced `tasks/slices/*.md` for the complete product contract. A dependency is
+complete only when its own task file says `status: done` on current `main`.
+
+Update only the active task's status in its delivery commit. Keep
+`tasks/ROADMAP.md` static so parallel front and backend PRs do not edit a shared
+progress file.
 
 ## Start gate
 
-Read `AGENTS.md` and the active task. Do not edit until you can state:
+Before editing, state:
 
-- the browser-visible outcome;
-- demo steps under three minutes;
-- current UI states;
-- accepted API contract;
-- backend learning goal;
-- explicit out-of-scope work.
+- browser-visible consumer and demo path;
+- current UI states and fixed API contract;
+- current task ownership and forbidden paths;
+- one primary learning goal;
+- validation and explicit out-of-scope work.
 
-If any item is missing, improve the task before implementation.
+Require `Approve`, `Change` or `Cancel`. Do not edit, install, branch or build
+before approval.
 
 ## Delivery order
 
-1. Build or confirm the UI with task-approved mocks.
-2. Lock the smallest request/response contract required by that UI.
-3. Implement only that backend path.
-4. Replace the mock with the real API.
-5. Test the successful and relevant denied/error behavior.
-6. Run the browser demo.
-7. Write the backend learning note.
-8. Review the diff against the out-of-scope list.
-9. Stop.
+For front tasks:
 
-Parallel UI and backend work is allowed only after the contract is explicit.
-Agents must use separate branches or worktrees and avoid shared files.
+1. implement or integrate only the specified UI phase;
+2. verify idle, loading, success and relevant error/denied states;
+3. run the real app on desktop and mobile;
+4. stop without changing backend code.
 
-When `/task` orchestrates multiple agents on one slice branch, invoke phases
-sequentially in the task's written owner order. Parallel invocation requires an
-explicitly approved separate-worktree plan, disjoint ownership and a named
-integration owner. Record handoff decisions in the main task context.
+For backend tasks:
+
+1. restate the source slice contract;
+2. implement the smallest direct request path;
+3. test success and relevant unauthorized/forbidden behavior;
+4. write the concise backend learning note;
+5. stop without changing frontend code.
+
+Cross-clone work proceeds through merged contracts and task dependencies, never
+through uncommitted sibling files.
 
 ## Complexity guardrails
 
-- Prefer one or two endpoints.
-- Prefer one backend concept per slice.
-- Do not introduce a generic framework for a single known use case.
-- Do not implement later tasks because they seem adjacent.
-- Do not add persistence, caching, events, background jobs or authorization layers before the active UI demonstrates their need.
-- Keep generated migrations separate from authored code in review summaries.
+- Prefer one or two endpoints and one backend concept per task.
+- Do not add future-slice infrastructure or generic abstractions.
+- Treat UI hiding as presentation, never authorization.
+- Keep migrations and generated output identifiable in review.
+- Do not weaken tests or acceptance criteria to obtain a pass.
 
-## Verification gate
+## Review and delivery
 
-Require:
-
-- build and relevant tests pass;
-- browser demo works from a clean start;
-- relevant loading/error/denied state is visible;
-- security enforcement exists on the server;
-- no new console error appears;
-- acceptance criteria have evidence;
-- the learning note explains the actual request path.
-
-Reject completion statements based only on edited files or compilation.
-
-## Review and delivery gates
-
-After validation, show the user the implementation report and diff summary.
-Require `Approve`, `Change`, or `Auto-review`. `Auto-review` invokes the
-read-only `task-reviewer`; it never replaces user approval.
+After all checks and browser evidence pass, require `Approve`, `Change` or
+`Auto-review`. The read-only reviewer never replaces final user approval.
 
 After final approval:
 
-1. mark the active task and roadmap row `Done` without deleting the task;
-2. stage only slice code, tests, required docs and status updates;
-3. verify the staged diff contains no secrets or generated evidence;
-4. commit on `slice/<id>-<slug>`, push without force, and open a PR to `main`;
-5. report delivery evidence and stop before the next slice.
+1. set only the active task to `status: done`;
+2. stage only owned implementation, tests, required docs and that task file;
+3. inspect the staged diff for secrets and unrelated changes;
+4. commit on `front/fxxx-slug` or `backend/bxxx-slug`;
+5. push once without force and create a PR to `main`;
+6. report evidence and stop.
 
-If validation, push or PR creation fails, preserve the branch and task state and
+On validation, push or PR failure, preserve the current clone and branch and
 report the exact blocker. Never reset, clean, stash, amend or retry a failed push
 automatically.

@@ -1,8 +1,10 @@
 # S10 — Audit log and invitations
 
-## Status
+## Executable tasks
 
-`Planned`
+- Front contract and mock: `F013`
+- Backend: `B010`
+- Front integration: `F014`
 
 ## Owner
 

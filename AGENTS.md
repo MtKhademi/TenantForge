@@ -4,8 +4,9 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 
 ## Before changing files
 
-1. Start normal roadmap work with `/task`; use `/task-run` only to recover an
-   interrupted, already-approved slice branch.
+1. In the `front` clone start with `/front-task`; in the `backend` clone start
+   with `/backend-task`. Use `/task` only for read-only coordination from the
+   `main` clone and `/task-run` only to recover an interrupted task branch.
 2. Read the active task completely.
 3. Read only the product, architecture or design documents referenced by that task.
 4. State the visible outcome, files you expect to touch and what remains out of scope.
@@ -16,8 +17,12 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 ## Scope discipline
 
 - Keep exactly one task active.
+- Work only inside the current clone. Never inspect or modify sibling `main`,
+  `front` or `backend` directories.
 - Do not implement future roadmap items.
-- Do not create an endpoint without a consumer in the current UI, except a health endpoint required to run the system.
+- Do not create an endpoint without a named current or immediately dependent
+  front task as its consumer, except a health endpoint required to run the
+  system.
 - Normally add no more than two endpoints in one slice.
 - Prefer direct, readable code over abstractions created for hypothetical future requirements.
 - Do not combine IAM, tenancy, permissions, caching and audit work in the same slice.
@@ -87,14 +92,16 @@ Do not turn the learning note into framework documentation. Explain only the cod
 
 ## Git safety
 
-- Synchronize a clean `main`, then work on `slice/<slice-id>-<slug>` after plan
-  approval.
+- Use three ordinary clones named `main`, `front` and `backend`. Never create or
+  use a Git worktree.
+- Synchronize clean `main` in the current clone, then create
+  `front/fxxx-<slug>` or `backend/bxxx-<slug>` after plan approval.
 - Show `git status` and `git diff` before proposing a commit.
 - Never force-push, rewrite shared history or push directly to `main`.
 - Do not commit secrets, local credentials, database data or generated browser artifacts.
 - Keep `main` runnable and demoable.
-- Do not delete completed task files. Mark their status and roadmap row `Done`
-  in the delivery commit so the public learning history remains readable.
+- Do not delete completed task files. Change only the active executable task to
+  `status: done`; never edit the static roadmap merely to record progress.
 - Require a second user approval after validation and review before commit,
   push and pull-request creation.
 

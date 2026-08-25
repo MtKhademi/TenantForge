@@ -1,8 +1,9 @@
 # S02 — Authenticated application shell
 
-## Status
+## Executable tasks
 
-`Planned`
+- Backend: `B002`
+- Front: `F003`
 
 ## Owner
 

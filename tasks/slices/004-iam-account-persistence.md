@@ -1,8 +1,8 @@
 # S04 — IAM account persistence
 
-## Status
+## Executable tasks
 
-`Planned`
+- Backend: `B004`
 
 ## Owner
 

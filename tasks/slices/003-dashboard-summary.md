@@ -1,8 +1,10 @@
 # S03 — Real dashboard summary
 
-## Status
+## Executable tasks
 
-`Planned`
+- Front contract and mock: `F004`
+- Backend: `B003`
+- Front integration: `F005`
 
 ## Owner
 

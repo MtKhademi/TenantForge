@@ -33,6 +33,8 @@ Check:
 8. the backend learning note explains the actual request path and decisions;
 9. no secret, generated artifact, weakened test or unrelated refactor is present;
 10. no speculative abstraction or future roadmap behavior was introduced.
+11. the diff does not touch a sibling queue task, the static roadmap or files
+    outside the active front/backend ownership boundary.
 
 Report findings ordered by severity:
 

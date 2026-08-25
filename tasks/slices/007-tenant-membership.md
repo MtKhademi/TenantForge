@@ -1,8 +1,10 @@
 # S07 — Tenant and membership
 
-## Status
+## Executable tasks
 
-`Planned`
+- Front contract and mock: `F008`
+- Backend: `B007`
+- Front integration: `F009`
 
 ## Owner
 

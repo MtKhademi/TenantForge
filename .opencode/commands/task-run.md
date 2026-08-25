@@ -1,35 +1,26 @@
 ---
-description: Resume an approved TenantForge task on its existing slice branch
+description: Resume an approved front or backend task in the current clone
 agent: build
 ---
 
-Resume one already-approved TenantForge task in the current worktree.
-Normal entry is `/task`; use this command only after an interrupted session.
+Resume one interrupted task on its existing branch. Normal entry uses
+`/front-task` or `/backend-task`.
 
 Arguments: `$ARGUMENTS`
 
-Require exactly one slice ID, numeric ID or task path accepted by `/task`.
+Require exactly one `Fxxx` or `Bxxx` ID.
 
-## Guard
-
-1. Resolve the Git root and read the complete matching task.
-2. Load `vertical-slice-delivery` and read `AGENTS.md`.
-3. Derive the expected branch `slice/<slice-id-lowercase>-<slug>`.
-4. Require the current branch to equal that branch. Do not switch branches,
-   create worktrees, stash, reset, clean or discard files.
-5. Report the existing dirty paths; they are the recoverable task state, not a
-   reason to erase work.
-6. Confirm every dependency is `Done` in both its task file and
-   `tasks/ROADMAP.md`.
-7. Reconstruct the last approved plan from conversation context. If the exact
-   plan is unavailable or ambiguous, present a reconstructed plan and wait for
-   `Approve`, `Change`, or `Cancel` before editing.
-
-## Resume
-
-1. Compare the current diff with the task acceptance criteria and rebuild the
-   todo list.
-2. Continue from the first incomplete phase with the task's named implementation
-   agent.
-3. Follow `/task` from execution through validation, review gate and delivery.
-4. Do not create another branch or start another slice.
+1. Resolve the matching task and its source slice.
+2. For `Fxxx`, require branch `front/<id-lowercase>-<slug>` and front ownership.
+3. For `Bxxx`, require branch `backend/<id-lowercase>-<slug>` and backend
+   ownership.
+4. Never switch clones, access sibling directories or create a worktree.
+5. Treat current dirty files as recoverable task state. Never stash, reset,
+   clean or discard them.
+6. Confirm dependencies are `done` on the task branch's base. If the exact
+   approved plan is unavailable, reconstruct it from the task and diff, present
+   it and wait for approval.
+7. Rebuild todos from acceptance criteria and current diff.
+8. Resume with `ui-engineer` for F tasks or `backend-mentor` for B tasks.
+9. Follow the owning command from validation through review and delivery. Do not
+   start another task.

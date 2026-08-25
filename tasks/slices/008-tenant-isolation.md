@@ -1,8 +1,9 @@
 # S08 — Tenant isolation
 
-## Status
+## Executable tasks
 
-`Planned`
+- Backend: `B008`
+- Front: `F010`
 
 ## Owner
 

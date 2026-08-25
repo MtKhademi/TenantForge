@@ -1,8 +1,10 @@
 # S09 — Role and permission matrix
 
-## Status
+## Executable tasks
 
-`Planned`
+- Front contract and mock: `F011`
+- Backend: `B009`
+- Front integration: `F012`
 
 ## Owner
 
