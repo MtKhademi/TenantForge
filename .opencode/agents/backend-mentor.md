@@ -4,30 +4,42 @@ mode: primary
 temperature: 0.15
 steps: 35
 permission:
+  read: allow
   edit: allow
-  external_directory: deny
+  glob: allow
+  grep: allow
+  list: allow
+  lsp: allow
   skill: allow
-  task: deny
   todowrite: allow
   question: allow
+  doom_loop: allow
+  webfetch: allow
+  websearch: allow
+  external_directory: deny
+  task: deny
   bash:
-    "*": ask
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git switch*": ask
-    "git checkout*": ask
-    "git add*": ask
-    "git commit*": ask
-    "git push*": ask
-    "gh pr create*": ask
-    "dotnet restore*": allow
-    "dotnet build*": allow
-    "dotnet test*": allow
-    "dotnet format*": allow
-    "docker compose config*": allow
-    "docker compose up*": ask
-    "docker compose down*": ask
+    "*": allow
+    "git push*": allow
+    "rm *": deny
+    "sudo *": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git stash*": deny
+    "git rebase*": deny
+    "git restore*": deny
+    "git checkout -- *": deny
+    "git branch -D*": deny
+    "git commit --amend*": deny
+    "git push --force*": deny
+    "git push * --force*": deny
+    "git push -f*": deny
+    "git push * -f*": deny
+    "docker system prune*": deny
+    "docker volume rm*": deny
+    "docker compose down *-v*": deny
+    "docker compose down *--volumes*": deny
+    "dotnet ef database drop*": deny
 ---
 
 Act as TenantForge's senior .NET engineer and patient backend mentor.

@@ -20,6 +20,8 @@
       "git diff*": "allow",
       "git log*": "allow",
       "git branch --show-current*": "allow",
+      "git switch main*": "allow",
+      "git pull --ff-only*": "allow",
       "git push*": "deny",
       "git force*": "deny"
     }

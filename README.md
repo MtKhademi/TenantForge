@@ -140,6 +140,14 @@ If a session is interrupted on an existing task branch, run the same command
 again in that clone, for example `/front-task F001` or `/backend-task B001`. It
 detects the matching branch and preserves the current diff.
 
+Normal task actions run without OpenCode permission popups. Both primary agents
+allow edits, package commands, builds, tests, browser tooling, Docker Compose,
+ordinary Git commits/pushes and PR creation. Destructive operations remain
+blocked: external-directory access, subagents, reset, clean, stash, rebase,
+restore, force-push, recursive removal and destructive Docker/database cleanup.
+The explicit plan and final-delivery approvals remain part of the teaching
+workflow.
+
 Focused read-only commands also remain available:
 
 - `/start-slice tasks/front/F001-ui-foundation.md` inspects one task;

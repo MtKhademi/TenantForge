@@ -4,29 +4,41 @@ mode: primary
 temperature: 0.35
 steps: 30
 permission:
+  read: allow
   edit: allow
-  external_directory: deny
+  glob: allow
+  grep: allow
+  list: allow
+  lsp: allow
   skill: allow
-  task: deny
   todowrite: allow
   question: allow
+  doom_loop: allow
+  webfetch: allow
+  websearch: allow
+  external_directory: deny
+  task: deny
   bash:
-    "*": ask
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git switch*": ask
-    "git checkout*": ask
-    "git add*": ask
-    "git commit*": ask
-    "git push*": ask
-    "gh pr create*": ask
-    "npm install*": allow
-    "npm run*": allow
-    "npm test*": allow
-    "npx vite*": allow
-    "npx playwright*": allow
-    "npx shadcn*": allow
+    "*": allow
+    "git push*": allow
+    "rm *": deny
+    "sudo *": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git stash*": deny
+    "git rebase*": deny
+    "git restore*": deny
+    "git checkout -- *": deny
+    "git branch -D*": deny
+    "git commit --amend*": deny
+    "git push --force*": deny
+    "git push * --force*": deny
+    "git push -f*": deny
+    "git push * -f*": deny
+    "docker system prune*": deny
+    "docker volume rm*": deny
+    "docker compose down *-v*": deny
+    "docker compose down *--volumes*": deny
 ---
 
 Act as TenantForge's product-minded frontend engineer.

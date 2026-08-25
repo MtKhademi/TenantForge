@@ -93,3 +93,16 @@ or:
 
 The command detects its existing branch and preserves the current diff. It never
 stashes, resets, cleans or touches either sibling clone.
+
+## Permission mode
+
+The `ui-engineer` and `backend-mentor` primary agents auto-allow normal work in
+their current clone, including edits, dependencies, build/test commands, browser
+verification, Docker Compose, commits, pushes and pull-request creation. This
+removes repeated OpenCode tool-permission prompts.
+
+Guardrails remain explicit `deny` rules for sibling/external directories,
+subagents, reset, clean, stash, rebase, restore, force-push, recursive removal
+and destructive Docker/database cleanup. Plan approval and final delivery
+approval are conversation gates, not tool-permission popups, and remain enabled
+so the learner sees and controls the workflow.
