@@ -61,8 +61,10 @@ opencode
 ```
 
 Each task command synchronizes only its current clone, creates its own branch,
-stops for plan approval, invokes the responsible agent, validates the work and
-stops again before delivery.
+stops for plan approval and completes the work in that same primary agent
+conversation. It creates a visible todo list after approval and updates it after
+every implementation, validation, self-review and delivery step. No subagent is
+used.
 
 ## Parallel work
 
@@ -77,17 +79,17 @@ delivery branches, preventing routine front/backend merge conflicts.
 ## Recovery
 
 If a session stops after a task branch exists, reopen OpenCode inside that same
-clone and run:
+clone and run the same owning command:
 
 ```text
-/task-run F001
+/front-task F001
 ```
 
 or:
 
 ```text
-/task-run B001
+/backend-task B001
 ```
 
-The recovery command preserves the current diff. It never stashes, resets,
-cleans or touches either sibling clone.
+The command detects its existing branch and preserves the current diff. It never
+stashes, resets, cleans or touches either sibling clone.

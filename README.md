@@ -91,12 +91,10 @@ See [tasks/ROADMAP.md](tasks/ROADMAP.md) for dependencies and completion rules.
 
 ## OpenCode workflow
 
-TenantForge includes two implementation agents and one read-only reviewer:
+TenantForge includes two primary implementation agents:
 
 - `ui-engineer` owns the frontend, browser states, responsiveness and visual verification.
 - `backend-mentor` implements only the backend required by the active slice, tests it, and explains it.
-- `task-reviewer` checks the finished diff against visible behavior, scope,
-  security, tests and the learning goal without editing files.
 
 OpenCode loads their definitions from `.opencode/agents/`. Project-specific skills live in `.opencode/skills/`.
 
@@ -133,17 +131,20 @@ From `backend/`, execute only backend work:
 ```
 
 Each command selects the first runnable task from its own folder, checks
-cross-queue dependencies, prepares a bounded plan, waits for approval, invokes
-the responsible agent, validates the result and stops again before delivery.
-If a session is interrupted on an existing task branch, run `/task-run F001` or
-`/task-run B001` in that same clone.
+cross-queue dependencies and runs directly in its owning primary agent—there is
+no coordinator or subagent. After plan approval, that same conversation creates
+a visible todo list and updates it after every implementation, test, browser/API
+verification, self-review and delivery step.
+
+If a session is interrupted on an existing task branch, run the same command
+again in that clone, for example `/front-task F001` or `/backend-task B001`. It
+detects the matching branch and preserves the current diff.
 
 Focused read-only commands also remain available:
 
 - `/start-slice tasks/front/F001-ui-foundation.md` inspects one task;
 - `/review-slice tasks/backend/B001-development-login-api.md` reviews one diff;
-- `@ui-engineer` and `@backend-mentor` can still be invoked manually for a
-  narrowly-scoped phase.
+- `@ui-engineer` and `@backend-mentor` are also selectable as primary agents.
 
 Install the optional upstream UI skills locally in this repository:
 
@@ -169,7 +170,7 @@ Review third-party skill contents and licenses before committing copied files. T
 ```text
 .
 ├── .opencode/
-│   ├── agents/          # UI engineer, backend mentor and reviewer
+│   ├── agents/          # Primary UI engineer and backend mentor
 │   ├── commands/        # /task, /front-task and /backend-task
 │   └── skills/          # TenantForge-specific workflows
 ├── docs/                # Product, architecture and UI direction

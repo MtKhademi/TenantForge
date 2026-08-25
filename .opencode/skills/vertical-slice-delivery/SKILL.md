@@ -16,6 +16,14 @@ Use one normal Git clone per responsibility:
 Never create or use Git worktrees. Never read, edit or run commands in a sibling
 clone. Synchronize only the current clone from `main` before selection.
 
+Run each executable command in one primary agent conversation:
+
+- `/front-task` runs directly as `ui-engineer`;
+- `/backend-task` runs directly as `backend-mentor`.
+
+Never call the `task` tool or delegate to a subagent. Use the same primary agent
+for discovery, planning, implementation, validation, self-review and delivery.
+
 ## Task model
 
 Treat `tasks/front/F*.md` and `tasks/backend/B*.md` as executable queues. Read the
@@ -38,6 +46,22 @@ Before editing, state:
 
 Require `Approve`, `Change` or `Cancel`. Do not edit, install, branch or build
 before approval.
+
+## Visible todo protocol
+
+After plan approval:
+
+1. call `todowrite` with the complete approved sequence;
+2. keep exactly one todo `in_progress`;
+3. perform that step in the current primary agent;
+4. immediately mark it `completed`, start the next todo and show its evidence;
+5. never complete multiple unseen steps in one todo update;
+6. on failure, keep the failed step active and add or revise the smallest
+   recovery todo.
+
+Keep build, focused tests, broader tests, browser/API demo, learning note,
+self-review, status update, staging, commit, push and PR creation as distinct
+todos whenever they apply. Do not start delivery todos before final approval.
 
 ## Delivery order
 
@@ -69,17 +93,22 @@ through uncommitted sibling files.
 
 ## Review and delivery
 
-After all checks and browser evidence pass, require `Approve`, `Change` or
-`Auto-review`. The read-only reviewer never replaces final user approval.
+After all checks pass, review the complete diff yourself in the same primary
+conversation. Present findings, acceptance evidence and remaining risks. Require
+`Approve`, `Change` or `Cancel` before delivery.
+
+On `Change`, add visible correction and revalidation todos, execute them one at
+a time and repeat self-review. On `Cancel`, preserve the branch and stop.
 
 After final approval:
 
-1. set only the active task to `status: done`;
-2. stage only owned implementation, tests, required docs and that task file;
-3. inspect the staged diff for secrets and unrelated changes;
-4. commit on `front/fxxx-slug` or `backend/bxxx-slug`;
-5. push once without force and create a PR to `main`;
-6. report evidence and stop.
+1. continue the same visible todo list;
+2. set only the active task to `status: done`;
+3. stage only owned implementation, tests, required docs and that task file;
+4. inspect the staged diff for secrets and unrelated changes;
+5. commit on `front/fxxx-slug` or `backend/bxxx-slug`;
+6. push once without force and create a PR to `main`;
+7. report evidence and stop.
 
 On validation, push or PR failure, preserve the current clone and branch and
 report the exact blocker. Never reset, clean, stash, amend or retry a failed push

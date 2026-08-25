@@ -6,13 +6,27 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 
 1. In the `front` clone start with `/front-task`; in the `backend` clone start
    with `/backend-task`. Use `/task` only for read-only coordination from the
-   `main` clone and `/task-run` only to recover an interrupted task branch.
+   `main` clone. Run the owning command again to recover an interrupted task
+   branch.
 2. Read the active task completely.
 3. Read only the product, architecture or design documents referenced by that task.
 4. State the visible outcome, files you expect to touch and what remains out of scope.
 5. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
 6. Wait for explicit plan approval before editing, installing packages, creating
    a branch or running implementation commands.
+
+## Single-agent execution
+
+- `/front-task` runs directly in the primary `ui-engineer` conversation.
+- `/backend-task` runs directly in the primary `backend-mentor` conversation.
+- Never call the `task` tool, start a subagent or delegate a phase.
+- After plan approval, create the todo list with `todowrite` and keep exactly one
+  item `in_progress`.
+- Update the todo list immediately after every completed step and show the
+  evidence and next step. Never hide several implementation steps inside one
+  todo update.
+- Perform final diff review in the same agent and require final user approval
+  before delivery.
 
 ## Scope discipline
 
