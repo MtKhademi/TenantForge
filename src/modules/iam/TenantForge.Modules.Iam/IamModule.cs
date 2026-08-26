@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TenantForge.Modules.Iam.Features.Account;
+using TenantForge.Modules.Iam.Features.Dashboard;
 using TenantForge.Modules.Iam.Features.Login;
 
 namespace TenantForge.Modules.Iam;
@@ -27,6 +28,7 @@ public static class IamModule
     {
         endpoints.MapLoginFeature();
         endpoints.MapCurrentAccountFeature();
+        endpoints.MapDashboardSummaryFeature();
         return endpoints;
     }
 }

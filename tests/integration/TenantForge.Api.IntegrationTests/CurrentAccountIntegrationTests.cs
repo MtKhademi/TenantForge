@@ -140,7 +140,7 @@ public class CurrentAccountIntegrationTests : IDisposable
 
 internal static class TestJwtFactory
 {
-    public static string Issue(string signingKey, string issuer = "TenantForge", string audience = "TenantForge")
+    public static string Issue(string signingKey, string issuer = "TenantForge", string audience = "TenantForge", bool isPlatformAdmin = true)
     {
         var descriptor = new SecurityTokenDescriptor
         {
@@ -149,7 +149,7 @@ internal static class TestJwtFactory
                 new Claim(JwtRegisteredClaimNames.Sub, "development-admin"),
                 new Claim(JwtRegisteredClaimNames.Email, ApiFactory.Email),
                 new Claim(JwtRegisteredClaimNames.Name, "Platform Administrator"),
-                new Claim("isPlatformAdmin", "true")
+                new Claim("isPlatformAdmin", isPlatformAdmin ? "true" : "false")
             ]),
             Audience = audience,
             Issuer = issuer,

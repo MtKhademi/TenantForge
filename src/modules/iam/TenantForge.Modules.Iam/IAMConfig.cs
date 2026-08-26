@@ -17,8 +17,16 @@ public sealed class IAMConfig : IModuleConfig
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
         // Authorization services are environment-independent: protected endpoints
-        // (RequireAuthorization) need them in every environment.
-        services.AddAuthorization();
+        // (RequireAuthorization) need them in every environment. The
+        // PlatformAdmin policy requires an authenticated principal whose
+        // isPlatformAdmin claim is exactly "true" (a missing/false claim is
+        // authenticated-but-forbidden, so authorization middleware answers 403
+        // instead of the endpoint body having to re-check and default-deny).
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(AuthorizationPolicyNames.PlatformAdmin, policy =>
+                policy.RequireClaim("isPlatformAdmin", "true"));
+        });
 
         // The options are bound lazily from the full configuration so late
         // sources (including test hosts) are honored. Outside Development the
