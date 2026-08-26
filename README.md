@@ -65,7 +65,7 @@ Versions are introduced and locked by the task that first needs them. The bootst
 2. **One active task per clone** — front and backend may overlap only where the
    explicit dependency graph allows it.
 3. **No speculative backend** — an endpoint needs a named current or immediately
-   dependent front consumer in the roadmap.
+   dependent front consumer in the task ledger.
 4. **Small contracts** — a slice normally adds no more than one or two endpoints.
 5. **Teach through the code** — backend slices include a concise learning note under `docs/learning/`.
 6. **Secure by environment** — temporary shortcuts such as the hardcoded admin are development-only and must fail closed in production.
@@ -87,7 +87,7 @@ Versions are introduced and locked by the task that first needs them. The bootst
 | S09 | Roles and permissions are editable in a matrix | Tenant RBAC and authorization policies |
 | S10 | Navigation reacts to permissions; audit and invitations are visible | Permission-aware API, audit log and invitation flow |
 
-See [tasks/ROADMAP.md](tasks/ROADMAP.md) for dependencies and completion rules.
+See [tasks/TASKS.md](tasks/TASKS.md) for the live task queues, statuses, dependencies and active specification links.
 
 ## OpenCode workflow
 
@@ -130,14 +130,16 @@ From `backend/`, execute only backend work:
 /backend-task B001
 ```
 
-Each command selects the first runnable task from its own folder, checks
-cross-queue dependencies and runs directly in its owning primary agent—there is
-no coordinator or subagent. After plan approval, that same conversation creates
-a visible todo list and updates it after every implementation, test, browser/API
-verification, self-review and delivery step.
+Each command reads `tasks/TASKS.md`, selects the first runnable task in its queue,
+checks cross-queue dependencies and loads the linked full specification. Work runs
+directly in the owning primary agent—there is no coordinator or subagent. After
+plan approval, that same conversation creates a visible todo list and updates the
+ledger through implementation, verification, review and delivery. Once a task is
+finally approved, its ledger row becomes `done` and its completed local spec file
+is removed in the same commit.
 
 If a session is interrupted on an existing task branch, run the same command
-again in that clone, for example `/front-task F001` or `/backend-task B001`. It
+again in that clone, for example `/front-task F004` or `/backend-task B001`. It
 detects the matching branch and preserves the current diff.
 
 Normal task actions run without OpenCode permission popups. Both primary agents
@@ -150,7 +152,7 @@ workflow.
 
 Focused read-only commands also remain available:
 
-- `/start-slice tasks/front/F001-ui-foundation.md` inspects one task;
+- `/start-slice tasks/front/F004-refactor-persian-rtl-interface.md` inspects one active task;
 - `/review-slice tasks/backend/B001-development-login-api.md` reviews one diff;
 - `@ui-engineer` and `@backend-mentor` are also selectable as primary agents.
 
@@ -183,6 +185,7 @@ Review third-party skill contents and licenses before committing copied files. T
 │   └── skills/          # TenantForge-specific workflows
 ├── docs/                # Product, architecture and UI direction
 ├── tasks/
+│   ├── TASKS.md         # Status, dependencies and active spec links
 │   ├── front/           # Executable F tasks
 │   ├── backend/         # Executable B tasks
 │   └── slices/          # Complete product/API specifications
@@ -195,7 +198,7 @@ Application directories are created by the first tasks rather than hidden in a p
 
 ## Current status
 
-**Bootstrap / documentation-first.** The product code begins with S00.
+**F001 and B001 are complete.** F002 and B002 are the next runnable integration tasks; the Persian RTL refactors follow F003 in `tasks/TASKS.md`.
 
 ## License
 
