@@ -53,7 +53,7 @@ one valid Spec link.
 | ID | Slice | Task | Status | Depends on | Spec |
 |---|---|---|---|---|---|
 | B001 | S01 | Development login API | done | — | — |
-| B002 | S02 | Current account API | planned | B001, F001 | [Spec](backend/B002-current-account-api.md) |
+| B002 | S02 | Current account API | done | B001, F001 | — |
 | B003 | S03 | Dashboard summary API | planned | B002, F003 | [Spec](backend/B003-dashboard-summary-api.md) |
 | B004 | S04 | IAM persistence | planned | B003, F007 | [Spec](backend/B004-iam-persistence.md) |
 | B005 | S05 | Seeded platform admin | planned | B004 | [Spec](backend/B005-seeded-platform-admin.md) |
