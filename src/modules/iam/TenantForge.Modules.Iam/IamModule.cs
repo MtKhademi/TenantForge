@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TenantForge.Modules.Iam.Features.Account;
 using TenantForge.Modules.Iam.Features.Login;
 
 namespace TenantForge.Modules.Iam;
@@ -25,6 +26,7 @@ public static class IamModule
     public static IEndpointRouteBuilder MapIamModule(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapLoginFeature();
+        endpoints.MapCurrentAccountFeature();
         return endpoints;
     }
 }

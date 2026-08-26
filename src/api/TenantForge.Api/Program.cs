@@ -24,6 +24,13 @@ IamModule.ValidateIamModuleConfiguration(builder.Environment, app.Configuration)
 
 app.UseCors();
 
+// Authentication and authorization run in every environment. The JWT scheme is
+// registered by the IAM module unconditionally, but outside Development its
+// signing key does not exist (configuration validation forbids it), so token
+// validation always fails and protected endpoints answer 401 — fail closed.
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapHealth();
 app.MapIamModule();
 

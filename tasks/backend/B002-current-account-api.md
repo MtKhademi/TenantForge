@@ -3,6 +3,8 @@ id: B002
 slice: S02
 title: Implement current account and logout APIs
 agent: backend-mentor
+status: done
+depends_on: [B001, F001]
 source: tasks/slices/002-authenticated-shell.md
 ---
 
