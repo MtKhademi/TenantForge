@@ -3,8 +3,6 @@ id: F005
 slice: S02
 title: Refactor the collapsible RTL application sidebar
 agent: ui-engineer
-status: planned
-depends_on: [F004]
 source: tasks/slices/002-authenticated-shell.md
 ---
 
