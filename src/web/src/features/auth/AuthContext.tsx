@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { createContext, useContext, useMemo, useState } from 'react'
 import type { AuthSession, LoginRequest } from './authTypes'
-import { mockAuthAdapter } from './mockAuthAdapter'
+import { httpAuthAdapter } from './httpAuthAdapter'
 
 type AuthContextValue = {
   session: AuthSession | null
@@ -13,18 +13,18 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() =>
-    mockAuthAdapter.getSession(),
+    httpAuthAdapter.getSession(),
   )
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
       async login(request) {
-        const nextSession = await mockAuthAdapter.login(request)
+        const nextSession = await httpAuthAdapter.login(request)
         setSession(nextSession)
       },
       signOut() {
-        mockAuthAdapter.signOut()
+        httpAuthAdapter.signOut()
         setSession(null)
       },
     }),

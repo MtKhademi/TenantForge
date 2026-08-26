@@ -7,8 +7,11 @@ import { z } from 'zod'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { useAuth } from '@/features/auth/AuthContext'
-import { InvalidCredentialsError } from '@/features/auth/authTypes'
-import { mockAdministratorCredentials } from '@/features/auth/mockAuthAdapter'
+import {
+  ApiUnavailableError,
+  InvalidCredentialsError,
+} from '@/features/auth/authTypes'
+import { developmentAdministratorCredentials } from '@/features/auth/httpAuthAdapter'
 import { useTheme } from '@/features/theme/ThemeContext'
 
 const loginSchema = z.object({
@@ -45,10 +48,14 @@ export function LoginPage() {
       navigate('/dashboard', { replace: true })
     } catch (error) {
       if (error instanceof InvalidCredentialsError) {
-        setCredentialError('These mock credentials are not recognized. Check the documented development administrator and try again.')
+        setCredentialError('The email or password is incorrect. Try again.')
         return
       }
-      setCredentialError('The mock sign-in adapter could not complete the request. Try again.')
+      setCredentialError(
+        error instanceof ApiUnavailableError
+          ? 'The sign-in service is unavailable. Check your connection and try again.'
+          : 'Something went wrong while signing in. Try again.',
+      )
     }
   }
 
@@ -66,12 +73,12 @@ export function LoginPage() {
               <p className="text-sm text-muted-foreground">Understandable multi-tenant SaaS IAM</p>
             </div>
           </div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-primary">Slice S00 foundation</p>
+          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-primary">Slice S01 — development login</p>
           <h1 className="max-w-xl text-4xl font-semibold tracking-[-0.04em] text-foreground md:text-6xl">
             A calm administration surface from the first login.
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
-            Sign in with the temporary development administrator to inspect the responsive shell, theme control and mock session behavior that S01 will replace with a real API.
+            Sign in with the development administrator. Your request goes straight to the TenantForge API, which issues the signed session token.
           </p>
         </div>
       </section>
@@ -81,7 +88,7 @@ export function LoginPage() {
           <div className="mb-8 flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
-              <p className="mt-2 text-sm text-muted-foreground">Use the S00 development mock administrator.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Use the documented development administrator.</p>
             </div>
             <SecondaryButton
               type="button"
@@ -131,12 +138,12 @@ export function LoginPage() {
                 {isSubmitting ? (
                   <>
                     <Loader2 aria-hidden="true" className="me-2 size-4 animate-spin" />
-                    Checking mock credentials
+                    Signing in
                   </>
                 ) : (
                   <>
                     <LockKeyhole aria-hidden="true" className="me-2 size-4" />
-                    Open dashboard
+                    Sign in
                   </>
                 )}
               </Button>
@@ -144,10 +151,10 @@ export function LoginPage() {
           </form>
 
           <div className="mt-5 rounded-lg border border-border bg-surface-elevated p-4 text-sm text-muted-foreground">
-            <p className="font-semibold text-foreground">Documented mock administrator</p>
-            <p className="mt-2"><span className="font-medium text-foreground">Email:</span> {mockAdministratorCredentials.email}</p>
-            <p><span className="font-medium text-foreground">Password:</span> {mockAdministratorCredentials.password}</p>
-            <p className="mt-2">This S00 adapter stores only a temporary mock session in sessionStorage so refresh can prove shell behavior.</p>
+            <p className="font-semibold text-foreground">Documented development administrator</p>
+            <p className="mt-2"><span className="font-medium text-foreground">Email:</span> {developmentAdministratorCredentials.email}</p>
+            <p><span className="font-medium text-foreground">Password:</span> {developmentAdministratorCredentials.password}</p>
+            <p className="mt-2">The session and its signed token stay in this browser tab (sessionStorage) so refresh can prove shell behavior.</p>
           </div>
         </div>
       </section>

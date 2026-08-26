@@ -7,7 +7,10 @@ export type AuthUser = {
 
 export type AuthSession = {
   user: AuthUser
-  signedInAtUtc: string
+  /** Signed JWT issued by the development login API. */
+  accessToken: string
+  /** UTC ISO timestamp for the token's expiry. */
+  expiresAtUtc: string
 }
 
 export type LoginRequest = {
@@ -21,9 +24,23 @@ export interface AuthAdapter {
   signOut(): void
 }
 
+/** Raised when the API rejects the submitted credentials (HTTP 401). */
 export class InvalidCredentialsError extends Error {
-  constructor() {
-    super('Invalid mock administrator credentials.')
+  constructor(message = 'The email or password is incorrect.') {
+    super(message)
     this.name = 'InvalidCredentialsError'
+  }
+}
+
+/**
+ * Raised when the login API cannot be reached or answers with a response
+ * that is not a valid login result. Deliberately distinct from
+ * {@link InvalidCredentialsError} so the UI never presents a network or
+ * server failure as "wrong password".
+ */
+export class ApiUnavailableError extends Error {
+  constructor(message = 'The sign-in service is unavailable.') {
+    super(message)
+    this.name = 'ApiUnavailableError'
   }
 }
