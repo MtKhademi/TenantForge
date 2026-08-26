@@ -3,8 +3,6 @@ id: F006
 slice: S03
 title: Define and mock the dashboard summary
 agent: ui-engineer
-status: planned
-depends_on: [F005]
 source: tasks/slices/003-dashboard-summary.md
 ---
 
