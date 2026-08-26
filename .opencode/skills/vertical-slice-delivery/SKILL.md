@@ -26,13 +26,15 @@ for discovery, planning, implementation, validation, self-review and delivery.
 
 ## Task model
 
-Treat `tasks/front/F*.md` and `tasks/backend/B*.md` as executable queues. Read the
-referenced `tasks/slices/*.md` for the complete product contract. A dependency is
-complete only when its own task file says `status: done` on current `main`.
+Treat `tasks/TASKS.md` as the single source of status and dependencies. Every
+non-done row links one complete executable Spec under `tasks/front/` or
+`tasks/backend/`; read that Spec and its referenced `tasks/slices/*.md` contract.
+A dependency is complete only when its ledger row is `done` on current `main`.
 
-Update only the active task's status in its delivery commit. Keep
-`tasks/ROADMAP.md` static so parallel front and backend PRs do not edit a shared
-progress file.
+After plan approval, update only the active row to `in_progress`; after
+validation, update it to `review`. After final approval, update it to `done`, set
+its Spec cell to `—` and delete exactly that completed Spec in the delivery
+commit. Never edit another row or delete another Spec.
 
 ## Start gate
 
@@ -119,12 +121,15 @@ a time and repeat self-review. On `Cancel`, preserve the branch and stop.
 After final approval:
 
 1. continue the same visible todo list;
-2. set only the active task to `status: done`;
-3. stage only owned implementation, tests, required docs and that task file;
-4. inspect the staged diff for secrets and unrelated changes;
-5. commit on `front/fxxx-slug` or `backend/bxxx-slug`;
-6. push once without force and create a PR to `main`;
-7. report evidence and stop.
+2. preserve the checked Spec acceptance criteria and evidence for the PR body;
+3. set only the active ledger row to `done` and its Spec cell to `—`;
+4. delete exactly the active tracked Spec with `git rm -- <exact-path>`;
+5. validate that every non-done row has one Spec, every done row has none, all
+   dependency IDs exist and the graph has no cycle;
+6. stage only owned implementation, tests, required docs, the ledger update and
+   active Spec deletion;
+7. inspect, commit on `front/fxxx-slug` or `backend/bxxx-slug`, push once without
+   force, create a PR to `main`, report evidence and stop.
 
 On validation, push or PR failure, preserve the current clone and branch and
 report the exact blocker. Never reset, clean, stash, amend or retry a failed push
