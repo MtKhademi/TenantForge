@@ -4,7 +4,7 @@ slice: S06
 title: Implement user management APIs
 agent: backend-mentor
 status: planned
-depends_on: [B005, F006]
+depends_on: [B005, F008]
 source: tasks/slices/006-user-management.md
 ---
 
@@ -20,6 +20,6 @@ Implement the platform user list and creation contracts defined for S06.
 
 ## Acceptance
 
-- F007 can list persisted users and create one valid account.
+- F009 can list persisted users and create one valid account.
 - Duplicate, invalid and unauthorized paths have correct semantics.
 - Learning note, tests and build pass without UI edits.

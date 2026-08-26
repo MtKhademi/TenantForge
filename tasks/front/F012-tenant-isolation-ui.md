@@ -1,10 +1,10 @@
 ---
-id: F010
+id: F012
 slice: S08
 title: Expose tenant isolation in the UI
 agent: ui-engineer
 status: planned
-depends_on: [F009, B008]
+depends_on: [F011, B008]
 source: tasks/slices/008-tenant-isolation.md
 ---
 

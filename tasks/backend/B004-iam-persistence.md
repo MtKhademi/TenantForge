@@ -4,7 +4,7 @@ slice: S04
 title: Add IAM account persistence
 agent: backend-mentor
 status: planned
-depends_on: [B003, F005]
+depends_on: [B003, F007]
 source: tasks/slices/004-iam-account-persistence.md
 ---
 

@@ -3,7 +3,9 @@
 ## Executable tasks
 
 - Backend: `B002`
-- Front: `F003`
+- Front authenticated shell: `F003`
+- Front Persian RTL refactor: `F004`
+- Front collapsible RTL sidebar refactor: `F005`
 
 ## Owner
 

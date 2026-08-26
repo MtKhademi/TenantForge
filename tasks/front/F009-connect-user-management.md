@@ -1,16 +1,16 @@
 ---
-id: F007
+id: F009
 slice: S06
 title: Connect user management APIs
 agent: ui-engineer
 status: planned
-depends_on: [F006, B006]
+depends_on: [F008, B006]
 source: tasks/slices/006-user-management.md
 ---
 
 # Objective
 
-Replace F006 user mocks with persisted users and creation through B006.
+Replace F008 user mocks with persisted users and creation through B006.
 
 ## Scope
 

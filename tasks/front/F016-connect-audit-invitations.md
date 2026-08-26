@@ -1,16 +1,16 @@
 ---
-id: F014
+id: F016
 slice: S10
 title: Connect invitations and audit log APIs
 agent: ui-engineer
 status: planned
-depends_on: [F013, B010]
+depends_on: [F015, B010]
 source: tasks/slices/010-audit-and-invitations.md
 ---
 
 # Objective
 
-Replace F013 mocks with real invitations and immutable audit events from B010.
+Replace F015 mocks with real invitations and immutable audit events from B010.
 
 ## Scope
 

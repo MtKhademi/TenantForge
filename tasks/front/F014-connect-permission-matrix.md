@@ -1,16 +1,16 @@
 ---
-id: F012
+id: F014
 slice: S09
 title: Connect role and permission APIs
 agent: ui-engineer
 status: planned
-depends_on: [F011, B009]
+depends_on: [F013, B009]
 source: tasks/slices/009-role-permission-matrix.md
 ---
 
 # Objective
 
-Replace F011 mocks with persisted tenant roles, permissions and assignments from
+Replace F013 mocks with persisted tenant roles, permissions and assignments from
 B009.
 
 ## Scope
