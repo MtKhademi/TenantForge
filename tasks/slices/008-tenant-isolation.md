@@ -3,7 +3,7 @@
 ## Executable tasks
 
 - Backend: `B008`
-- Front: `F010`
+- Front: `F012`
 
 ## Owner
 

@@ -4,7 +4,7 @@ slice: S10
 title: Implement invitations and audit events
 agent: backend-mentor
 status: planned
-depends_on: [B009, F013]
+depends_on: [B009, F015]
 source: tasks/slices/010-audit-and-invitations.md
 ---
 
@@ -21,6 +21,6 @@ by the final starter-kit demo.
 
 ## Acceptance
 
-- F014 can create an invitation and display related audit events.
+- F016 can create an invitation and display related audit events.
 - Raw tokens and secrets never appear in responses or logs.
 - Authorization, expiry and immutability paths are integration-tested.

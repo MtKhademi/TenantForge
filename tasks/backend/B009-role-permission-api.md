@@ -4,7 +4,7 @@ slice: S09
 title: Implement tenant roles and permissions
 agent: backend-mentor
 status: planned
-depends_on: [B008, F011]
+depends_on: [B008, F013]
 source: tasks/slices/009-role-permission-matrix.md
 ---
 
@@ -21,6 +21,6 @@ for the accepted S09 matrix contract.
 
 ## Acceptance
 
-- F012 can persist and reload a custom role assignment.
+- F014 can persist and reload a custom role assignment.
 - Denied operations remain denied even when called directly.
 - Backend tests, build and learning note pass.

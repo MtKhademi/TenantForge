@@ -4,7 +4,7 @@ slice: S07
 title: Implement tenants and memberships
 agent: backend-mentor
 status: planned
-depends_on: [B006, F008]
+depends_on: [B006, F010]
 source: tasks/slices/007-tenant-membership.md
 ---
 
@@ -21,6 +21,6 @@ the S07 switcher.
 
 ## Acceptance
 
-- F009 can create and reload a tenant with its first Owner.
+- F011 can create and reload a tenant with its first Owner.
 - Invalid or duplicate operations do not leave partial data.
 - Backend tests, build and learning note pass.

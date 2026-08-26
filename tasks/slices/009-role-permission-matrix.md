@@ -2,9 +2,9 @@
 
 ## Executable tasks
 
-- Front contract and mock: `F011`
+- Front contract and mock: `F013`
 - Backend: `B009`
-- Front integration: `F012`
+- Front integration: `F014`
 
 ## Owner
 

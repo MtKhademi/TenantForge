@@ -1,10 +1,10 @@
 ---
-id: F006
+id: F008
 slice: S06
 title: Define and mock user management
 agent: ui-engineer
 status: planned
-depends_on: [F005]
+depends_on: [F007]
 source: tasks/slices/006-user-management.md
 ---
 

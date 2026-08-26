@@ -1,16 +1,16 @@
 ---
-id: F005
+id: F007
 slice: S03
 title: Connect the dashboard summary API
 agent: ui-engineer
 status: planned
-depends_on: [F004, B003]
+depends_on: [F006, B003]
 source: tasks/slices/003-dashboard-summary.md
 ---
 
 # Objective
 
-Replace F004 dashboard mocks with the real B003 API without changing the
+Replace F006 dashboard mocks with the real B003 API without changing the
 accepted user experience.
 
 ## Scope

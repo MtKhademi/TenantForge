@@ -1,10 +1,10 @@
 ---
-id: F011
+id: F013
 slice: S09
 title: Define and mock the role permission matrix
 agent: ui-engineer
 status: planned
-depends_on: [F010]
+depends_on: [F012]
 source: tasks/slices/009-role-permission-matrix.md
 ---
 
