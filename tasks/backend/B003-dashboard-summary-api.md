@@ -3,8 +3,6 @@ id: B003
 slice: S03
 title: Implement the dashboard summary API
 agent: backend-mentor
-status: planned
-depends_on: [B002, F003]
 source: tasks/slices/003-dashboard-summary.md
 ---
 
