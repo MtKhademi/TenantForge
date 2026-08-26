@@ -3,8 +3,6 @@ id: F009
 slice: S06
 title: Connect user management APIs
 agent: ui-engineer
-status: planned
-depends_on: [F008, B006]
 source: tasks/slices/006-user-management.md
 ---
 
