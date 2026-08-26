@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using TenantForge.Modules.Iam.Features.Login;
 
 namespace TenantForge.Modules.Iam;
@@ -13,16 +16,50 @@ public sealed class IAMConfig : IModuleConfig
 
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
-        if (environment.EnvironmentName != Environments.Development)
-        {
-            return;
-        }
+        // Authorization services are environment-independent: protected endpoints
+        // (RequireAuthorization) need them in every environment.
+        services.AddAuthorization();
 
+        // The options are bound lazily from the full configuration so late
+        // sources (including test hosts) are honored. Outside Development the
+        // section is absent by definition (startup validation forbids it), so
+        // this binds an empty object and no signing key is ever available.
         services.AddSingleton(sp =>
         {
             var section = sp.GetRequiredService<IConfiguration>().GetSection(DevelopmentLoginPath);
             return section.Get<DevelopmentLoginOptions>() ?? new DevelopmentLoginOptions();
         });
+
+        // JwtBearer validates the tokens issued by DevelopmentJwtIssuer and
+        // provides the 401 challenge for protected endpoints in every
+        // environment. The signing key is assigned at runtime by
+        // DevelopmentJwtBearerOptions: when it is absent (outside Development)
+        // token validation always fails and protected endpoints fail closed.
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.MapInboundClaims = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = DevelopmentAdminIdentity.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = DevelopmentAdminIdentity.Audience,
+                    ValidateIssuerSigningKey = true,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromSeconds(30)
+                };
+            });
+        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>, DevelopmentJwtBearerOptions>();
+
+        // The credential source and token issuer are the development-only login
+        // shortcut; outside Development they are simply absent, so login is
+        // impossible in those environments.
+        if (environment.EnvironmentName != Environments.Development)
+        {
+            return;
+        }
+
         services.AddSingleton<ICredentialChecker, DevelopmentCredentialChecker>();
         services.AddSingleton<DevelopmentJwtIssuer>();
     }
