@@ -3,8 +3,6 @@ id: B006
 slice: S06
 title: Implement user management APIs
 agent: backend-mentor
-status: planned
-depends_on: [B005, F008]
 source: tasks/slices/006-user-management.md
 ---
 
