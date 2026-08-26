@@ -73,8 +73,10 @@ already `done` on `main`. They never exchange uncommitted files. Shared truth
 moves between clones only after a pull request is merged and the other clone
 pulls updated `main`.
 
-Each task changes only its own status file. The static roadmap is not edited by
-delivery branches, preventing routine front/backend merge conflicts.
+Each delivery changes only its own row in `tasks/TASKS.md`. Status and
+dependencies live in that ledger; detailed Specs remain complete while planned
+or active and are removed only when their row becomes `done`. Front and backend
+branches must never edit another row or Spec.
 
 ## Recovery
 
@@ -91,8 +93,10 @@ or:
 /backend-task B001
 ```
 
-The command detects its existing branch and preserves the current diff. It never
-stashes, resets, cleans or touches either sibling clone.
+The command detects its existing branch and preserves the current diff. It can
+recover `in_progress` and `review` rows, or finish delivery when the row is
+`done` and its Spec has already been removed. It never stashes, resets, cleans
+or touches either sibling clone.
 
 ## Permission mode
 
