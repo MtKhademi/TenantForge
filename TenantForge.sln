@@ -1,0 +1,28 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# TenantForge
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TenantForge.Api", "src\api\TenantForge.Api\TenantForge.Api.csproj", "{1B0F3D50-1111-4B01-8A01-0000000000A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TenantForge.Modules.Iam", "src\modules\iam\TenantForge.Modules.Iam\TenantForge.Modules.Iam.csproj", "{1B0F3D50-2222-4B01-8A01-0000000000A2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TenantForge.Api.IntegrationTests", "tests\integration\TenantForge.Api.IntegrationTests\TenantForge.Api.IntegrationTests.csproj", "{1B0F3D50-3333-4B01-8A01-0000000000A3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1B0F3D50-1111-4B01-8A01-0000000000A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B0F3D50-1111-4B01-8A01-0000000000A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B0F3D50-1111-4B01-8A01-0000000000A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B0F3D50-1111-4B01-8A01-0000000000A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1B0F3D50-2222-4B01-8A01-0000000000A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B0F3D50-2222-4B01-8A01-0000000000A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B0F3D50-2222-4B01-8A01-0000000000A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B0F3D50-2222-4B01-8A01-0000000000A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1B0F3D50-3333-4B01-8A01-0000000000A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B0F3D50-3333-4B01-8A01-0000000000A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B0F3D50-3333-4B01-8A01-0000000000A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B0F3D50-3333-4B01-8A01-0000000000A3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

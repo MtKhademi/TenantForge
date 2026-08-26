@@ -3,7 +3,7 @@ id: B001
 slice: S01
 title: Implement the development login API
 agent: backend-mentor
-status: planned
+status: done
 depends_on: []
 source: tasks/slices/001-hardcoded-admin-login.md
 ---

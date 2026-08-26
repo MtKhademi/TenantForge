@@ -91,6 +91,22 @@ through uncommitted sibling files.
 - Keep migrations and generated output identifiable in review.
 - Do not weaken tests or acceptance criteria to obtain a pass.
 
+## Verification environment (backend)
+
+- This machine has no Linux `dotnet` CLI; use `dotnet.exe` (Windows SDK via WSL interop, .NET 10) for build/test/run.
+- Compose modules through their public seam only (`IamModule.AddIamModule` /
+  `ValidateIamModuleConfiguration` / `MapIamModule`); features stay `internal`,
+  and module configuration follows `IModuleConfig`. Validate configuration only
+  after `builder.Build()`, never at registration.
+- `dotnet.exe run` forces `Development`; run the built DLL for Production runs.
+- Windows hosts are not reachable from WSL on `127.0.0.1`; bind `0.0.0.0` and
+  curl through the WSL gateway IP.
+- Make `WebApplicationFactory` test hosts hermetic with a temp content root so
+  on-disk `appsettings.*.json` cannot leak into tests.
+
+See `docs/architecture.md` ("Local development environment") and the
+`backend-mentor` agent for the full detail.
+
 ## Review and delivery
 
 After all checks pass, review the complete diff yourself in the same primary
