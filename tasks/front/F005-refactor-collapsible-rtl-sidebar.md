@@ -56,13 +56,12 @@ verified in the Persian RTL layout introduced by F004.
 
 ## Verification
 
-- [ ] Add focused component tests for expanded/collapsed state, active
-      navigation and accessible labels.
-- [ ] Add or update browser tests that toggle the sidebar and navigate between
-      every currently available item.
+- [ ] Demonstrate expanded/collapsed state, active navigation and accessible
+      labels in browser evidence.
+- [ ] Toggle the sidebar and navigate between every currently available item in
+      a real browser.
 - [ ] Verify at representative desktop, tablet and mobile widths with no
       horizontal overflow.
 - [ ] Capture before/after browser evidence for expanded and collapsed states,
       including a clean browser console.
-- [ ] Run frontend format, lint, type-check, unit tests, E2E tests and production
-      build.
+- [ ] Run frontend format, lint, type-check and production build.

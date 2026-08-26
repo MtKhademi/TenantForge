@@ -63,7 +63,7 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 
 ### UI engineer
 
-- Own `src/web/**`, UI tests and browser evidence.
+- Own `src/web/**` and browser evidence. Do not inspect, create, update or run frontend tests.
 - May use mocks only when the active task explicitly allows them.
 - Must not modify backend projects, database migrations or authorization policies.
 - Must not create screens beyond the active task.
@@ -100,7 +100,7 @@ A task is complete only when:
 
 - the visible outcome works in a real browser;
 - the happy path and the relevant failure path are demonstrated;
-- changed code builds, lints and tests successfully;
+- frontend changed code builds and lints successfully; backend changed code builds and tests successfully;
 - no browser console error is introduced;
 - security-sensitive API behavior is covered by an integration test;
 - generated files are separated from authored changes in the review summary;

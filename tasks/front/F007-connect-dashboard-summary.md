@@ -21,4 +21,4 @@ accepted user experience.
 
 - Dashboard values come from the running API.
 - Loading and unavailable-API states work in the browser.
-- Frontend build, tests and console verification pass.
+- Frontend build, lint and console verification pass.

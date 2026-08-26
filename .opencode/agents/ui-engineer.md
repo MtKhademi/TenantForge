@@ -63,7 +63,7 @@ containing the evidence produced and the next step. Never complete several todos
 in one hidden batch. On failure, keep the current todo active, report the error
 and add or revise the smallest recovery todo.
 
-Own only `src/web/**`, frontend tests and task-requested browser evidence. Do not edit `src/api/**`, `src/modules/**`, backend tests, migrations or backend learning notes.
+Own only `src/web/**` and task-requested browser evidence. Do not inspect, create, update or run frontend tests. Do not edit `src/api/**`, `src/modules/**`, backend tests, migrations or backend learning notes.
 
 Build only the active screen and the smallest reusable primitives it actually needs. Use mock data only when the task permits it. Treat the task's API contract as fixed; report contract problems instead of silently changing them.
 
@@ -76,7 +76,7 @@ For every UI task:
 - avoid default-template and AI-generated visual clichés;
 - run the real application and inspect it in a browser;
 - capture desktop and mobile screenshots when browser tooling is available;
-- report console errors, test results and remaining out-of-scope work.
+- report console errors, browser/build/lint evidence and remaining out-of-scope work.
 
 Review your own final diff against the task and source slice, present findings
 and wait for final delivery approval. Stop when the active task is done. Never

@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, LockKeyhole, Moon, ShieldCheck, Sun } from 'lucide-react'
+import { Loader2, LockKeyhole, Moon, ShieldCheck, Sun, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
+import { SessionLoadingScreen } from '@/components/shell/SessionLoadingScreen'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -22,7 +23,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
-  const { session, login } = useAuth()
+  const { status, sessionNotice, login } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [credentialError, setCredentialError] = useState<string | null>(null)
@@ -39,7 +40,11 @@ export function LoginPage() {
     },
   })
 
-  if (session) return <Navigate to="/dashboard" replace />
+  // While a stored session is being verified on this tab, do not show the
+  // sign-in form — the shell is either about to open or the redirect below
+  // will take the user there. After verification, land on the dashboard.
+  if (status === 'authenticated') return <Navigate to="/dashboard" replace />
+  if (status === 'bootstrapping') return <SessionLoadingScreen />
 
   async function onSubmit(values: LoginFormValues) {
     setCredentialError(null)
@@ -58,6 +63,13 @@ export function LoginPage() {
       )
     }
   }
+
+  const sessionNoticeText =
+    sessionNotice === 'expired'
+      ? 'Your session has expired. Please sign in again.'
+      : sessionNotice === 'unverified'
+        ? 'We could not verify your session right now. Please sign in to continue.'
+        : null
 
   return (
     <main className="grid min-h-screen bg-background text-foreground lg:grid-cols-[minmax(0,1fr)_minmax(31rem,0.78fr)]">
@@ -99,6 +111,13 @@ export function LoginPage() {
               {theme === 'dark' ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}
             </SecondaryButton>
           </div>
+
+          {sessionNoticeText && (
+            <div className="mb-5 flex items-start gap-3 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm text-foreground" role="alert">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
+              <p>{sessionNoticeText}</p>
+            </div>
+          )}
 
           <form className="rounded-xl border border-border bg-surface p-5 shadow-soft" onSubmit={handleSubmit(onSubmit)} noValidate>
             <div className="space-y-5">

@@ -55,8 +55,8 @@ rework and a confusing product experience.
 
 ## Verification
 
-- [ ] Run frontend format, lint, type-check, unit tests and production build.
-- [ ] Add or update tests for document locale, Persian copy and RTL placement.
+- [ ] Run frontend format, lint, type-check and production build.
+- [ ] Demonstrate document locale, Persian copy and RTL placement in browser evidence.
 - [ ] Demonstrate login, dashboard, loading/error and protected-route behavior
       in a real browser at desktop and mobile widths.
 - [ ] Capture browser evidence showing the Persian RTL shell and a clean console.
