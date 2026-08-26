@@ -3,8 +3,6 @@ id: F016
 slice: S10
 title: Connect invitations and audit log APIs
 agent: ui-engineer
-status: planned
-depends_on: [F015, B010]
 source: tasks/slices/010-audit-and-invitations.md
 ---
 
