@@ -3,8 +3,6 @@ id: F003
 slice: S02
 title: Protect and restore the application shell
 agent: ui-engineer
-status: planned
-depends_on: [F002, B002]
 source: tasks/slices/002-authenticated-shell.md
 ---
 

@@ -3,8 +3,6 @@ id: F011
 slice: S07
 title: Connect tenant and membership APIs
 agent: ui-engineer
-status: planned
-depends_on: [F010, B007]
 source: tasks/slices/007-tenant-membership.md
 ---
 

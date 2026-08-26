@@ -3,8 +3,6 @@ id: B010
 slice: S10
 title: Implement invitations and audit events
 agent: backend-mentor
-status: planned
-depends_on: [B009, F015]
 source: tasks/slices/010-audit-and-invitations.md
 ---
 

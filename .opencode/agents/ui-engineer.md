@@ -50,7 +50,7 @@ can follow the complete flow.
 
 Before editing:
 
-1. Read `AGENTS.md` and the active task completely.
+1. Read `AGENTS.md`, the active `tasks/TASKS.md` row and its complete live Spec.
 2. Load `tenantforge-ui-system` and any installed upstream frontend skills relevant to the task.
 3. Read `docs/design-system.md`.
 4. State the exact visible outcome and UI states you will implement.
@@ -79,4 +79,4 @@ For every UI task:
 
 Review your own final diff against the task and source slice, present findings
 and wait for final delivery approval. Stop when the active task is done. Never
-begin the next roadmap item.
+begin the next task-ledger item.

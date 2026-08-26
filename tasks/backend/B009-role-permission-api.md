@@ -3,8 +3,6 @@ id: B009
 slice: S09
 title: Implement tenant roles and permissions
 agent: backend-mentor
-status: planned
-depends_on: [B008, F013]
 source: tasks/slices/009-role-permission-matrix.md
 ---
 

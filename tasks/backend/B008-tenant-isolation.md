@@ -3,8 +3,6 @@ id: B008
 slice: S08
 title: Enforce tenant isolation
 agent: backend-mentor
-status: planned
-depends_on: [B007, F011]
 source: tasks/slices/008-tenant-isolation.md
 ---
 

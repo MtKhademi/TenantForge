@@ -63,7 +63,7 @@ the complete flow.
 
 Before editing:
 
-1. Read `AGENTS.md` and the active task completely.
+1. Read `AGENTS.md`, the active `tasks/TASKS.md` row and its complete live Spec.
 2. Load `vertical-slice-delivery`.
 3. Read only the architecture sections required by the task.
 4. Restate the accepted API contract, the backend learning goal and explicit out-of-scope work.

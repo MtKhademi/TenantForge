@@ -3,8 +3,6 @@ id: B007
 slice: S07
 title: Implement tenants and memberships
 agent: backend-mentor
-status: planned
-depends_on: [B006, F010]
 source: tasks/slices/007-tenant-membership.md
 ---
 

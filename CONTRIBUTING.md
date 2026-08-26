@@ -4,8 +4,9 @@ TenantForge welcomes focused contributions that preserve its visible-first learn
 
 ## Start with a task
 
-Every product change should map to one executable task under `tasks/front/` or
-`tasks/backend/` and one source specification under `tasks/slices/`.
+Every product change must have one row in `tasks/TASKS.md`, one complete live
+executable Spec under `tasks/front/` or `tasks/backend/`, and one permanent
+source specification under `tasks/slices/`.
 
 1. use the `main` clone and `/task` to see runnable work;
 2. run `/front-task Fxxx` in the `front` clone or `/backend-task Bxxx` in the
@@ -15,16 +16,17 @@ Every product change should map to one executable task under `tasks/front/` or
 5. work only on `front/fxxx-<slug>` or `backend/bxxx-<slug>` in that clone.
 
 The workflow requires a second approval after tests and browser verification.
-Only then does it mark that one task `done`, commit, push and prepare the pull
-request. Do not edit the static roadmap or another queue's task to record
-progress. Completed tasks remain as learning material.
+Only then does it change that one ledger row to `done`, replace its Spec link
+with `—`, delete exactly the completed executable Spec, commit, push and prepare
+the pull request. Do not edit another ledger row or delete another task's Spec.
+The source slice, learning note, Git history and PR remain as learning material.
 
 Do not use Git worktrees and do not reach into a sibling clone. Front and backend
 share work only through merged pull requests and updated `main`.
 
 If a change does not fit an existing task, propose a source slice with
-`tasks/slices/TEMPLATE.md` and an executable task with `tasks/TEMPLATE.md` before
-implementing it.
+`tasks/slices/TEMPLATE.md`, add a ledger row and create its complete executable
+Spec with `tasks/TEMPLATE.md` before implementing it.
 
 ## Pull requests
 
@@ -49,7 +51,8 @@ Avoid bundling formatting, renaming, dependency upgrades and product behavior in
 
 ## Documentation
 
-Update the active task when its accepted contract changes. Backend slices must include a learning note under `docs/learning/` when that directory is introduced.
+Update the active Spec when its accepted contract changes; keep status and
+dependencies only in `tasks/TASKS.md`. Backend slices must include a learning note under `docs/learning/` when that directory is introduced.
 
 ## Conduct
 

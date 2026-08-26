@@ -3,8 +3,6 @@ id: B005
 slice: S05
 title: Seed and authenticate the platform administrator
 agent: backend-mentor
-status: planned
-depends_on: [B004]
 source: tasks/slices/005-seeded-platform-admin.md
 ---
 

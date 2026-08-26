@@ -8,8 +8,10 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
    with `/backend-task`. Use `/task` only for read-only coordination from the
    `main` clone. Run the owning command again to recover an interrupted task
    branch.
-2. Read the active task completely.
-3. Read only the product, architecture or design documents referenced by that task.
+2. Read the active row in `tasks/TASKS.md` and its complete linked Spec. The
+   ledger is authoritative for status and dependencies; the Spec is
+   authoritative for detailed scope and acceptance.
+3. Read only the product, architecture or design documents referenced by that Spec.
 4. State the visible outcome, files you expect to touch and what remains out of scope.
 5. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
 6. Wait for explicit plan approval before editing, installing packages, creating
@@ -28,12 +30,26 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 - Perform final diff review in the same agent and require final user approval
   before delivery.
 
+## Task ledger and Spec lifecycle
+
+- `tasks/TASKS.md` is the single source of task status and dependencies.
+- Every non-done row has exactly one complete executable Spec under
+  `tasks/front/` or `tasks/backend/`; every done row has Spec `—` and no live
+  executable task file.
+- After plan approval, change only the active row to `in_progress`. After
+  validation, change it to `review`.
+- After final delivery approval, change only the active row to `done`, replace
+  its Spec link with `—` and delete exactly that tracked Spec in the same
+  delivery commit.
+- Preserve source slices and Git/PR history as the permanent record. Never
+  delete another task's Spec or use file absence alone as proof of completion.
+
 ## Scope discipline
 
 - Keep exactly one task active.
 - Work only inside the current clone. Never inspect or modify sibling `main`,
   `front` or `backend` directories.
-- Do not implement future roadmap items.
+- Do not implement future `tasks/TASKS.md` items.
 - Do not create an endpoint without a named current or immediately dependent
   front task as its consumer, except a health endpoint required to run the
   system.
@@ -114,8 +130,9 @@ Do not turn the learning note into framework documentation. Explain only the cod
 - Never force-push, rewrite shared history or push directly to `main`.
 - Do not commit secrets, local credentials, database data or generated browser artifacts.
 - Keep `main` runnable and demoable.
-- Do not delete completed task files. Change only the active executable task to
-  `status: done`; never edit the static roadmap merely to record progress.
+- During delivery, update only the active `tasks/TASKS.md` row and delete only
+  its exact linked Spec after final approval. Verify all other live Spec links
+  and dependencies before committing.
 - Require a second user approval after validation and review before commit,
   push and pull-request creation.
 

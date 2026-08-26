@@ -3,8 +3,6 @@ id: F002
 slice: S01
 title: Connect login UI to the development API
 agent: ui-engineer
-status: planned
-depends_on: [F001, B001]
 source: tasks/slices/001-hardcoded-admin-login.md
 ---
 

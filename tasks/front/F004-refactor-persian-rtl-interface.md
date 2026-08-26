@@ -3,8 +3,6 @@ id: F004
 slice: S02
 title: Refactor the application into a Persian RTL interface
 agent: ui-engineer
-status: planned
-depends_on: [F003]
 source: tasks/slices/002-authenticated-shell.md
 ---
 
