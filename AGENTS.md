@@ -134,6 +134,11 @@ Do not turn the learning note into framework documentation. Explain only the cod
   untracked or substantive changes.
 - Git preflight is not an investigation: do not inspect binaries, aliases, PATH
   or config, and do not repeat equivalent status commands.
+- On a clean owning task branch, the owning command fetches `origin/main` once.
+  If that exact task row is already `done` with Spec `—` on remote main, it
+  automatically switches to local `main`, pulls and continues to the next
+  runnable task. This delivery-exit transition is not recovery and requires no
+  manual Git command.
 - Show `git status` and `git diff` before proposing a commit.
 - Never force-push, rewrite shared history or push directly to `main`.
 - Do not commit secrets, local credentials, database data or generated browser artifacts.

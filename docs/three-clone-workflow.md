@@ -93,10 +93,18 @@ or:
 /backend-task B001
 ```
 
-The command detects its existing branch and preserves the current diff. It can
-recover `in_progress` and `review` rows, or finish delivery when the row is
-`done` and its Spec has already been removed. It never stashes, resets, cleans
-or touches either sibling clone.
+The command detects its existing branch and routes automatically:
+
+- substantive local changes mean real recovery: preserve the diff and resume the
+  same `in_progress` or `review` task;
+- a clean task branch whose exact row is already `done` with Spec `—` on
+  `origin/main` means delivery is complete: switch this clone to `main`, pull
+  and continue to the next runnable task in the same invocation;
+- a clean task branch not yet marked done on remote main remains in recovery for
+  review or delivery.
+
+No manual switch or pull is required after a merged PR. The command never
+stashes, resets, cleans, deletes the old branch or touches either sibling clone.
 
 ## Permission mode
 

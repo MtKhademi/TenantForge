@@ -26,14 +26,29 @@ The Git preflight is a short routing step, not a diagnostic task.
 1. Run `git rev-parse --show-toplevel` once. Report that root as the active
    **front clone**; never inspect or edit a sibling directory.
 2. Run `git branch --show-current` once.
-3. If the branch matches `front/fxxx-<slug>`, recover that task in place:
-   - infer or verify the matching F row in `tasks/TASKS.md`;
-   - accept `in_progress` or `review` as recoverable state;
-   - accept `done` with Spec `—` only as delivery recovery for this branch;
-   - do not switch, pull, restore, stash, reset or clean;
-   - read the ledger row, live Spec when present and current diff, then rebuild
-     the plan and visible todos.
-4. Otherwise run `git status --porcelain=v1` exactly once.
+3. If the branch matches `front/fxxx-<slug>`, route by evidence:
+   - infer the matching F task ID from the branch;
+   - run `git status --porcelain=v1` exactly once;
+   - if it contains substantive staged, untracked or unstaged changes, preserve
+     everything and recover this task in place. Do not fetch, switch, pull,
+     restore, stash, reset or clean;
+   - if it is non-empty but
+     `git diff --cached --quiet && test -z "$(git ls-files --others --exclude-standard)" && git diff --ignore-cr-at-eol --quiet`
+     succeeds, run `git restore --worktree -- .` once and treat it as clean;
+   - when clean, run `git fetch origin main` once and inspect only the exact
+     matching row from `origin/main:tasks/TASKS.md` using `git show`;
+   - if that remote-main row is `done` with Spec `—`, the task is already
+     delivered. Report the transition, run `git switch main`, then
+     `git pull --ff-only`, verify one clean `git status --porcelain=v1`, and
+     continue directly at **Select**. With no argument choose the next runnable
+     task; with the completed ID explicitly supplied, report it done and stop;
+   - otherwise recover the current task in place: read its local ledger row,
+     live Spec when present and current diff, then rebuild the plan and visible
+     todos;
+   - never delete the completed local branch automatically.
+
+4. If step 3 did not already route to **Select**, run
+   `git status --porcelain=v1` exactly once.
    - If empty, continue immediately.
    - If non-empty, run exactly this one classifier:
      `git diff --cached --quiet && test -z "$(git ls-files --others --exclude-standard)" && git diff --ignore-cr-at-eol --quiet`
