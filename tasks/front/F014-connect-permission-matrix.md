@@ -21,4 +21,4 @@ B009.
 
 - Role creation and assignment survive refresh.
 - Allowed navigation and denied operations match the server response.
-- Frontend tests and browser demo pass.
+- Frontend build, lint and browser demo pass.

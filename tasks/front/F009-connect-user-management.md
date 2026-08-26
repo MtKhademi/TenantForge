@@ -20,4 +20,4 @@ Replace F008 user mocks with persisted users and creation through B006.
 
 - The seeded administrator appears and a new user persists after refresh.
 - Duplicate or invalid input produces the specified feedback.
-- Frontend tests and real browser demo pass.
+- Frontend build, lint and real browser demo pass.

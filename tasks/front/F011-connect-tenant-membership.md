@@ -20,4 +20,4 @@ Replace F010 mocks with persisted tenant and membership behavior from B007.
 
 - A created tenant survives refresh and appears in the switcher.
 - Validation and relevant error behavior are visible.
-- Frontend tests and browser verification pass.
+- Frontend build, lint and browser verification pass.

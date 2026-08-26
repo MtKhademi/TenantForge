@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, X } from 'lucide-react'
+import { Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, X } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SecondaryButton } from '@/components/ui/Button'
@@ -12,12 +12,12 @@ const navItems = ['Dashboard', 'Platform identity', 'Security posture']
 export function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { session, signOut } = useAuth()
+  const { session, isSigningOut, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
 
-  function handleSignOut() {
-    signOut()
+  async function handleSignOut() {
+    await signOut()
     navigate('/login', { replace: true })
   }
 
@@ -76,8 +76,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 <p className="text-sm font-semibold">{session?.user.displayName}</p>
                 <p className="text-xs text-muted-foreground">{session?.user.email}</p>
               </div>
-              <SecondaryButton type="button" aria-label="Sign out" className="px-3" onClick={handleSignOut}>
-                <LogOut aria-hidden="true" className="size-4" />
+              <SecondaryButton
+                type="button"
+                aria-label={isSigningOut ? 'Signing out' : 'Sign out'}
+                className="px-3"
+                disabled={isSigningOut}
+                onClick={handleSignOut}
+              >
+                {isSigningOut ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <LogOut aria-hidden="true" className="size-4" />
+                )}
               </SecondaryButton>
             </div>
           </div>

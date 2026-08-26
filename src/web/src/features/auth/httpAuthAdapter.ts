@@ -1,5 +1,5 @@
-import type { AuthAdapter, AuthSession, LoginRequest } from './authTypes'
-import { ApiUnavailableError, InvalidCredentialsError } from './authTypes'
+import type { AuthAdapter, AuthSession, AuthUser, LoginRequest } from './authTypes'
+import { ApiUnavailableError, InvalidCredentialsError, SessionExpiredError } from './authTypes'
 
 /**
  * S01: the login UI talks to the real development API through this adapter.
@@ -7,12 +7,13 @@ import { ApiUnavailableError, InvalidCredentialsError } from './authTypes'
  * origin deployment) forwards `/api/*` to the .NET API.
  */
 const LOGIN_PATH = '/api/auth/login'
+const CURRENT_ACCOUNT_PATH = '/api/auth/me'
 const SESSION_KEY = 'tenantforge:auth:session'
-const LOGIN_TIMEOUT_MS = 8_000
+const REQUEST_TIMEOUT_MS = 8_000
 
-function createLoginAbortSignal() {
+function createRequestAbortSignal() {
   const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), LOGIN_TIMEOUT_MS)
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   return {
     signal: controller.signal,
     clear: () => window.clearTimeout(timeoutId),
@@ -98,7 +99,7 @@ export const httpAuthAdapter: AuthAdapter = {
 
   async login(request: LoginRequest) {
     let response: Response
-    const abort = createLoginAbortSignal()
+    const abort = createRequestAbortSignal()
     try {
       response = await fetch(LOGIN_PATH, {
         method: 'POST',
@@ -140,4 +141,66 @@ export const httpAuthAdapter: AuthAdapter = {
   signOut() {
     window.sessionStorage.removeItem(SESSION_KEY)
   },
+
+  /** Persist a session after it was verified or created. */
+  saveSession(session: AuthSession) {
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  },
+
+  async fetchCurrentAccount(accessToken) {
+    let response: Response
+    const abort = createRequestAbortSignal()
+    try {
+      response = await fetch(CURRENT_ACCOUNT_PATH, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: abort.signal,
+      })
+    } catch {
+      throw new ApiUnavailableError()
+    } finally {
+      abort.clear()
+    }
+
+    if (response.status === 401) {
+      throw new SessionExpiredError()
+    }
+    if (!response.ok) {
+      throw new ApiUnavailableError()
+    }
+
+    let payload: unknown
+    try {
+      payload = await response.json()
+    } catch {
+      throw new ApiUnavailableError()
+    }
+
+    return parseCurrentAccount(payload)
+  },
+}
+
+/** S02: `GET /api/auth/me` answers with the flat record below. */
+function parseCurrentAccount(payload: unknown): AuthUser {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiUnavailableError()
+  }
+  const user = payload as Record<string, unknown>
+  if (
+    typeof user.id !== 'string' ||
+    user.id.length === 0 ||
+    typeof user.email !== 'string' ||
+    user.email.length === 0 ||
+    typeof user.displayName !== 'string' ||
+    user.displayName.length === 0 ||
+    typeof user.isPlatformAdmin !== 'boolean'
+  ) {
+    throw new ApiUnavailableError()
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    isPlatformAdmin: user.isPlatformAdmin,
+  }
 }

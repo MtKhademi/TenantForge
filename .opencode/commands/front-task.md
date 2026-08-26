@@ -86,7 +86,7 @@ The Git preflight is a short routing step, not a diagnostic task.
 
 ## Plan gate
 
-1. Inspect only relevant `src/web/**` code and frontend tests.
+1. Inspect only relevant `src/web/**` code. Do not inspect, create or update frontend tests.
 2. Present visible outcome, UI states, accepted API contract, expected files,
    browser demo, validation, branch `front/<id-lowercase>-<slug>` and explicit
    out-of-scope work.
@@ -98,7 +98,8 @@ The Git preflight is a short routing step, not a diagnostic task.
 
 1. After approval, stay on the already selected or recovered task branch.
 2. Add separate visible todos to change only the active ledger row from
-   `planned` to `in_progress`, implement, test, demo, review and deliver.
+   `planned` to `in_progress`, implement, demo, review and deliver. Do not add
+   frontend test todos.
 3. Immediately call `todowrite` with the approved sequence and keep exactly one
    item `in_progress`.
 4. Perform every step yourself in this same `ui-engineer` conversation. Never
@@ -106,12 +107,12 @@ The Git preflight is a short routing step, not a diagnostic task.
 5. After each step succeeds, immediately update `todowrite`: complete that one
    todo and start the next one. Show the evidence and next step; never
    batch-complete hidden work.
-6. Keep product edits under `src/web/**` and frontend tests unless the Spec
-   explicitly names one shared file.
-7. Run frontend build, lint, tests and real desktop/mobile browser demo as
-   separate visible todos.
-8. Review the diff for backend edits, secrets, generated evidence, future work
-   and unrelated changes.
+6. Keep product edits under `src/web/**` unless the Spec explicitly names one
+   shared file. Do not inspect, create or update frontend tests.
+7. Run frontend build, lint and real desktop/mobile browser demo as separate
+   visible todos. Do not run frontend test commands.
+8. Review the diff for backend edits, frontend test edits, secrets, generated
+   evidence, future work and unrelated changes.
 
 ## Review and delivery
 
@@ -134,8 +135,8 @@ The Git preflight is a short routing step, not a diagnostic task.
      `git rm -- <exact-active-spec-path>`;
    - verify every non-done row still has one live Spec, every done row has none,
      all dependency IDs exist and the graph has no cycle.
-7. Stage the frontend implementation, tests, required docs, `tasks/TASKS.md`
-   and the active Spec deletion. Inspect the staged diff, commit with the F-ID,
+7. Stage the frontend implementation, required docs, `tasks/TASKS.md` and the
+   active Spec deletion. Inspect the staged diff, commit with the F-ID,
    push once without force and open a PR to `main`.
 8. Report branch, commit, PR, validation and remaining risks. Stop before the
    next task.

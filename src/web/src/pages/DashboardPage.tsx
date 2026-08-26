@@ -24,11 +24,11 @@ export function DashboardPage() {
           </div>
           <div className="rounded-xl border border-border bg-surface p-5 shadow-soft">
             <p className="text-sm font-semibold">Session behavior</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">The session with its signed token is stored in sessionStorage and survives browser refresh until sign out or tab close.</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">The signed token stays in this browser tab. On refresh the API re-verifies it before the shell is restored; invalid or expired tokens return you to sign-in.</p>
           </div>
           <div className="rounded-xl border border-border bg-surface p-5 shadow-soft">
             <p className="text-sm font-semibold">Next slice</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">S02 protects the shell with the current account API and refines the responsive layout.</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">The Persian RTL interface and the collapsible RTL sidebar refine this authenticated shell.</p>
           </div>
         </div>
       </section>
