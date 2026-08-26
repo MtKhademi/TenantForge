@@ -3,7 +3,7 @@ id: F001
 slice: S00
 title: Build the UI foundation and mock login
 agent: ui-engineer
-status: planned
+status: done
 depends_on: []
 source: tasks/slices/000-ui-foundation.md
 ---
