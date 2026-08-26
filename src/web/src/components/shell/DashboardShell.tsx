@@ -137,7 +137,7 @@ function ShellNav({ collapsed }: { collapsed: boolean }) {
       </div>
       {!collapsed && (
         <div className="mt-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
-          Mock session is stored in sessionStorage for S00 browser refresh verification only.
+          The development API session is stored in this browser tab for refresh verification only.
         </div>
       )}
     </nav>
