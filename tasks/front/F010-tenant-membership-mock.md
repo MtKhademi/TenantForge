@@ -3,8 +3,6 @@ id: F010
 slice: S07
 title: Define and mock tenants and memberships
 agent: ui-engineer
-status: planned
-depends_on: [F009]
 source: tasks/slices/007-tenant-membership.md
 ---
 
