@@ -36,6 +36,35 @@ Rules:
 - Contracts are introduced only for demonstrated cross-module needs.
 - Infrastructure remains replaceable but is not abstracted prematurely.
 
+### Module composition seam
+
+Each module exposes exactly one public static seam class plus a module-config
+class; everything else in the module is `internal`, so the API host cannot
+reach into feature details. The host composes a module with three calls:
+
+```csharp
+builder.Services.AddIamModule(builder.Environment);
+var app = builder.Build();
+IamModule.ValidateIamModuleConfiguration(builder.Environment, app.Configuration);
+app.MapIamModule();
+```
+
+- `IamModule` (public) is the seam: `AddIamModule` (DI registration),
+  `ValidateIamModuleConfiguration` (startup validation), `MapIamModule`
+  (endpoint mapping).
+- `IModuleConfig` is the module-config contract: a `SectionName` (the top-level
+  config tag, e.g. `IAM`), `RegisterServices`, and `ValidateConfiguration`.
+- `IAMConfig : IModuleConfig` reads its section from `IConfiguration`, throws at
+  startup when the configuration is not correct (fail closed), and only then
+  registers services.
+- Validation runs **after** `builder.Build()`, never at registration time:
+  `WebApplication.CreateBuilder` has not consumed every configuration source
+  then, and `WebApplicationFactory` test configuration is injected afterwards.
+  Registering services is allowed pre-Build; deciding pass/fail is not.
+
+Future modules (tenancy, audit, ...) follow the same seam shape: one public
+module class, one `<X>ModuleConfig : IModuleConfig`, features stay internal.
+
 ## Authentication evolution
 
 Authentication intentionally evolves in visible steps:
@@ -79,6 +108,27 @@ The first RBAC milestone supports role-based allows. Direct per-user allow/deny 
 - Tenant isolation and unauthorized access are integration-test requirements.
 
 Tests are added with the slice that creates the behavior. The project does not build a large test harness before the first usable flow.
+
+## Local development environment (WSL + Windows .NET SDK)
+
+On the reference machine there is no Linux `dotnet` CLI. The .NET SDK is
+reachable through WSL interop as `dotnet.exe` (on PATH, .NET 10; NuGet cache in
+`~/.nuget/packages` is shared and network access to nuget.org works). Use
+`dotnet.exe build` / `dotnet.exe test` for all backend commands.
+
+Practical consequences:
+
+- `dotnet.exe run` re-applies `Properties/launchSettings.json` (which forces
+  `ASPNETCORE_ENVIRONMENT=Development`). For environment-sensitive runs
+  (e.g. proving Production fail-closed) run the **built DLL directly**:
+  `ASPNETCORE_ENVIRONMENT=Production dotnet.exe src/api/.../bin/Debug/net10.0/TenantForge.Api.dll`.
+- A Windows process listening on `localhost` is not reachable from WSL via
+  `127.0.0.1`. Bind with `--urls http://0.0.0.0:<port>` and curl through the
+  WSL gateway IP (`ip route | head -1` → `default via <gw>`), which is the
+  Windows host.
+- `WebApplicationFactory` test hosts must be hermetic: point the content root
+  at an empty temp directory (`builder.UseContentRoot(...)`) so the real
+  `appsettings.*.json` files on disk do not leak into test configuration.
 
 ## Observability and operations
 
