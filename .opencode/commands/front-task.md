@@ -19,23 +19,34 @@ valid examples:
 /front-task tasks/front/F004-refactor-persian-rtl-interface.md
 ```
 
-## Enter or recover this task
+## Fast entry or recovery
 
-1. Resolve the Git root. Report it as the active **front clone**; never read or
-   edit a sibling directory.
-2. Inspect the current branch and `git status --short` before changing anything.
-3. If the current branch matches `front/fxxx-<slug>`:
+The Git preflight is a short routing step, not a diagnostic task.
+
+1. Run `git rev-parse --show-toplevel` once. Report that root as the active
+   **front clone**; never inspect or edit a sibling directory.
+2. Run `git branch --show-current` once.
+3. If the branch matches `front/fxxx-<slug>`, recover that task in place:
    - infer or verify the matching F row in `tasks/TASKS.md`;
-   - accept `in_progress` or `review` as recoverable implementation state;
-   - accept `done` with Spec `—` and a deleted task file only as delivery
-     recovery for this same branch;
-   - never stash, reset, clean, discard, switch branches or pull;
-   - read the ledger row, live task Spec when present and current diff, rebuild
-     the plan and todo state, then ask for approval before resuming when the
-     previous approval is unclear.
-4. Otherwise require a clean worktree, switch this clone to `main`, run
-   `git pull --ff-only`, and require clean current `main`.
-5. Never create a worktree.
+   - accept `in_progress` or `review` as recoverable state;
+   - accept `done` with Spec `—` only as delivery recovery for this branch;
+   - do not switch, pull, restore, stash, reset or clean;
+   - read the ledger row, live Spec when present and current diff, then rebuild
+     the plan and visible todos.
+4. Otherwise run `git status --porcelain=v1` exactly once.
+   - If empty, continue immediately.
+   - If non-empty, run exactly this one classifier:
+     `git diff --cached --quiet && test -z "$(git ls-files --others --exclude-standard)" && git diff --ignore-cr-at-eol --quiet`
+   - If it succeeds, the only changes are CRLF/LF noise. Run
+     `git restore --worktree -- .` once and continue.
+   - If it fails, show the already captured status and stop. Preserve the real
+     changes; do not diagnose or modify them.
+5. Run `git switch main`, then `git pull --ff-only`, then one final
+   `git status --porcelain=v1`. If it is not empty, report it and stop.
+6. Never create a worktree.
+7. Never inspect the Git executable, aliases, PATH, config or installation.
+   Never repeat an equivalent Git command. Preflight gets at most the commands
+   explicitly listed above.
 
 ## Select
 
@@ -51,7 +62,10 @@ valid examples:
    file must exist. Stop on a missing, duplicate or mismatched Spec.
 6. If blocked, report each pending dependency, its status, owning clone and
    exact command, then stop.
-7. Read the complete Spec, its `source` slice, `AGENTS.md`,
+7. For a fresh task, immediately create and switch to
+   `front/<id-lowercase>-<slug>` from the updated `main`. Do this before deep
+   analysis so every task starts on its own branch.
+8. Read the complete Spec, its `source` slice, `AGENTS.md`,
    `docs/design-system.md` and load `vertical-slice-delivery` plus
    `tenantforge-ui-system`.
 
@@ -62,13 +76,12 @@ valid examples:
    browser demo, validation, branch `front/<id-lowercase>-<slug>` and explicit
    out-of-scope work.
 3. Present todos and ask `Approve`, `Change` or `Cancel`; stop and wait.
-4. Before approval, do not edit, install packages, create a branch or run build
-   commands.
+4. Before approval, do not edit product or task files, install packages or run
+   build commands. The selected task branch already exists.
 
 ## Execute
 
-1. After approval, create the proposed branch for a fresh task; keep the existing
-   matching branch in recovery mode.
+1. After approval, stay on the already selected or recovered task branch.
 2. Add separate visible todos to change only the active ledger row from
    `planned` to `in_progress`, implement, test, demo, review and deliver.
 3. Immediately call `todowrite` with the approved sequence and keep exactly one

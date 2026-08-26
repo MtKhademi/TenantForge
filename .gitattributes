@@ -1,0 +1,6 @@
+# Keep repository text stable across Windows, WSL, Linux and macOS.
+* text=auto eol=lf
+
+# Windows command scripts require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

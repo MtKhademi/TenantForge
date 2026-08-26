@@ -14,8 +14,9 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 3. Read only the product, architecture or design documents referenced by that Spec.
 4. State the visible outcome, files you expect to touch and what remains out of scope.
 5. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
-6. Wait for explicit plan approval before editing, installing packages, creating
-   a branch or running implementation commands.
+6. After synchronization and task selection, create the owning task branch
+   before deep analysis. Then wait for explicit plan approval before editing,
+   installing packages or running implementation commands.
 
 ## Single-agent execution
 
@@ -124,8 +125,15 @@ Do not turn the learning note into framework documentation. Explain only the cod
 
 - Use three ordinary clones named `main`, `front` and `backend`. Never create or
   use a Git worktree.
-- Synchronize clean `main` in the current clone, then create
-  `front/fxxx-<slug>` or `backend/bxxx-<slug>` after plan approval.
+- For a fresh task, use the bounded command preflight: synchronize `main`,
+  select the first runnable owning task, create `front/fxxx-<slug>` or
+  `backend/bxxx-<slug>`, then analyze and request plan approval.
+- If tracked changes are proven to be CRLF/LF-only with
+  `git diff --ignore-cr-at-eol --quiet`, the owning command may run exactly
+  `git restore --worktree -- .` once. Never use that exception for staged,
+  untracked or substantive changes.
+- Git preflight is not an investigation: do not inspect binaries, aliases, PATH
+  or config, and do not repeat equivalent status commands.
 - Show `git status` and `git diff` before proposing a commit.
 - Never force-push, rewrite shared history or push directly to `main`.
 - Do not commit secrets, local credentials, database data or generated browser artifacts.

@@ -28,6 +28,7 @@ permission:
     "git stash*": deny
     "git rebase*": deny
     "git restore*": deny
+    "git restore --worktree -- .": allow
     "git checkout -- *": deny
     "git branch -D*": deny
     "git commit --amend*": deny
