@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,10 +45,40 @@ async function fillCredentialsAndSubmit(
   user: ReturnType<typeof userEvent.setup>,
   { email = VALID_EMAIL, password = VALID_PASSWORD } = {},
 ) {
-  await user.type(screen.getByLabelText(/email/i), email)
-  await user.type(screen.getByLabelText(/password/i), password)
-  await user.click(screen.getByRole('button', { name: /sign in/i }))
+  await user.type(screen.getByLabelText('ایمیل'), email)
+  await user.type(screen.getByLabelText('رمز عبور'), password)
+  await user.click(screen.getByRole('button', { name: 'ورود' }))
 }
+
+describe('F004 Persian RTL interface', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // The `lang="fa"` / `dir="rtl"` document boundary lives in index.html and
+  // is asserted live in the Playwright spec (e2e/s01.spec.ts); jsdom does
+  // not parse the HTML shell, so no unit-level duplicate is added here.
+
+  it('shows the session loading screen in Persian while bootstrapping', () => {
+    const stored = {
+      user: loginResponse().user,
+      accessToken: 'signed-test-token',
+      expiresAtUtc: '2030-01-01T00:00:00Z',
+    }
+    window.sessionStorage.setItem('tenantforge:auth:session', JSON.stringify(stored))
+    // Never resolves: the app must stay on the Persian loading screen.
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})))
+
+    renderApp('/dashboard')
+
+    expect(screen.getByText('در حال بازیابی نشست شما')).toBeInTheDocument()
+  })
+})
 
 describe('S01 development login API', () => {
   beforeEach(() => {
@@ -66,10 +96,10 @@ describe('S01 development login API', () => {
     const user = userEvent.setup()
     renderApp()
 
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
+    await user.click(screen.getByRole('button', { name: 'ورود' }))
 
-    expect(await screen.findByText('Email is required.')).toBeInTheDocument()
-    expect(screen.getByText('Password is required.')).toBeInTheDocument()
+    expect(await screen.findByText('ایمیل الزامی است.')).toBeInTheDocument()
+    expect(screen.getByText('رمز عبور الزامی است.')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -81,9 +111,9 @@ describe('S01 development login API', () => {
     await fillCredentialsAndSubmit(user, { password: 'not-the-password' })
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('The email or password is incorrect. Try again.')
-    expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /tenantforge is ready/i })).not.toBeInTheDocument()
+    expect(alert).toHaveTextContent('ایمیل یا رمز عبور درست نیست. دوباره تلاش کنید.')
+    expect(screen.getByRole('heading', { name: 'ورود' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /tenantforge/i })).not.toBeInTheDocument()
   })
 
   it('shows an API-unavailable alert (not invalid credentials) when the request cannot complete', async () => {
@@ -94,8 +124,8 @@ describe('S01 development login API', () => {
     await fillCredentialsAndSubmit(user)
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('The sign-in service is unavailable.')
-    expect(alert).not.toHaveTextContent('email or password is incorrect')
+    expect(alert).toHaveTextContent('سرویس ورود در دسترس نیست. اتصال را بررسی کنید و دوباره تلاش کنید.')
+    expect(alert).not.toHaveTextContent('ایمیل یا رمز عبور درست نیست')
   })
 
   it('shows an API-unavailable alert when the API answers with an unexpected error status', async () => {
@@ -106,8 +136,8 @@ describe('S01 development login API', () => {
     await fillCredentialsAndSubmit(user)
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('The sign-in service is unavailable.')
-    expect(alert).not.toHaveTextContent('email or password is incorrect')
+    expect(alert).toHaveTextContent('سرویس ورود در دسترس نیست. اتصال را بررسی کنید و دوباره تلاش کنید.')
+    expect(alert).not.toHaveTextContent('ایمیل یا رمز عبور درست نیست')
   })
 
   it('signs in through the API, stores the signed session and reaches the dashboard', async () => {
@@ -118,8 +148,10 @@ describe('S01 development login API', () => {
 
     await fillCredentialsAndSubmit(user)
 
-    expect(await screen.findByRole('heading', { name: /tenantforge is ready/i })).toBeInTheDocument()
-    expect(screen.getByText(/signed in as platform administrator/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /tenantforge برای نخستین برش/i })).toBeInTheDocument()
+    // The display name sits inside a <bdi> for correct bidi rendering.
+    expect(within(screen.getByRole('main')).getByText('Platform Administrator', { selector: 'bdi' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'داشبورد' })).toBeInTheDocument()
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/auth/login',
@@ -131,31 +163,49 @@ describe('S01 development login API', () => {
     expect(stored.user.isPlatformAdmin).toBe(true)
   })
 
-  it('restores a valid stored session after a page refresh', () => {
+  it('restores a valid stored session after a page refresh', async () => {
     const stored: Record<string, unknown> = {
       user: loginResponse().user,
       accessToken: 'signed-test-token',
       expiresAtUtc: '2030-01-01T00:00:00Z',
     }
     window.sessionStorage.setItem('tenantforge:auth:session', JSON.stringify(stored))
+    // The stored session is re-verified against the real contract.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(loginResponse().user)))
 
     renderApp('/dashboard')
 
-    expect(screen.getByRole('heading', { name: /tenantforge is ready/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /tenantforge برای نخستین برش/i })).toBeInTheDocument()
   })
 
-  it('drops an expired stored session and requires a fresh sign-in', () => {
+  it('drops an expired stored session and requires a fresh sign-in', async () => {
     const stored: Record<string, unknown> = {
       user: loginResponse().user,
       accessToken: 'expired-token',
       expiresAtUtc: '2020-01-01T00:00:00Z',
     }
     window.sessionStorage.setItem('tenantforge:auth:session', JSON.stringify(stored))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ title: 'Invalid credentials' }, 401)))
 
     renderApp('/dashboard')
 
-    expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'ورود' })).toBeInTheDocument()
     expect(window.sessionStorage.getItem('tenantforge:auth:session')).toBeNull()
+  })
+
+  it('shows a Persian session-expired notice after a 401 on bootstrap', async () => {
+    const stored: Record<string, unknown> = {
+      user: loginResponse().user,
+      accessToken: 'expired-token',
+      expiresAtUtc: '2030-01-01T00:00:00Z',
+    }
+    window.sessionStorage.setItem('tenantforge:auth:session', JSON.stringify(stored))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ title: 'Invalid credentials' }, 401)))
+
+    renderApp('/dashboard')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('نشست شما منقضی شده است. دوباره وارد شوید.')
   })
 
   it('signs out and returns to login', async () => {
@@ -164,11 +214,11 @@ describe('S01 development login API', () => {
     renderApp()
 
     await fillCredentialsAndSubmit(user)
-    await screen.findByRole('heading', { name: /tenantforge is ready/i })
+    await screen.findByRole('heading', { name: /tenantforge برای نخستین برش/i })
 
-    await user.click(screen.getByRole('button', { name: /sign out/i }))
+    await user.click(screen.getByRole('button', { name: 'خروج' }))
 
-    expect(await screen.findByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'ورود' })).toBeInTheDocument()
     expect(window.sessionStorage.getItem('tenantforge:auth:session')).toBeNull()
   })
 })

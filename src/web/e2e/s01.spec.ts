@@ -18,9 +18,9 @@ function loginResponse() {
 }
 
 async function fillAndSubmit(page: Page, { email = VALID_EMAIL, password = VALID_PASSWORD } = {}) {
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: /sign in/i }).click()
+  await page.getByLabel('ایمیل').fill(email)
+  await page.getByLabel('رمز عبور').fill(password)
+  await page.getByRole('button', { name: 'ورود' }).click()
 }
 
 test('S01: sign in through the login API, verify 401 and unavailable states', async ({
@@ -56,30 +56,34 @@ test('S01: sign in through the login API, verify 401 and unavailable states', as
     })
   })
 
+  // --- F004: the document boundary is Persian RTL ---
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fa')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+
   // --- Idle state ---
   await page.goto('/login')
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
-  await expect(page.getByText(/slice s01 — development login/i)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'ورود' })).toBeVisible()
+  await expect(page.getByText(/برش S01 — ورود توسعه/)).toBeVisible()
 
   // --- Client validation (no API call) ---
-  await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page.getByText('Email is required.')).toBeVisible()
-  await expect(page.getByText('Password is required.')).toBeVisible()
+  await page.getByRole('button', { name: 'ورود' }).click()
+  await expect(page.getByText('ایمیل الزامی است.')).toBeVisible()
+  await expect(page.getByText('رمز عبور الزامی است.')).toBeVisible()
   expect(loginRequests).toHaveLength(0)
 
   // --- 401 invalid credentials ---
   await fillAndSubmit(page, { password: 'not-the-password' })
   const invalidAlert = page.getByRole('alert')
   await expect(invalidAlert).toBeVisible()
-  await expect(invalidAlert).toHaveText(/email or password is incorrect/i)
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
-  expect(loginRequests).toHaveLength(1)
+    await expect(invalidAlert).toHaveText(/ایمیل یا رمز عبور درست نیست/)
+    await expect(page.getByRole('heading', { name: 'ورود' })).toBeVisible()
+    expect(loginRequests).toHaveLength(1)
 
-  // --- Success: reach the dashboard through the API ---
-  await fillAndSubmit(page)
-  await expect(page.getByRole('heading', { name: /tenantforge is ready/i })).toBeVisible()
-  await expect(page.getByText(/signed in as platform administrator/i)).toBeVisible()
-  expect(loginRequests).toHaveLength(2)
+    // --- Success: reach the dashboard through the API ---
+    await fillAndSubmit(page)
+    await expect(page.getByRole('heading', { name: /tenantforge برای نخستین برش/i })).toBeVisible()
+    await expect(page.getByText(/وارد شده‌اید/)).toBeVisible()
+    expect(loginRequests).toHaveLength(2)
 
   // The stored session carries the signed token.
   const stored = await page.evaluate(() =>
@@ -90,15 +94,15 @@ test('S01: sign in through the login API, verify 401 and unavailable states', as
 
   // --- Refresh keeps the session (sessionStorage) ---
   await page.reload()
-  await expect(page.getByRole('heading', { name: /tenantforge is ready/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /tenantforge برای نخستین برش/i })).toBeVisible()
 
   // --- Theme toggle still works ---
-  await page.getByRole('button', { name: /switch to/i }).first().click()
+  await page.getByRole('button', { name: /تغییر به پوسته/i }).first().click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', /dark|light/)
 
   // --- Sign out returns to login ---
-  await page.getByRole('button', { name: /sign out/i }).click()
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await page.getByRole('button', { name: 'خروج' }).click()
+  await expect(page.getByRole('heading', { name: 'ورود' })).toBeVisible()
   const afterSignOut = await page.evaluate(() =>
     window.sessionStorage.getItem('tenantforge:auth:session'),
   )
@@ -107,16 +111,16 @@ test('S01: sign in through the login API, verify 401 and unavailable states', as
   // --- Unavailable API: distinct from invalid credentials ---
   await page.route(LOGIN_ROUTE, (route) => route.abort())
   await fillAndSubmit(page)
-  const unavailableAlert = page.getByRole('alert')
-  await expect(unavailableAlert).toBeVisible()
-  await expect(unavailableAlert).toHaveText(/sign-in service is unavailable/i)
-  await expect(unavailableAlert).not.toHaveText(/email or password is incorrect/i)
+    const unavailableAlert = page.getByRole('alert')
+    await expect(unavailableAlert).toBeVisible()
+    await expect(unavailableAlert).toHaveText(/سرویس ورود در دسترس نیست/)
+    await expect(unavailableAlert).not.toHaveText(/ایمیل یا رمز عبور درست نیست/)
 
-  // --- Screenshots (desktop + mobile projects) ---
-  const screenshotPath =
-    test.info().project.name === 'mobile'
-      ? '/tmp/opencode/f002-s01-mobile-unavailable.png'
-      : '/tmp/opencode/f002-s01-desktop-unavailable.png'
+    // --- Screenshots (desktop + mobile projects) ---
+    const screenshotPath =
+      test.info().project.name === 'mobile'
+        ? '/tmp/opencode/f004-s01-mobile-unavailable.png'
+        : '/tmp/opencode/f004-s01-desktop-unavailable.png'
   await page.screenshot({ path: screenshotPath, fullPage: true })
 
   // No unexpected console errors (the aborted request logs a network error

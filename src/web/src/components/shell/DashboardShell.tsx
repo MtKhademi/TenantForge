@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, X } from 'lucide-react'
+import { Loader2, LogOut, Menu, Moon, PanelRightClose, PanelRightOpen, ShieldCheck, Sun, X } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SecondaryButton } from '@/components/ui/Button'
@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useTheme } from '@/features/theme/ThemeContext'
 import { cn } from '@/lib/utils'
 
-const navItems = ['Dashboard', 'Platform identity', 'Security posture']
+const navItems = ['داشبورد', 'هویت پلتفرم', 'وضعیت امنیتی']
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -43,7 +43,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-3">
               <SecondaryButton
                 type="button"
-                aria-label="Open navigation"
+                aria-label="باز کردن ناوبری"
                 className="px-3 lg:hidden"
                 onClick={() => setDrawerOpen(true)}
               >
@@ -51,34 +51,34 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </SecondaryButton>
               <SecondaryButton
                 type="button"
-                aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-label={sidebarCollapsed ? 'باز کردن نوار کناری' : 'کوچک کردن نوار کناری'}
                 className="hidden px-3 lg:inline-flex"
                 onClick={() => setSidebarCollapsed((value) => !value)}
               >
-                {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" className="size-4" /> : <PanelLeftClose aria-hidden="true" className="size-4" />}
+                {sidebarCollapsed ? <PanelRightOpen aria-hidden="true" className="size-4" /> : <PanelRightClose aria-hidden="true" className="size-4" />}
               </SecondaryButton>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">TenantForge</p>
-                <h1 className="text-lg font-semibold tracking-tight">Dashboard</h1>
+                <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">TenantForge</p>
+                <h1 className="text-lg font-semibold tracking-tight">داشبورد</h1>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+                aria-label={theme === 'dark' ? 'تغییر به پوسته روشن' : 'تغییر به پوسته تیره'}
                 className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-muted"
                 onClick={toggleTheme}
               >
                 {theme === 'dark' ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}
-                <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+                <span className="hidden sm:inline">{theme === 'dark' ? 'روشن' : 'تیره'}</span>
               </button>
               <div className="hidden text-end sm:block">
-                <p className="text-sm font-semibold">{session?.user.displayName}</p>
-                <p className="text-xs text-muted-foreground">{session?.user.email}</p>
+                <p className="text-sm font-semibold"><bdi>{session?.user.displayName}</bdi></p>
+                <p className="text-xs text-muted-foreground"><bdi>{session?.user.email}</bdi></p>
               </div>
               <SecondaryButton
                 type="button"
-                aria-label={isSigningOut ? 'Signing out' : 'Sign out'}
+                aria-label={isSigningOut ? 'در حال خروج' : 'خروج'}
                 className="px-3"
                 disabled={isSigningOut}
                 onClick={handleSignOut}
@@ -97,12 +97,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </div>
 
       {drawerOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Mobile navigation">
-          <button className="absolute inset-0 bg-slate-950/45" aria-label="Close navigation" type="button" onClick={() => setDrawerOpen(false)} />
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="ناوبری موبایل">
+          <button className="absolute inset-0 bg-slate-950/45" aria-label="بستن ناوبری" type="button" onClick={() => setDrawerOpen(false)} />
           <div className="relative h-full w-[min(22rem,86vw)] border-e border-border bg-sidebar text-sidebar-foreground shadow-raised">
             <div className="flex items-center justify-between border-b border-border p-4">
-              <span className="text-sm font-semibold uppercase tracking-[0.18em]">TenantForge</span>
-              <SecondaryButton type="button" aria-label="Close navigation" className="px-3" onClick={() => setDrawerOpen(false)}>
+              <span className="text-sm font-semibold tracking-[0.08em]">TenantForge</span>
+              <SecondaryButton type="button" aria-label="بستن ناوبری" className="px-3" onClick={() => setDrawerOpen(false)}>
                 <X aria-hidden="true" className="size-4" />
               </SecondaryButton>
             </div>
@@ -116,7 +116,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
 function ShellNav({ collapsed }: { collapsed: boolean }) {
   return (
-    <nav className="flex h-full flex-col gap-6 p-4" aria-label="Primary navigation">
+    <nav className="flex h-full flex-col gap-6 p-4" aria-label="ناوبری اصلی">
       <div className="flex items-center gap-3">
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <ShieldCheck aria-hidden="true" className="size-5" />
@@ -124,7 +124,7 @@ function ShellNav({ collapsed }: { collapsed: boolean }) {
         {!collapsed && (
           <div>
             <p className="text-sm font-semibold">TenantForge</p>
-            <p className="text-xs text-muted-foreground">SaaS IAM foundation</p>
+            <p className="text-xs text-muted-foreground">پایه هویت SaaS</p>
           </div>
         )}
       </div>
@@ -147,7 +147,7 @@ function ShellNav({ collapsed }: { collapsed: boolean }) {
       </div>
       {!collapsed && (
         <div className="mt-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
-          The development API session is stored in this browser tab for refresh verification only.
+          نشست API توسعه فقط برای بررسی رفتار تازه‌سازی در همین زبانه مرورگر ذخیره می‌شود.
         </div>
       )}
     </nav>
