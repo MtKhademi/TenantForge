@@ -19,11 +19,11 @@ export function SessionLoadingScreen() {
         <div role="status">
           <p className="flex items-center gap-2.5 text-sm font-medium">
             <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
-            Restoring your session
+            در حال بازیابی نشست شما
             <span className="sr-only">…</span>
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Verifying your TenantForge sign-in.
+            ورود شما به TenantForge در حال تأیید است.
           </p>
         </div>
       </div>

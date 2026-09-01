@@ -34,7 +34,7 @@ one valid Spec link.
 | F001 | S00 | UI foundation and mock login | done | — | — |
 | F002 | S01 | Connect development login | done | F001, B001 | — |
 | F003 | S02 | Authenticated shell | done | F002, B002 | — |
-| F004 | S02 | Refactor Persian RTL interface | planned | F003 | [Spec](front/F004-refactor-persian-rtl-interface.md) |
+| F004 | S02 | Refactor Persian RTL interface | in_progress | F003 | [Spec](front/F004-refactor-persian-rtl-interface.md) |
 | F005 | S02 | Refactor collapsible RTL sidebar | planned | F004 | [Spec](front/F005-refactor-collapsible-rtl-sidebar.md) |
 | F006 | S03 | Dashboard summary mock | planned | F005 | [Spec](front/F006-dashboard-summary-mock.md) |
 | F007 | S03 | Connect dashboard summary | planned | F006, B003 | [Spec](front/F007-connect-dashboard-summary.md) |

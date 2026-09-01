@@ -34,7 +34,7 @@ export interface AuthAdapter {
 
 /** Raised when the API rejects the submitted credentials (HTTP 401). */
 export class InvalidCredentialsError extends Error {
-  constructor(message = 'The email or password is incorrect.') {
+  constructor(message = 'ایمیل یا رمز عبور درست نیست.') {
     super(message)
     this.name = 'InvalidCredentialsError'
   }
@@ -47,7 +47,7 @@ export class InvalidCredentialsError extends Error {
  * server failure as "wrong password".
  */
 export class ApiUnavailableError extends Error {
-  constructor(message = 'The sign-in service is unavailable.') {
+  constructor(message = 'سرویس ورود در دسترس نیست.') {
     super(message)
     this.name = 'ApiUnavailableError'
   }
@@ -61,7 +61,7 @@ export class ApiUnavailableError extends Error {
  * clear client state instead of "wrong password".
  */
 export class SessionExpiredError extends Error {
-  constructor(message = 'Your session has expired.') {
+  constructor(message = 'نشست شما منقضی شده است.') {
     super(message)
     this.name = 'SessionExpiredError'
   }
