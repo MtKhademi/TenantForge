@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
@@ -6,12 +7,34 @@ import { defineConfig } from 'vitest/config'
 // Proxying /api keeps the web app same-origin, so no CORS is needed in dev
 // or in `vite preview` (used by the Playwright e2e suite).
 //
-// The default assumes the API runs on the same host as Vite. On this
-// development machine the API runs through the Windows .NET SDK via WSL
-// interop, whose sockets are only reachable through the WSL gateway IP —
-// override with VITE_API_PROXY_TARGET=http://<gateway>:5000 in that case.
+// Target resolution, in order:
+// 1. VITE_API_PROXY_TARGET — explicit override, always wins (e.g. the API
+//    running inside the same machine as Vite).
+// 2. Inside WSL (WSL_DISTRO_NAME is set by WSL itself): the API normally
+//    runs on the Windows host via the .NET SDK, and WSL2's loopback does
+//    not reach Windows ports, so use the default-route gateway IP.
+// 3. Otherwise assume the API runs on the same host as Vite.
+function resolveApiProxyTarget(): string {
+  const override = process.env.VITE_API_PROXY_TARGET
+  if (override) return override
+  if (process.env.WSL_DISTRO_NAME) {
+    try {
+      const defaultRoute = execFileSync('ip', ['route'], { encoding: 'utf8' })
+        .split('\n')
+        .find((line) => line.startsWith('default via '))
+      const gateway = defaultRoute?.trim().split(/\s+/)[2]
+      if (gateway && /^\d{1,3}(\.\d{1,3}){3}$/.test(gateway)) {
+        return `http://${gateway}:5000`
+      }
+    } catch {
+      // `ip` unavailable — fall through to the same-host default.
+    }
+  }
+  return 'http://localhost:5000'
+}
+
 const apiProxy = {
-  target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:5000',
+  target: resolveApiProxyTarget(),
   changeOrigin: false,
 }
 
