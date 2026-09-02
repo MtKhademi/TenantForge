@@ -27,8 +27,8 @@ export function DashboardPage() {
             <p className="mt-2 text-sm leading-6 text-muted-foreground">توکن امضاشده در همین زبانه مرورگر می‌ماند. هنگام تازه‌سازی، API پیش از بازگرداندن پوسته آن را دوباره تأیید می‌کند؛ توکن نامعتبر یا منقضی شما را به صفحه ورود برمی‌گرداند.</p>
           </div>
           <div className="rounded-xl border border-border bg-surface p-5 shadow-soft">
-            <p className="text-sm font-semibold">برش بعدی</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">رابط فارسی راست‌به‌چپ و نوار کناری جمع‌شونده RTL این پوسته احراز هویت‌شده را تکمیل می‌کند.</p>
+            <p className="text-sm font-semibold">گام بعدی</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">نوار کناری جمع‌شونده RTL و خلاصه داشبورد، این پوسته احراز هویت‌شده را تکمیل می‌کنند.</p>
           </div>
         </div>
       </section>

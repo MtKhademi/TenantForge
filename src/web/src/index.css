@@ -2,11 +2,12 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/vazirmatn";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: 'Vazirmatn', 'IRANSans', 'Tahoma', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Vazirmatn Variable', 'Vazirmatn', 'IRANSans', 'Tahoma', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
