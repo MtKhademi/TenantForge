@@ -40,7 +40,8 @@ public sealed class ApiFactory(string environment, DevelopmentLoginMode developm
         var values = new Dictionary<string, string?>
         {
             ["Logging:LogLevel:Default"] = "Debug",
-            ["AllowedOrigins:0"] = "http://localhost:5173"
+            ["AllowedOrigins:0"] = "http://localhost:5173",
+            ["ConnectionStrings:IamDb"] = "Host=localhost;Port=5432;Database=tenantforge_tests;Username=tenantforge;Password=tenantforge"
         };
 
         switch (developmentLoginMode)
