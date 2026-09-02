@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tenantforge-postgres
+    environment:
+      POSTGRES_DB: tenantforge
+      POSTGRES_USER: tenantforge
+      POSTGRES_PASSWORD: tenantforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - tenantforge-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenantforge -d tenantforge"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  tenantforge-postgres-data:

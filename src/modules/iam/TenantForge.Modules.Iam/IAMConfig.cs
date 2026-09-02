@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using TenantForge.Modules.Iam.Features.Login;
+using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam;
 
@@ -12,10 +14,19 @@ public sealed class IAMConfig : IModuleConfig
 {
     public string SectionName => "IAM";
 
+    private const string IamConnectionStringName = "IamDb";
+
     private string DevelopmentLoginPath => $"{SectionName}:{DevelopmentLoginOptions.SectionName}";
 
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
+        services.AddDbContext<IamDbContext>((serviceProvider, options) =>
+        {
+            var connectionString = serviceProvider.GetRequiredService<IConfiguration>()
+                .GetConnectionString(IamConnectionStringName);
+            options.UseNpgsql(connectionString);
+        });
+
         // Authorization services are environment-independent: protected endpoints
         // (RequireAuthorization) need them in every environment. The
         // PlatformAdmin policy requires an authenticated principal whose
@@ -74,6 +85,13 @@ public sealed class IAMConfig : IModuleConfig
 
     public void ValidateConfiguration(IHostEnvironment environment, IConfiguration configuration)
     {
+        var connectionString = configuration.GetConnectionString(IamConnectionStringName);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                $"The 'ConnectionStrings:{IamConnectionStringName}' configuration value is required for IAM persistence.");
+        }
+
         var section = configuration.GetSection(DevelopmentLoginPath);
         var email = section.GetSection("Email").Value;
         var password = section.GetSection("Password").Value;
