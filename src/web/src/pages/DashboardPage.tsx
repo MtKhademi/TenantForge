@@ -3,30 +3,61 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
-import { mockDashboardAdapter } from '@/features/dashboard/dashboardAdapter'
+import { useAuth } from '@/features/auth/AuthContext'
+import { SessionExpiredError } from '@/features/auth/authTypes'
+import { httpDashboardAdapter } from '@/features/dashboard/dashboardAdapter'
 import type { DashboardSummary } from '@/features/dashboard/dashboardTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S03 dashboard summary (F006: contract + mock).
+ * S03 dashboard summary (F007: connected to the real B003 API).
  *
  * States, in order of precedence:
  * - initial loading  – skeleton with the exact footprint of the loaded cards,
  *   so the page never shifts when data arrives;
- * - loaded           – the three contract values only (no invented metrics);
+ * - loaded           – the three contract values from the running API
+ *   (no invented metrics);
  * - background refetch – values stay put while a refresh is in flight;
  * - retryable error  – no data yet: a full alert panel with retry; data
  *   already shown: a compact inline warning that keeps the last values.
  *
- * Data comes from `mockDashboardAdapter` (task-approved mock). F007 swaps in
- * the real `GET /api/platform/dashboard-summary` call behind the same seam.
+ * Data comes from `httpDashboardAdapter` → `GET /api/platform/dashboard-summary`.
+ * A mid-session `401` follows the S02 "expired" flow (clear state → login)
+ * rather than offering a misleading retry.
  */
 export function DashboardPage() {
+  const { session, signOut } = useAuth()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [isBusy, setIsBusy] = useState(true)
   const [refetchFailed, setRefetchFailed] = useState(false)
   // Monotonic guard: a superseded fetch (unmount, rapid retries) never writes.
   const requestIdRef = useRef(0)
+  // The token and sign-out identity change over the session; syncing them
+  // into refs (in effects, before the fetch effect below) keeps the fetch
+  // callbacks — and the mount effect — stable.
+  const sessionRef = useRef(session)
+  const signOutRef = useRef(signOut)
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+  useEffect(() => {
+    signOutRef.current = signOut
+  }, [signOut])
+
+  /**
+   * A `401` means the session token no longer validates mid-session: the
+   * honest response is the S02 "expired" flow (clear state → login), not a
+   * retry button. Any other failure is retryable.
+   */
+  const handleFailure = useCallback((error: unknown) => {
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    // Initial failure: summary stays null, the error panel takes over.
+    // Refresh failure: keep the last values and flag the refetch.
+    setRefetchFailed(true)
+  }, [])
 
   /**
    * Initial fetch: the synchronous state is already correct at mount
@@ -36,42 +67,40 @@ export function DashboardPage() {
    */
   const startInitialFetch = useCallback(() => {
     const requestId = ++requestIdRef.current
-    return mockDashboardAdapter
-      .fetchSummary()
+    return httpDashboardAdapter
+      .fetchSummary(sessionRef.current?.accessToken ?? '')
       .then((next) => {
         if (requestId !== requestIdRef.current) return
         setSummary(next)
       })
-      .catch(() => {
+      .catch((error) => {
         if (requestId !== requestIdRef.current) return
-        // Initial failure: summary stays null, the error panel takes over.
-        // Refresh failure: keep the last values and flag the refetch.
-        setRefetchFailed(true)
+        handleFailure(error)
       })
       .finally(() => {
         if (requestId === requestIdRef.current) setIsBusy(false)
       })
-  }, [])
+  }, [handleFailure])
 
   /** Refresh/retry (event handlers): mark busy synchronously, then fetch. */
   const refresh = useCallback(() => {
     const requestId = ++requestIdRef.current
     setIsBusy(true)
     setRefetchFailed(false)
-    return mockDashboardAdapter
-      .fetchSummary()
+    return httpDashboardAdapter
+      .fetchSummary(sessionRef.current?.accessToken ?? '')
       .then((next) => {
         if (requestId !== requestIdRef.current) return
         setSummary(next)
       })
-      .catch(() => {
+      .catch((error) => {
         if (requestId !== requestIdRef.current) return
-        setRefetchFailed(true)
+        handleFailure(error)
       })
       .finally(() => {
         if (requestId === requestIdRef.current) setIsBusy(false)
       })
-  }, [])
+  }, [handleFailure])
 
   useEffect(() => {
     void startInitialFetch()

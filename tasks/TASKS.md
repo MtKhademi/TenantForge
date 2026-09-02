@@ -37,7 +37,7 @@ one valid Spec link.
 | F004 | S02 | Refactor Persian RTL interface | done | F003 | — |
 | F005 | S02 | Refactor collapsible RTL sidebar | done | F004 | — |
 | F006 | S03 | Dashboard summary mock | done | F005 | — |
-| F007 | S03 | Connect dashboard summary | planned | F006, B003 | [Spec](front/F007-connect-dashboard-summary.md) |
+| F007 | S03 | Connect dashboard summary | done | F006, B003 | — |
 | F008 | S06 | User management mock | planned | F007 | [Spec](front/F008-user-management-mock.md) |
 | F009 | S06 | Connect user management | planned | F008, B006 | [Spec](front/F009-connect-user-management.md) |
 | F010 | S07 | Tenant membership mock | planned | F009 | [Spec](front/F010-tenant-membership-mock.md) |

@@ -1,9 +1,9 @@
 /**
  * S03 dashboard summary — the fixed request/response contract.
  *
- * F006 mocks these exact fields; F007 swaps the mock for the real endpoint.
- * The backend (B003) already implements this contract, so the shape here is
- * the source of truth both sides must keep in sync.
+ * The backend (B003) implements this contract; F006 mocked it and F007
+ * connected the real endpoint. The shape here is the source of truth both
+ * sides must keep in sync.
  */
 
 /**
@@ -34,6 +34,9 @@ export type DashboardSummary = {
   apiStatus: string
   /** Number of platform administrators available at this stage. */
   platformAdminCount: number
-  /** UTC timestamp of when the summary was generated (ISO 8601, Z suffix). */
+  /**
+   * UTC timestamp of when the summary was generated. The API emits .NET "O"
+   * form (`...+00:00`); a `Z` suffix is also valid UTC and must be accepted.
+   */
   generatedAtUtc: string
 }

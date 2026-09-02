@@ -1,70 +1,100 @@
+import {
+  ApiUnavailableError,
+  SessionExpiredError,
+} from '@/features/auth/authTypes'
 import type { DashboardSummary } from './dashboardTypes'
 
 /**
  * S03 dashboard summary — data source seam.
  *
- * F006 ships only the mock. F007 replaces `mockDashboardAdapter` with an
- * implementation that calls `GET /api/platform/dashboard-summary` using the
- * session token; the page never needs to change.
+ * F007: `httpDashboardAdapter` calls the real B003 endpoint
+ * `GET /api/platform/dashboard-summary` with the session token. The F006 mock
+ * is gone; this is the only implementation.
  *
- * The mock honors the exact contract (field names, types, UTC timestamp) so
- * the UI built here is already the UI that will render real data.
+ * Error mapping follows the same rules as the auth adapter:
+ * - `401` → `SessionExpiredError` (missing/invalid/expired token — the auth
+ *   layer clears the session and redirects to login);
+ * - `403` or any other non-2xx / network failure / malformed body →
+ *   `ApiUnavailableError` (the page shows the retryable error state).
  */
 export type DashboardAdapter = {
-  fetchSummary(): Promise<DashboardSummary>
+  fetchSummary(accessToken: string): Promise<DashboardSummary>
 }
 
-/** Simulated network latency so the loading skeleton is actually visible. */
-const MOCK_LATENCY_MS = 900
+const SUMMARY_PATH = '/api/platform/dashboard-summary'
+const REQUEST_TIMEOUT_MS = 8_000
 
-/**
- * Dev-only demo hook (F006 only, removed in F007) — makes the retryable
- * error states demonstrable in the browser without touching a real API:
- *
- * - `?summaryError=once`    fails the visible initial fetch → the full
- *   error panel with a retry button is shown, and retrying succeeds;
- * - `?summaryError=refetch` lets the initial load succeed, then fails the
- *   first refresh → the compact inline warning is shown while the last
- *   values stay on screen, and retrying succeeds.
- *
- * Fetch numbers assume the development environment (this hook is only used
- * for the F006 browser demo): under React StrictMode the mount effect runs
- * twice, so the visible initial fetch is the second one and the first
- * refresh click is the third. Nothing in the visible UI advertises this; it
- * only affects the mock.
- */
-const searchParams =
-  typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search)
-    : new URLSearchParams()
-
-const faultMode = searchParams.get('summaryError')
-const faultFetchNumber =
-  faultMode === 'once' ? 2 : faultMode === 'refetch' ? 3 : null
-
-let fetchCount = 0
-
-/**
- * Values are the task-approved mock: the development environment name, a
- * healthy API, and the single seeded development administrator. They mirror
- * what the real B003 endpoint returns at this stage — no invented metrics.
- */
-function nextMockSummary(): DashboardSummary {
+function createRequestAbortSignal() {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   return {
-    environment: 'Development',
-    apiStatus: 'Healthy',
-    platformAdminCount: 1,
-    generatedAtUtc: new Date().toISOString(),
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timeoutId),
   }
 }
 
-export const mockDashboardAdapter: DashboardAdapter = {
-  async fetchSummary() {
-    await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
-    fetchCount += 1
-    if (faultFetchNumber === fetchCount) {
-      throw new Error('mock-summary-unavailable')
+/**
+ * Strict contract validation: the page must never render half-parsed data.
+ * Any deviation from the accepted S03 contract is treated as an unavailable
+ * API, not a partially successful one.
+ */
+function parseSummary(payload: unknown): DashboardSummary {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiUnavailableError()
+  }
+  const body = payload as Record<string, unknown>
+  if (
+    typeof body.environment !== 'string' ||
+    body.environment.length === 0 ||
+    typeof body.apiStatus !== 'string' ||
+    body.apiStatus.length === 0 ||
+    typeof body.platformAdminCount !== 'number' ||
+    !Number.isInteger(body.platformAdminCount) ||
+    typeof body.generatedAtUtc !== 'string' ||
+    Number.isNaN(Date.parse(body.generatedAtUtc))
+  ) {
+    throw new ApiUnavailableError()
+  }
+  return {
+    environment: body.environment,
+    apiStatus: body.apiStatus,
+    platformAdminCount: body.platformAdminCount,
+    generatedAtUtc: body.generatedAtUtc,
+  }
+}
+
+export const httpDashboardAdapter: DashboardAdapter = {
+  async fetchSummary(accessToken) {
+    let response: Response
+    const abort = createRequestAbortSignal()
+    try {
+      response = await fetch(SUMMARY_PATH, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: abort.signal,
+      })
+    } catch {
+      // Network failure or timeout: the API is unreachable.
+      throw new ApiUnavailableError()
+    } finally {
+      abort.clear()
     }
-    return nextMockSummary()
+
+    if (response.status === 401) {
+      throw new SessionExpiredError()
+    }
+    if (!response.ok) {
+      // 403 (not a platform administrator) and any other server failure.
+      throw new ApiUnavailableError()
+    }
+
+    let payload: unknown
+    try {
+      payload = await response.json()
+    } catch {
+      throw new ApiUnavailableError()
+    }
+
+    return parseSummary(payload)
   },
 }
