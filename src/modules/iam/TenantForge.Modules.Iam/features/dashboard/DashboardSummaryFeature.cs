@@ -1,29 +1,33 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using TenantForge.Modules.Iam;
+using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Dashboard;
 
 internal static class DashboardSummaryFeature
 {
-    // Honest values for the current stage. The API is "healthy" when this endpoint
-    // answers at all (no health infrastructure probes dependencies yet), and the
-    // platform administrator count is the single seeded development administrator
-    // from B001 — no persistence exists yet, so there is nothing to count.
-    // B004/B005 will derive this from stored users instead of a constant.
+    // Honest values for the current stage. The API is "healthy" when this
+    // endpoint answers at all (no health infrastructure probes dependencies
+    // yet). The platform administrator count is derived from the persisted
+    // accounts: the number of active platform administrators.
     private const string ApiStatusHealthy = "Healthy";
-    private const int PlatformAdminCountAtThisStage = 1;
 
     public static IEndpointRouteBuilder MapDashboardSummaryFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/platform/dashboard-summary", (IHostEnvironment environment) =>
+        endpoints.MapGet("/api/platform/dashboard-summary", async (IHostEnvironment environment, IamDbContext db) =>
         {
+            var platformAdminCount = await db.Accounts
+                .CountAsync(a => a.IsPlatformAdmin && a.Status == AccountStatus.Active);
+
             var summary = new DashboardSummaryResponse(
                 Environment: environment.EnvironmentName,
                 ApiStatus: ApiStatusHealthy,
-                PlatformAdminCount: PlatformAdminCountAtThisStage,
+                PlatformAdminCount: platformAdminCount,
                 GeneratedAtUtc: DateTimeOffset.UtcNow.ToString("O"));
 
             return Results.Ok(summary);

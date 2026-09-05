@@ -6,9 +6,10 @@ using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
 
-public class DashboardSummaryIntegrationTests : IDisposable
+[Collection(nameof(IamApiTestCollection))]
+public class DashboardSummaryIntegrationTests(IamDbFixture db) : IDisposable
 {
-    private readonly ApiFactory _factory = new(environment: "Development", developmentLoginMode: DevelopmentLoginMode.Complete);
+    private readonly ApiFactory _factory = new(environment: "Development", seedMode: IamSeedMode.Complete, db);
 
     public void Dispose() => _factory.Dispose();
 
@@ -46,6 +47,8 @@ public class DashboardSummaryIntegrationTests : IDisposable
 
         Assert.Equal("Development", root.GetProperty("environment").GetString());
         Assert.Equal("Healthy", root.GetProperty("apiStatus").GetString());
+        // The shared fixture seeds exactly one active platform administrator;
+        // the count is a real query result, not a constant.
         Assert.Equal(1, root.GetProperty("platformAdminCount").GetInt32());
 
         // generatedAtUtc must be a real UTC instant produced by this request,
@@ -84,17 +87,17 @@ public class DashboardSummaryIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task ProductionWithoutDevelopmentSection_DashboardSummaryFailsClosedWith401()
+    public async Task ProductionWithoutSeedOrKey_DashboardSummaryFailsClosedWith401()
     {
-        using var productionFactory = new ApiFactory(environment: "Production", developmentLoginMode: DevelopmentLoginMode.Absent);
+        using var productionFactory = new ApiFactory(environment: "Production", seedMode: IamSeedMode.Absent, db);
         using var client = productionFactory.CreateClient();
 
         // No Authorization header -> 401.
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/platform/dashboard-summary")).StatusCode);
 
-        // Even a valid-looking development token is useless in Production: the
-        // JWT scheme has no development signing key there, so signature
-        // validation fails and the endpoint must answer 401 (never 500).
+        // Even a valid-looking token signed with the known development key is
+        // useless in Production: the JWT scheme has no signing key there, so
+        // signature validation fails and the endpoint must answer 401 (never 500).
         var devToken = TestJwtFactory.Issue(signingKey: ApiFactory.SigningKey);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", devToken);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/platform/dashboard-summary")).StatusCode);

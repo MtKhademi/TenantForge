@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Login;
 using TenantForge.Modules.Iam.Infrastructure;
 
@@ -14,11 +16,9 @@ public sealed class IAMConfig : IModuleConfig
 {
     public string SectionName => "IAM";
 
-    private const string IamConnectionStringName = "IamDb";
-
-    private string DevelopmentLoginPath => $"{SectionName}:{DevelopmentLoginOptions.SectionName}";
-
-    private string IamConnectionStringPath => $"{SectionName}:{IamConnectionStringName}";
+    private string IamConnectionStringPath => $"{SectionName}:IamDb";
+    private string AuthPath => $"{SectionName}:{AuthOptions.SectionName}";
+    private string SeedAdminPath => $"{SectionName}:{SeedAdminOptions.SectionName}";
 
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
@@ -40,21 +40,23 @@ public sealed class IAMConfig : IModuleConfig
                 policy.RequireClaim("isPlatformAdmin", "true"));
         });
 
-        // The options are bound lazily from the full configuration so late
-        // sources (including test hosts) are honored. Outside Development the
-        // section is absent by definition (startup validation forbids it), so
-        // this binds an empty object and no signing key is ever available.
+        // Auth and seed options are bound lazily from the full configuration so
+        // late sources (including test hosts) are honored.
         services.AddSingleton(sp =>
-        {
-            var section = sp.GetRequiredService<IConfiguration>().GetSection(DevelopmentLoginPath);
-            return section.Get<DevelopmentLoginOptions>() ?? new DevelopmentLoginOptions();
-        });
+            sp.GetRequiredService<IConfiguration>().GetSection(AuthPath).Get<AuthOptions>() ?? new AuthOptions());
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<IConfiguration>().GetSection(SeedAdminPath).Get<SeedAdminOptions>() ?? new SeedAdminOptions());
 
-        // JwtBearer validates the tokens issued by DevelopmentJwtIssuer and
-        // provides the 401 challenge for protected endpoints in every
-        // environment. The signing key is assigned at runtime by
-        // DevelopmentJwtBearerOptions: when it is absent (outside Development)
-        // token validation always fails and protected endpoints fail closed.
+        // Password hashing. PasswordHasher<TUser> ships in the ASP.NET Core shared
+        // framework; it stores a salted, iterated PBKDF2 hash and never the
+        // plaintext password.
+        services.AddSingleton<IPasswordHasher<Account>, PasswordHasher<Account>>();
+
+        // JwtBearer validates the tokens issued by JwtIssuer and provides the 401
+        // challenge for protected endpoints in every environment. The signing key
+        // is assigned at runtime by JwtBearerSigningKeyOptions: when it is absent
+        // a random, never-matching key is used, so no token can validate and
+        // protected endpoints fail closed with 401 instead of throwing a 500.
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
@@ -62,26 +64,28 @@ public sealed class IAMConfig : IModuleConfig
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = DevelopmentAdminIdentity.Issuer,
+                    ValidIssuer = JwtConstants.Issuer,
                     ValidateAudience = true,
-                    ValidAudience = DevelopmentAdminIdentity.Audience,
+                    ValidAudience = JwtConstants.Audience,
                     ValidateIssuerSigningKey = true,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
-        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>, DevelopmentJwtBearerOptions>();
+        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>, JwtBearerSigningKeyOptions>();
 
-        // The credential source and token issuer are the development-only login
-        // shortcut; outside Development they are simply absent, so login is
-        // impossible in those environments.
-        if (environment.EnvironmentName != Environments.Development)
-        {
-            return;
-        }
-
-        services.AddSingleton<ICredentialChecker, DevelopmentCredentialChecker>();
-        services.AddSingleton<DevelopmentJwtIssuer>();
+        // Database-backed authentication and the idempotent seeder are real
+        // capabilities used in every environment, so they are registered
+        // unconditionally. Whether login can succeed depends on configuration
+        // (a seeded admin + a signing key), not on the environment name.
+        // Scoped, not Singleton: both depend on the scoped IamDbContext, and a
+        // singleton must never hold a scoped service (DI validates this at
+        // startup and refuses to build otherwise).
+        services.AddScoped<ICredentialChecker, AccountCredentialChecker>();
+        services.AddScoped<PlatformAdminSeeder>();
+        // JwtIssuer only depends on the singleton AuthOptions, so it stays a
+        // singleton.
+        services.AddSingleton<JwtIssuer>();
     }
 
     public void ValidateConfiguration(IHostEnvironment environment, IConfiguration configuration)
@@ -93,28 +97,36 @@ public sealed class IAMConfig : IModuleConfig
                 $"The '{IamConnectionStringPath}' configuration value is required for IAM persistence.");
         }
 
-        var section = configuration.GetSection(DevelopmentLoginPath);
-        var email = section.GetSection("Email").Value;
-        var password = section.GetSection("Password").Value;
-        var signingKey = section.GetSection("SigningKey").Value;
-        var isConfigured = email is not null || password is not null || signingKey is not null;
+        // The seed section must be either fully present or fully absent. A
+        // partially-filled section is a misconfiguration in ANY environment and
+        // fails startup. The message deliberately does not echo any configured
+        // value, so a password or other secret is never exposed on the error.
+        var email = configuration[$"{SeedAdminPath}:Email"];
+        var password = configuration[$"{SeedAdminPath}:Password"];
+        var displayName = configuration[$"{SeedAdminPath}:DisplayName"];
+        var presentCount =
+            (email is null || string.IsNullOrWhiteSpace(email) ? 0 : 1)
+            + (password is null || string.IsNullOrWhiteSpace(password) ? 0 : 1)
+            + (displayName is null || string.IsNullOrWhiteSpace(displayName) ? 0 : 1);
 
-        if (environment.EnvironmentName != Environments.Development)
-        {
-            if (isConfigured)
-            {
-                throw new InvalidOperationException(
-                    $"The '{DevelopmentLoginPath}' section is present but the environment is '{environment.EnvironmentName}'. " +
-                    "Development login credentials must never be configured outside Development.");
-            }
-            return;
-        }
-
-        if (email is null || password is null || signingKey is null)
+        if (presentCount is > 0 and < 3)
         {
             throw new InvalidOperationException(
-                $"The '{DevelopmentLoginPath}' section is incomplete in the Development environment. " +
-                "Email, Password and SigningKey must all be configured for development login.");
+                $"The '{SeedAdminPath}' section is incomplete; Email, Password and DisplayName must all be configured together.");
+        }
+
+        // Outside Development, an obviously weak seed password is refused. The
+        // length is checked only — never the value itself — so no secret is
+        // exposed by this validation.
+        if (environment.EnvironmentName != Environments.Development
+            && presentCount == 3
+            && password!.Length < MinimumProductionSeedPasswordLength)
+        {
+            throw new InvalidOperationException(
+                $"The '{SeedAdminPath}:Password' configuration value is unsafe for a non-Development environment: " +
+                $"it must be at least {MinimumProductionSeedPasswordLength} characters.");
         }
     }
+
+    private const int MinimumProductionSeedPasswordLength = 12;
 }

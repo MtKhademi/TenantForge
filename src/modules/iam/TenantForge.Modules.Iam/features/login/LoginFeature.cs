@@ -10,7 +10,7 @@ internal static class LoginFeature
 {
     public static IEndpointRouteBuilder MapLoginFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/api/auth/login", (LoginRequest request, [FromServices] ICredentialChecker? checker, [FromServices] DevelopmentJwtIssuer? issuer, ILoggerFactory loggerFactory) =>
+        endpoints.MapPost("/api/auth/login", async (LoginRequest request, [FromServices] ICredentialChecker checker, [FromServices] JwtIssuer issuer, ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("TenantForge.Modules.Iam.Features.Login");
             var email = request.Email?.Trim() ?? string.Empty;
@@ -24,16 +24,23 @@ internal static class LoginFeature
                     statusCode: StatusCodes.Status400BadRequest);
             }
 
-            if (checker is null || issuer is null)
+            if (!issuer.CanIssue)
             {
-                logger.LogInformation("Login rejected: no credential checker is registered in this environment.");
+                // No signing key is configured: refuse to authenticate rather
+                // than mint an unverifiable token. This keeps the endpoint
+                // fail-closed in any environment that lacks auth configuration.
+                logger.LogInformation("Login rejected: no signing key is configured in this environment.");
                 return Results.Problem(
                     title: "Invalid credentials",
                     detail: "The email or password is incorrect.",
                     statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            if (!checker.Check(email, password))
+            // The checker consults the persisted account store. A null result
+            // means: unknown email, wrong password, or disabled account — all
+            // deliberately indistinguishable to the caller.
+            var account = await checker.AuthenticateAsync(email, password);
+            if (account is null)
             {
                 logger.LogInformation("Login failed for email {Email}.", email);
                 return Results.Problem(
@@ -43,16 +50,16 @@ internal static class LoginFeature
             }
 
             logger.LogInformation("Login succeeded for email {Email}.", email);
-            var (accessToken, expiresAtUtc) = issuer.IssueForAdmin(email);
+            var (accessToken, expiresAtUtc) = issuer.Issue(account);
 
             var response = new LoginResponse(
                 accessToken,
                 expiresAtUtc.UtcDateTime.ToString("O"),
                 new LoginUserResponse(
-                    DevelopmentAdminIdentity.Id,
-                    email,
-                    DevelopmentAdminIdentity.DisplayName,
-                    DevelopmentAdminIdentity.IsPlatformAdmin));
+                    account.Id,
+                    account.Email,
+                    account.DisplayName,
+                    account.IsPlatformAdmin));
 
             return Results.Ok(response);
         });
