@@ -23,15 +23,20 @@ Accept no argument or one task ID such as `F004`, `B001` or `S03`.
    - the dependency graph has no cycle;
    - every non-done row has one existing Spec matching its ID and queue;
    - every done row has Spec `—` and no live executable task file.
-7. With no argument, report:
+7. Using your own judgment, refresh the codebase-memory-mcp index for this
+   project (index_repository) if it looks stale or missing for the reported
+   tasks — this does not edit any tracked file. Never edit Markdown or skill
+   files yourself; if a doc/skill looks stale, mention it as part of your
+   recommendation for the owning `/front-task` or `/backend-task` to handle.
+8. With no argument, report:
    - the first runnable `planned` Front row;
    - the first runnable `planned` Backend row;
    - each next blocked row and its pending dependencies;
    - whether both runnable tasks can safely proceed in parallel.
-8. With a task ID, show its title, source slice when its live Spec exists,
+9. With a task ID, show its title, source slice when its live Spec exists,
    status, dependencies, owning clone and exact command. A done task has no live
    Spec and must not be re-executed.
-9. Recommend only one of:
+10. Recommend only one of:
 
 ```text
 Open the front clone and run: /front-task <F-id>

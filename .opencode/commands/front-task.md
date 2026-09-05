@@ -135,8 +135,20 @@ The Git preflight is a short routing step, not a diagnostic task.
      `git rm -- <exact-active-spec-path>`;
    - verify every non-done row still has one live Spec, every done row has none,
      all dependency IDs exist and the graph has no cycle.
-7. Stage the frontend implementation, required docs, `tasks/TASKS.md` and the
+7. Using your own judgment, update the knowledge base only if this delivery
+   needs it, as its own visible todo:
+   - re-index this project with codebase-memory-mcp (index_repository,
+     moderate or full mode) when the delivered change is not yet reflected
+     in the graph;
+   - update or add the Markdown documentation this change affects (e.g.
+     docs/design-system.md, a UI/page composition convention, or the
+     tenantforge-ui-system skill file) only when this slice introduced or
+     changed that structure;
+   - skip entirely, with a one-line note why, when neither the graph nor any
+     doc/skill needs a change for this delivery. Never invent speculative
+     documentation.
+8. Stage the frontend implementation, required docs, `tasks/TASKS.md` and the
    active Spec deletion. Inspect the staged diff, commit with the F-ID,
    push once without force and open a PR to `main`.
-8. Report branch, commit, PR, validation and remaining risks. Stop before the
+9. Report branch, commit, PR, validation and remaining risks. Stop before the
    next task.
