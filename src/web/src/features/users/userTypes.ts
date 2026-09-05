@@ -27,7 +27,7 @@ export type PlatformUser = {
 
 /** `GET /api/platform/users` — first-page collection. */
 export type UserListResponse = {
-  items: PlatformUser[]
+  users: PlatformUser[]
 }
 
 /** `POST /api/platform/users` request body. */

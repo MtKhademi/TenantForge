@@ -7,7 +7,9 @@ import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
-import { mockUserAdapter } from '@/features/users/userAdapter'
+import { useAuth } from '@/features/auth/AuthContext'
+import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
+import { httpUserAdapter, UserForbiddenError, UserValidationError } from '@/features/users/userAdapter'
 import {
   UserConflictError,
   type PlatformUser,
@@ -16,12 +18,11 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * S06 user management (F008: contract + mock).
+ * S06 user management (F009: connected to the real B006 API).
  *
- * The platform administrator sees platform-scoped accounts and creates a
- * basic active user through a validated form. Data comes from
- * `mockUserAdapter` (task-approved mock); F009 swaps in the real
- * `GET/POST /api/platform/users` behind the same seam.
+ * The platform administrator sees persisted platform-scoped accounts and
+ * creates a basic active user through the real `GET/POST /api/platform/users`
+ * endpoints. The F008 mock is removed; the page keeps the accepted UX.
  *
  * States:
  * - list: initial skeleton, loaded table, empty panel, retryable error;
@@ -47,10 +48,14 @@ const createUserSchema = z.object({
 type CreateUserFormValues = z.infer<typeof createUserSchema>
 
 export function UsersPage() {
+  const { session, signOut } = useAuth()
   const [users, setUsers] = useState<PlatformUser[] | null>(null)
   const [isBusy, setIsBusy] = useState(true)
+  const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   // Monotonic guard: a superseded list fetch never writes.
   const listRequestIdRef = useRef(0)
+  const sessionRef = useRef(session)
+  const signOutRef = useRef(signOut)
 
   const [formOpen, setFormOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
@@ -71,6 +76,21 @@ export function UsersPage() {
     defaultValues: { email: '', displayName: '', password: '' },
   })
 
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+  useEffect(() => {
+    signOutRef.current = signOut
+  }, [signOut])
+
+  const handleListFailure = useCallback((error: unknown) => {
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    setListFailure(error instanceof UserForbiddenError ? 'forbidden' : 'unavailable')
+  }, [])
+
   /**
    * Initial list fetch: the synchronous state is already correct at mount
    * (`isBusy` starts true), so this path does no synchronous `setState` —
@@ -78,39 +98,43 @@ export function UsersPage() {
    */
   const startInitialFetch = useCallback(() => {
     const requestId = ++listRequestIdRef.current
-    return mockUserAdapter
-      .listUsers()
+    return httpUserAdapter
+      .listUsers(sessionRef.current?.accessToken ?? '')
       .then((response) => {
         if (requestId !== listRequestIdRef.current) return
-        setUsers(response.items)
+        setUsers(response.users)
+        setListFailure(null)
       })
-      .catch(() => {
+      .catch((error) => {
         if (requestId !== listRequestIdRef.current) return
         // Initial failure: users stays null, the error panel takes over.
         // Refetch failure after a success keeps the table on screen.
+        handleListFailure(error)
       })
       .finally(() => {
         if (requestId === listRequestIdRef.current) setIsBusy(false)
       })
-  }, [])
+  }, [handleListFailure])
 
   /** Refresh/retry (event handlers): mark busy synchronously, then fetch. */
   const loadUsers = useCallback(() => {
     const requestId = ++listRequestIdRef.current
     setIsBusy(true)
-    return mockUserAdapter
-      .listUsers()
+    setListFailure(null)
+    return httpUserAdapter
+      .listUsers(sessionRef.current?.accessToken ?? '')
       .then((response) => {
         if (requestId !== listRequestIdRef.current) return
-        setUsers(response.items)
+        setUsers(response.users)
       })
-      .catch(() => {
+      .catch((error) => {
         if (requestId !== listRequestIdRef.current) return
+        handleListFailure(error)
       })
       .finally(() => {
         if (requestId === listRequestIdRef.current) setIsBusy(false)
       })
-  }, [])
+  }, [handleListFailure])
 
   useEffect(() => {
     void startInitialFetch()
@@ -137,16 +161,25 @@ export function UsersPage() {
       setIsCreating(true)
       setCreateSuccess(null)
       try {
-        const created = await mockUserAdapter.createUser(values)
+        const created = await httpUserAdapter.createUser(sessionRef.current?.accessToken ?? '', values)
         setCreateSuccess(`کاربر ${created.displayName} ایجاد شد.`)
         reset()
         // Background re-fetch: the new row appears without a skeleton flash.
         void loadUsers()
       } catch (error) {
-        if (error instanceof UserConflictError) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+        } else if (error instanceof UserConflictError) {
           // Duplicate email: a stable conflict on the email field.
           setError('email', { message: error.message })
           emailInputRef.current?.focus()
+        } else if (error instanceof UserValidationError) {
+          for (const [field, message] of Object.entries(error.fieldErrors)) {
+            setError(field as keyof CreateUserFormValues, { message })
+          }
+          emailInputRef.current?.focus()
+        } else if (error instanceof UserForbiddenError || error instanceof ApiUnavailableError) {
+          setError('email', { message: error.message })
         }
       } finally {
         setIsCreating(false)
@@ -162,7 +195,7 @@ export function UsersPage() {
   )
 
   const isLoading = users === null && isBusy
-  const listError = users === null && !isBusy
+  const listError = users === null && !isBusy && listFailure !== null
   const isEmpty = users !== null && users.length === 0
   const emailField = register('email')
 
@@ -330,9 +363,13 @@ export function UsersPage() {
             <div className="flex items-start gap-3">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div className="space-y-1">
-                <p className="text-sm font-semibold">فهرست کاربران در دسترس نیست</p>
+                <p className="text-sm font-semibold">
+                  {listFailure === 'forbidden' ? 'دسترسی مدیریت کاربران مجاز نیست' : 'فهرست کاربران در دسترس نیست'}
+                </p>
                 <p className="text-sm leading-6 text-muted-foreground">
-                  هم‌اکنون نمی‌توانیم کاربران را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.
+                  {listFailure === 'forbidden'
+                    ? 'حساب فعلی مجوز مدیریت کاربران پلتفرم را ندارد.'
+                    : 'هم‌اکنون نمی‌توانیم کاربران را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'}
                 </p>
                 <Button type="button" className="mt-3 min-w-32" onClick={() => void loadUsers()}>
                   <RefreshCw aria-hidden="true" className="me-2 size-4" />

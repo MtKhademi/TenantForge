@@ -1,120 +1,180 @@
-import { ApiUnavailableError } from '@/features/auth/authTypes'
+import {
+  ApiUnavailableError,
+  SessionExpiredError,
+} from '@/features/auth/authTypes'
 import {
   UserConflictError,
   type CreateUserRequest,
   type PlatformUser,
   type UserListResponse,
+  type UserStatus,
 } from './userTypes'
 
 /**
- * S06 user management — data source seam (F008: contract + mock).
+ * S06 user management — real API data source (F009).
  *
- * F009 replaces `mockUserAdapter` with a `httpUserAdapter` that calls
- * `GET/POST /api/platform/users` with the session token; the page never
- * needs to change.
- *
- * The mock honors the exact contract (field names, types, UTC timestamps,
- * normalized email, no secret material) and keeps its collection in-tab so
- * a created user survives a list re-fetch — mirroring persisted behavior
- * without a backend.
+ * The F008 mock is gone. This adapter calls the B006 endpoints with the
+ * current session bearer token and validates response bodies strictly so the
+ * page never renders half-parsed data or secret material.
  */
 export type UserAdapter = {
-  listUsers(): Promise<UserListResponse>
-  createUser(request: CreateUserRequest): Promise<PlatformUser>
+  listUsers(accessToken: string): Promise<UserListResponse>
+  createUser(accessToken: string, request: CreateUserRequest): Promise<PlatformUser>
 }
 
-/** Simulated network latency so the loading skeleton is actually visible. */
-const MOCK_LATENCY_MS = 700
+const USERS_PATH = '/api/platform/users'
+const REQUEST_TIMEOUT_MS = 8_000
+
+export class UserValidationError extends Error {
+  fieldErrors: Partial<Record<keyof CreateUserRequest, string>>
+
+  constructor(fieldErrors: Partial<Record<keyof CreateUserRequest, string>>) {
+    super('درخواست ایجاد کاربر معتبر نیست.')
+    this.fieldErrors = fieldErrors
+    this.name = 'UserValidationError'
+  }
+}
+
+export class UserForbiddenError extends Error {
+  constructor(message = 'شما اجازه مدیریت کاربران پلتفرم را ندارید.') {
+    super(message)
+    this.name = 'UserForbiddenError'
+  }
+}
+
+function createRequestAbortSignal() {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  return {
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timeoutId),
+  }
+}
+
+function isUserStatus(value: unknown): value is UserStatus {
+  return value === 'Active' || value === 'Disabled'
+}
 
 /**
- * Dev-only demo hooks (F008 only, removed in F009) — make the non-happy
- * list states demonstrable in the browser without a backend:
- *
- * - `?users=empty`   serves an empty collection (empty state);
- * - `?usersError`    fails exactly one list fetch per page load (retryable
- *   error state). It is scoped to the list call only and to the fetch that
- *   the user actually sees: under React StrictMode the mount effect runs
- *   twice in development, so the visible initial list fetch is the second
- *   list call. The hook never touches `createUser`.
- *
- * Nothing in the visible UI advertises these; they only affect the mock.
+ * B006 emits `createdAtUtc` as a .NET "O" UTC value — `yyyy-MM-ddTHH:mm:ss.fffffff`
+ * with **no** `Z` suffix. A `Z`-less ISO string is read by `Date.parse` as *local*
+ * time, which would shift the created-at column on any non-UTC machine. The value
+ * is UTC by contract, so mark it explicitly before it reaches the table.
  */
-const searchParams =
-  typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search)
-    : new URLSearchParams()
+function normalizeUtcTimestamp(value: string): string {
+  // Already carries a zone (Z or a ±HH:MM offset) — leave it untouched.
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value
+  // A bare date-time with no zone: this is the .NET UTC "O" case → append Z.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)) {
+    return `${value}Z`
+  }
+  return value
+}
 
-const demoMode = searchParams.get('users') // 'empty' | null
-const listErrorRequested = searchParams.has('usersError')
+function parseUser(payload: unknown): PlatformUser {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiUnavailableError()
+  }
+  const user = payload as Record<string, unknown>
+  if (
+    typeof user.id !== 'string' ||
+    user.id.length === 0 ||
+    typeof user.email !== 'string' ||
+    user.email.length === 0 ||
+    typeof user.displayName !== 'string' ||
+    user.displayName.length === 0 ||
+    !isUserStatus(user.status) ||
+    typeof user.isPlatformAdmin !== 'boolean' ||
+    typeof user.createdAtUtc !== 'string' ||
+    Number.isNaN(Date.parse(user.createdAtUtc))
+  ) {
+    throw new ApiUnavailableError()
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    status: user.status,
+    isPlatformAdmin: user.isPlatformAdmin,
+    createdAtUtc: normalizeUtcTimestamp(user.createdAtUtc),
+  }
+}
 
-let listCallNumber = 0
-let listErrorArmed = listErrorRequested
+function parseListResponse(payload: unknown): UserListResponse {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiUnavailableError()
+  }
+  const body = payload as Record<string, unknown>
+  if (!Array.isArray(body.users)) {
+    throw new ApiUnavailableError()
+  }
+  return { users: body.users.map(parseUser) }
+}
 
-/**
- * The in-tab collection, seeded with the documented development
- * administrator (B001/B005). This is the task-approved mock data — it
- * matches what the real API will return for the platform at this stage.
- */
-const seededUsers: PlatformUser[] = [
-  {
-    id: 'development-admin',
-    email: 'admin@tenantforge.local',
-    displayName: 'Platform Administrator',
-    status: 'Active',
-    isPlatformAdmin: true,
-    createdAtUtc: '2030-01-01T00:00:00Z',
+function mapServerValidation(payload: unknown): Partial<Record<keyof CreateUserRequest, string>> {
+  const fallback = 'مقدار واردشده معتبر نیست.'
+  if (typeof payload !== 'object' || payload === null) return { email: fallback }
+  const body = payload as Record<string, unknown>
+  const errors = body.errors
+  if (typeof errors !== 'object' || errors === null) return { email: fallback }
+  const mapped: Partial<Record<keyof CreateUserRequest, string>> = {}
+  for (const field of ['email', 'displayName', 'password'] as const) {
+    const value = (errors as Record<string, unknown>)[field]
+    if (Array.isArray(value) && typeof value[0] === 'string') mapped[field] = value[0]
+    else if (typeof value === 'string') mapped[field] = value
+  }
+  return Object.keys(mapped).length > 0 ? mapped : { email: fallback }
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json()
+  } catch {
+    throw new ApiUnavailableError()
+  }
+}
+
+async function request(path: string, init: RequestInit): Promise<Response> {
+  const abort = createRequestAbortSignal()
+  try {
+    return await fetch(path, { ...init, signal: abort.signal })
+  } catch {
+    throw new ApiUnavailableError()
+  } finally {
+    abort.clear()
+  }
+}
+
+function authHeaders(accessToken: string) {
+  return { Authorization: `Bearer ${accessToken}` }
+}
+
+export const httpUserAdapter: UserAdapter = {
+  async listUsers(accessToken) {
+    const response = await request(USERS_PATH, {
+      method: 'GET',
+      headers: authHeaders(accessToken),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new UserForbiddenError()
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseListResponse(await readJson(response))
   },
-]
 
-const collection: PlatformUser[] = [...seededUsers]
-
-let createIdCounter = 0
-
-function delay() {
-  return new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS))
-}
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase()
-}
-
-/** Deterministic id for mock-created users (no secret material). */
-function nextId() {
-  createIdCounter += 1
-  return `user-${createIdCounter}`
-}
-
-export const mockUserAdapter: UserAdapter = {
-  async listUsers() {
-    await delay()
-    listCallNumber += 1
-    // Fault only the visible initial fetch (second call under StrictMode).
-    if (listErrorArmed && listCallNumber === 2) {
-      listErrorArmed = false
-      throw new ApiUnavailableError()
-    }
-    const items =
-      demoMode === 'empty' ? [] : [...collection].map((user) => ({ ...user }))
-    return { items }
-  },
-
-  async createUser(request) {
-    await delay()
-    const email = normalizeEmail(request.email)
-    // Uniqueness: a stable conflict, identical to the real 409 behavior.
-    if (collection.some((user) => user.email === email)) {
-      throw new UserConflictError()
-    }
-    const created: PlatformUser = {
-      id: nextId(),
-      email,
-      displayName: request.displayName.trim(),
-      // The mock creates an active user, exactly like the contract.
-      status: 'Active',
-      isPlatformAdmin: false,
-      createdAtUtc: new Date().toISOString(),
-    }
-    collection.push(created)
-    return { ...created }
+  async createUser(accessToken, body) {
+    const response = await request(USERS_PATH, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new UserForbiddenError()
+    if (response.status === 409) throw new UserConflictError()
+    if (response.status === 400) throw new UserValidationError(mapServerValidation(await readJson(response)))
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseUser(await readJson(response))
   },
 }
