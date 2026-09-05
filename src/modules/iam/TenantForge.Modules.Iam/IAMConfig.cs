@@ -18,12 +18,13 @@ public sealed class IAMConfig : IModuleConfig
 
     private string DevelopmentLoginPath => $"{SectionName}:{DevelopmentLoginOptions.SectionName}";
 
+    private string IamConnectionStringPath => $"{SectionName}:{IamConnectionStringName}";
+
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
         services.AddDbContext<IamDbContext>((serviceProvider, options) =>
         {
-            var connectionString = serviceProvider.GetRequiredService<IConfiguration>()
-                .GetConnectionString(IamConnectionStringName);
+            var connectionString = serviceProvider.GetRequiredService<IConfiguration>()[IamConnectionStringPath];
             options.UseNpgsql(connectionString);
         });
 
@@ -85,11 +86,11 @@ public sealed class IAMConfig : IModuleConfig
 
     public void ValidateConfiguration(IHostEnvironment environment, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString(IamConnectionStringName);
+        var connectionString = configuration[IamConnectionStringPath];
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(
-                $"The 'ConnectionStrings:{IamConnectionStringName}' configuration value is required for IAM persistence.");
+                $"The '{IamConnectionStringPath}' configuration value is required for IAM persistence.");
         }
 
         var section = configuration.GetSection(DevelopmentLoginPath);
