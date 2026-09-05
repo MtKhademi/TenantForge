@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using TenantForge.Modules.Iam.Features.Account;
 using TenantForge.Modules.Iam.Features.Dashboard;
 using TenantForge.Modules.Iam.Features.Login;
+using TenantForge.Modules.Iam.Features.Tenants;
 using TenantForge.Modules.Iam.Features.Users;
 using TenantForge.Modules.Iam.Infrastructure;
 
@@ -68,6 +69,7 @@ public static class IamModule
         endpoints.MapCurrentAccountFeature();
         endpoints.MapDashboardSummaryFeature();
         endpoints.MapUsersFeature();
+        endpoints.MapTenantsFeature();
         return endpoints;
     }
 }
