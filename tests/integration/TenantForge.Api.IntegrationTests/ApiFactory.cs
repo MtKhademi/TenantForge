@@ -41,7 +41,7 @@ public sealed class ApiFactory(string environment, DevelopmentLoginMode developm
         {
             ["Logging:LogLevel:Default"] = "Debug",
             ["AllowedOrigins:0"] = "http://localhost:5173",
-            ["ConnectionStrings:IamDb"] = "Host=localhost;Port=5432;Database=tenantforge_tests;Username=tenantforge;Password=tenantforge"
+            ["IAM:IamDb"] = "Host=localhost;Port=5432;Database=tenantforge_tests;Username=tenantforge;Password=tenantforge"
         };
 
         switch (developmentLoginMode)
