@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
-import { Loader2, LogOut, Menu, Moon, PanelRightClose, PanelRightOpen, Sun, X } from 'lucide-react'
+import { Building2, Loader2, LogOut, Menu, Moon, PanelRightClose, PanelRightOpen, Sun, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { TenantSwitcher } from '@/components/shell/TenantSwitcher'
 import { SecondaryButton } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useTheme } from '@/features/theme/ThemeContext'
+import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 import { ShellNav } from '@/components/shell/ShellNav'
 
@@ -30,7 +32,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { session, isSigningOut, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { tenants } = useTenantScope()
+  const location = useLocation()
   const navigate = useNavigate()
+
+  // The URL is the source of truth for the active tenant; resolve it here
+  // only to surface it in the header. Selection never grants access.
+  const activeTenant = (() => {
+    if (!location.pathname.startsWith('/t/')) return null
+    const segment = location.pathname.split('/')[2]
+    if (!segment) return null
+    const slug = decodeURIComponent(segment)
+    return tenants?.find((tenant) => tenant.slug === slug) ?? null
+  })()
 
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null)
@@ -110,11 +124,20 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 )}
               </SecondaryButton>
               <div>
-                <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">TenantForge</p>
+                <p className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground">
+                  TenantForge
+                  {activeTenant && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      <Building2 aria-hidden="true" className="size-3" />
+                      <bdi>{activeTenant.name}</bdi>
+                    </span>
+                  )}
+                </p>
                 <h1 className="text-lg font-semibold tracking-tight">داشبورد</h1>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <TenantSwitcher />
               <button
                 type="button"
                 aria-label={theme === 'dark' ? 'تغییر به پوسته روشن' : 'تغییر به پوسته تیره'}

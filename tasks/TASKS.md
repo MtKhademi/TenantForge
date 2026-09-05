@@ -40,7 +40,7 @@ one valid Spec link.
 | F007 | S03 | Connect dashboard summary | done | F006, B003 | — |
 | F008 | S06 | User management mock | done | F007 | — |
 | F009 | S06 | Connect user management | done | F008, B006 | — |
-| F010 | S07 | Tenant membership mock | planned | F009 | [Spec](front/F010-tenant-membership-mock.md) |
+| F010 | S07 | Tenant membership mock | done | F009 | — |
 | F011 | S07 | Connect tenant membership | planned | F010, B007 | [Spec](front/F011-connect-tenant-membership.md) |
 | F012 | S08 | Tenant isolation UI | planned | F011, B008 | [Spec](front/F012-tenant-isolation-ui.md) |
 | F013 | S09 | Permission matrix mock | planned | F012 | [Spec](front/F013-permission-matrix-mock.md) |
