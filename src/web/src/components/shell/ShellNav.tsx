@@ -1,4 +1,4 @@
-import { IdCard, LayoutDashboard, ShieldCheck, Shield, Users } from 'lucide-react'
+import { Building2, IdCard, LayoutDashboard, ShieldCheck, Shield, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -11,15 +11,21 @@ type ShellNavItem = {
   /** Real destination, or a placeholder anchor for future slices. */
   href: string
   placeholder?: boolean
+  /**
+   * Match a whole pathname prefix instead of an exact route (used by
+   * مستأجران, which is active on the platform page and inside `/t/:slug`).
+   */
+  activePrefixes?: string[]
 }
 
 /**
- * The destinations the shell exposes so far. داشبورد and کاربران are real
- * routes (S02/S06); the remaining items are named placeholders for later
- * slices, so they keep inert anchors and dimmed tooltips.
+ * The destinations the shell exposes so far. داشبورد, کاربران and مستأجران
+ * are real routes (S02/S06/S07); the remaining items are named placeholders
+ * for later slices, so they keep inert anchors and dimmed tooltips.
  */
 const navItems: ShellNavItem[] = [
   { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard' },
+  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'] },
   { id: 'users', label: 'کاربران', icon: Users, href: '/users' },
   { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true },
   { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true },
@@ -53,7 +59,11 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
 
       <ul className="space-y-1">
         {navItems.map((item) => {
-          const active = !item.placeholder && location.pathname === item.href
+          const active =
+            !item.placeholder &&
+            (item.activePrefixes
+              ? item.activePrefixes.some((prefix) => location.pathname.startsWith(prefix))
+              : location.pathname === item.href)
           const Icon = item.icon
           const link = (
             <a

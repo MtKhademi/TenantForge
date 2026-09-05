@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { SessionLoadingScreen } from './components/shell/SessionLoadingScreen'
 import { useAuth } from './features/auth/AuthContext'
+import { TenantScopeProvider } from './features/tenants/TenantScopeContext'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
+import { TenantScopePage } from './pages/TenantScopePage'
+import { TenantsPage } from './pages/TenantsPage'
 import { UsersPage } from './pages/UsersPage'
 
 /**
@@ -28,27 +31,33 @@ function RedirectHome() {
   return <Navigate to={status === 'authenticated' ? '/dashboard' : '/login'} replace />
 }
 
+/**
+ * S07 layout boundary: the tenant scope provider is mounted once around all
+ * protected routes so the shared tenant list (header switcher + tenants page)
+ * is fetched once per session and survives navigation. It represents
+ * selection only — never authorization.
+ */
+function ProtectedLayout() {
+  return (
+    <RequireSession>
+      <TenantScopeProvider>
+        <Outlet />
+      </TenantScopeProvider>
+    </RequireSession>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<RedirectHome />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/dashboard"
-        element={
-          <RequireSession>
-            <DashboardPage />
-          </RequireSession>
-        }
-      />
-      <Route
-        path="/users"
-        element={
-          <RequireSession>
-            <UsersPage />
-          </RequireSession>
-        }
-      />
+      <Route element={<ProtectedLayout />}>
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/platform/tenants" element={<TenantsPage />} />
+        <Route path="/t/:slug" element={<TenantScopePage />} />
+      </Route>
       <Route path="*" element={<RedirectHome />} />
     </Routes>
   )
