@@ -57,7 +57,7 @@ one valid Spec link.
 | B003 | S03 | Dashboard summary API | done | B002, F003 | — |
 | B004 | S04 | IAM persistence | done | B003, F007 | — |
 | B005 | S05 | Seeded platform admin | done | B004 | — |
-| B006 | S06 | User management API | planned | B005, F008 | [Spec](backend/B006-user-management-api.md) |
+| B006 | S06 | User management API | done | B005, F008 | — |
 | B007 | S07 | Tenant membership API | planned | B006, F010 | [Spec](backend/B007-tenant-membership-api.md) |
 | B008 | S08 | Tenant isolation | planned | B007, F011 | [Spec](backend/B008-tenant-isolation.md) |
 | B009 | S09 | Role permission API | planned | B008, F013 | [Spec](backend/B009-role-permission-api.md) |

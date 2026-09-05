@@ -55,5 +55,44 @@ internal sealed class Account
         };
     }
 
+    public static Account CreateUser(
+        string email,
+        string displayName,
+        string passwordHash,
+        DateTimeOffset nowUtc)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new ArgumentException("Email is required.", nameof(email));
+        }
+
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            throw new ArgumentException("Display name is required.", nameof(displayName));
+        }
+
+        if (string.IsNullOrWhiteSpace(passwordHash))
+        {
+            throw new ArgumentException("Password hash is required.", nameof(passwordHash));
+        }
+
+        var trimmedEmail = email.Trim();
+        var trimmedDisplayName = displayName.Trim();
+        var trimmedPasswordHash = passwordHash.Trim();
+
+        return new Account
+        {
+            Id = Guid.NewGuid(),
+            Email = trimmedEmail,
+            NormalizedEmail = NormalizeEmail(trimmedEmail),
+            DisplayName = trimmedDisplayName,
+            PasswordHash = trimmedPasswordHash,
+            IsPlatformAdmin = false,
+            Status = AccountStatus.Active,
+            CreatedAtUtc = nowUtc.ToUniversalTime(),
+            UpdatedAtUtc = nowUtc.ToUniversalTime()
+        };
+    }
+
     public static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
 }
