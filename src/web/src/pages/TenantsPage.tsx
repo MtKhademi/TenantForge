@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import {
-  mockTenantAdapter,
+  httpTenantAdapter,
   TenantForbiddenError,
   TenantValidationError,
 } from '@/features/tenants/tenantAdapter'
@@ -21,14 +21,15 @@ import { type PlatformUser } from '@/features/users/userTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S07 tenant membership — platform tenants page (F010, mocked).
+ * S07 tenant membership — platform tenants page (F011, connected to B007).
  *
- * The platform administrator sees the (mocked) tenant list and creates a
- * tenant together with its first Owner. The tenant data source is the F010
- * mock (`sessionStorage`); the Owner dropdown is fed by the **real** B006
- * `GET /api/platform/users` so the owner assigned in the demo is a real
- * platform user. Selecting a tenant (row action or header switcher) only
- * navigates — it grants no access.
+ * The platform administrator sees the real tenant list and creates a tenant
+ * together with its first Owner. The tenant data source is the B007 API
+ * (`GET/POST /api/platform/tenants`) via `httpTenantAdapter`; the Owner
+ * dropdown is fed by the **real** B006 `GET /api/platform/users` so the owner
+ * assigned in the demo is a real platform user. A created tenant is persisted
+ * server-side, so it survives a page refresh. Selecting a tenant (row action
+ * or header switcher) only navigates — it grants no access.
  *
  * States:
  * - list: initial skeleton, loaded table, empty panel, retryable error;
@@ -131,7 +132,7 @@ export function TenantsPage() {
       setIsCreating(true)
       setCreateSuccess(null)
       try {
-        const created = await mockTenantAdapter.createTenant(
+        const created = await httpTenantAdapter.createTenant(
           sessionRef.current?.accessToken ?? '',
           values,
         )

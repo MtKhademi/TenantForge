@@ -11,7 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthContext'
 import { SessionExpiredError } from '@/features/auth/authTypes'
-import { mockTenantAdapter, TenantForbiddenError } from './tenantAdapter'
+import { httpTenantAdapter, TenantForbiddenError } from './tenantAdapter'
 import type { TenantSummary } from './tenantTypes'
 
 /**
@@ -75,7 +75,7 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
   /** Initial fetch: `isBusy` is already true at mount, so no sync setState. */
   const startInitialFetch = useCallback(() => {
     const requestId = ++listRequestIdRef.current
-    return mockTenantAdapter
+    return httpTenantAdapter
       .listTenants(sessionRef.current?.accessToken ?? '')
       .then((response) => {
         if (requestId !== listRequestIdRef.current) return
@@ -96,7 +96,7 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
     const requestId = ++listRequestIdRef.current
     setIsBusy(true)
     setFailure(null)
-    mockTenantAdapter
+    httpTenantAdapter
       .listTenants(sessionRef.current?.accessToken ?? '')
       .then((response) => {
         if (requestId !== listRequestIdRef.current) return

@@ -1,4 +1,7 @@
-import { ApiUnavailableError } from '@/features/auth/authTypes'
+import {
+  ApiUnavailableError,
+  SessionExpiredError,
+} from '@/features/auth/authTypes'
 import {
   TenantConflictError,
   type CreateTenantRequest,
@@ -8,28 +11,26 @@ import {
 } from './tenantTypes'
 
 /**
- * S07 tenant membership — mock data source (F010).
+ * S07 tenant membership — real API data source (F011).
  *
- * F010 ships the S07 demo with no backend yet: this adapter stores tenants
- * in `sessionStorage` (so a refresh keeps them, and closing the tab resets
- * the demo) and simulates request latency so the real loading states are
- * exercised. The interface mirrors what the F011 HTTP adapter will call —
- * B007's `GET/POST /api/platform/tenants` — so swapping data sources later
- * touches no page code.
+ * The F010 `sessionStorage` mock is gone. This adapter calls the B007
+ * endpoints (`GET/POST /api/platform/tenants`) with the current session
+ * bearer token and validates response bodies strictly so the page never
+ * renders half-parsed data. The `TenantAdapter` interface is unchanged from
+ * F010, so the page and the shared tenant-scope context needed no other edits
+ * to swap data sources.
  */
 export type TenantAdapter = {
   listTenants(accessToken: string): Promise<TenantListResponse>
   createTenant(accessToken: string, request: CreateTenantRequest): Promise<TenantSummary>
 }
 
-const STORAGE_KEY = 'tenantforge.tenants.v1'
-/** Small artificial latency so skeleton/submitting states are visible. */
-const MOCK_LATENCY_MS = 450
-const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
+const TENANTS_PATH = '/api/platform/tenants'
+const REQUEST_TIMEOUT_MS = 8_000
 
 /**
  * `POST /api/platform/tenants` client-side validation failure (HTTP 400 in
- * F011). Field keys are the request field names, exactly like B006's user
+ * B007). Field keys are the request field names, exactly like B006's user
  * validation, so the page maps server field errors identically in both.
  */
 export class TenantValidationError extends Error {
@@ -49,10 +50,13 @@ export class TenantForbiddenError extends Error {
   }
 }
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
+function createRequestAbortSignal() {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  return {
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timeoutId),
+  }
 }
 
 function isTenantStatus(value: unknown): value is TenantStatus {
@@ -60,18 +64,18 @@ function isTenantStatus(value: unknown): value is TenantStatus {
 }
 
 /**
- * Normalize a tenant slug the way B007 will: trim, casefold, join words with
- * a single dash, drop anything that is not a letter/digit/dash, and never
- * allow a leading or trailing dash.
+ * B007 emits `createdAtUtc` as a .NET "O" UTC value (`yyyy-MM-ddTHH:mm:ss.fffffff+00:00`).
+ * The value is UTC by contract; if it ever arrives as a bare date-time with no
+ * zone, `Date.parse` would read it as *local* time and shift the column, so we
+ * mark the zone explicitly in that case. A value that already carries a `Z` or
+ * a ±HH:MM offset is left untouched.
  */
-export function normalizeTenantSlug(raw: string): string {
-  return raw
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
+function normalizeUtcTimestamp(value: string): string {
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)) {
+    return `${value}Z`
+  }
+  return value
 }
 
 function parseTenant(payload: unknown): TenantSummary {
@@ -101,82 +105,85 @@ function parseTenant(payload: unknown): TenantSummary {
     slug: tenant.slug,
     status: tenant.status,
     memberCount: tenant.memberCount,
-    createdAtUtc: tenant.createdAtUtc,
+    createdAtUtc: normalizeUtcTimestamp(tenant.createdAtUtc),
   }
 }
 
-function readStore(): TenantSummary[] {
-  let raw: string | null
-  try {
-    raw = window.sessionStorage.getItem(STORAGE_KEY)
-  } catch {
-    // Storage blocked (private mode) — the demo degrades to memory-only.
-    return []
+function parseListResponse(payload: unknown): TenantListResponse {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiUnavailableError()
   }
-  if (raw === null) return []
-  let parsed: unknown
+  const body = payload as Record<string, unknown>
+  if (!Array.isArray(body.tenants)) {
+    throw new ApiUnavailableError()
+  }
+  return { tenants: body.tenants.map(parseTenant) }
+}
+
+function mapServerValidation(payload: unknown): Partial<Record<keyof CreateTenantRequest, string>> {
+  const fallback = 'مقدار واردشده معتبر نیست.'
+  if (typeof payload !== 'object' || payload === null) return { name: fallback }
+  const body = payload as Record<string, unknown>
+  const errors = body.errors
+  if (typeof errors !== 'object' || errors === null) return { name: fallback }
+  const mapped: Partial<Record<keyof CreateTenantRequest, string>> = {}
+  for (const field of ['name', 'slug', 'ownerUserId'] as const) {
+    const value = (errors as Record<string, unknown>)[field]
+    if (Array.isArray(value) && typeof value[0] === 'string') mapped[field] = value[0]
+    else if (typeof value === 'string') mapped[field] = value
+  }
+  return Object.keys(mapped).length > 0 ? mapped : { name: fallback }
+}
+
+async function readJson(response: Response): Promise<unknown> {
   try {
-    parsed = JSON.parse(raw)
+    return await response.json()
   } catch {
     throw new ApiUnavailableError()
   }
-  if (!Array.isArray(parsed)) throw new ApiUnavailableError()
-  return parsed.map(parseTenant)
 }
 
-function writeStore(tenants: TenantSummary[]) {
+async function request(path: string, init: RequestInit): Promise<Response> {
+  const abort = createRequestAbortSignal()
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(tenants))
+    return await fetch(path, { ...init, signal: abort.signal })
   } catch {
-    // Degrade to memory-only; the current response is still correct.
+    throw new ApiUnavailableError()
+  } finally {
+    abort.clear()
   }
 }
 
-function validateRequest(request: CreateTenantRequest, existing: TenantSummary[]): void {
-  const fieldErrors: Partial<Record<keyof CreateTenantRequest, string>> = {}
-
-  const name = request.name.trim()
-  if (name.length === 0) fieldErrors.name = 'نام مستأجر الزامی است.'
-  else if (name.length > 80) fieldErrors.name = 'نام مستأجر نباید بیشتر از ۸۰ نویسه باشد.'
-
-  const slug = normalizeTenantSlug(request.slug)
-  if (slug.length === 0) fieldErrors.slug = 'یک شناسه لاتین معتبر وارد کنید (a-z، 0-9، خط تیره).'
-  else if (slug.length < 3) fieldErrors.slug = 'شناسه باید حداقل ۳ نویسه باشد.'
-  else if (slug.length > 50) fieldErrors.slug = 'شناسه نباید بیشتر از ۵۰ نویسه باشد.'
-  else if (!SLUG_PATTERN.test(slug)) fieldErrors.slug = 'شناسه باید با حرف یا رقم شروع و پایان یابد.'
-  else if (existing.some((tenant) => tenant.slug === slug)) {
-    // Server-side conflict (HTTP 409 in F011), surfaced as its own error.
-    throw new TenantConflictError()
-  }
-
-  if (request.ownerUserId.trim().length === 0) {
-    fieldErrors.ownerUserId = 'مالک نخست مستأجر را انتخاب کنید.'
-  }
-
-  if (Object.keys(fieldErrors).length > 0) throw new TenantValidationError(fieldErrors)
+function authHeaders(accessToken: string) {
+  return { Authorization: `Bearer ${accessToken}` }
 }
 
-export const mockTenantAdapter: TenantAdapter = {
-  async listTenants() {
-    await delay(MOCK_LATENCY_MS)
-    return { tenants: readStore() }
+export const httpTenantAdapter: TenantAdapter = {
+  async listTenants(accessToken) {
+    const response = await request(TENANTS_PATH, {
+      method: 'GET',
+      headers: authHeaders(accessToken),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new TenantForbiddenError()
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseListResponse(await readJson(response))
   },
 
-  async createTenant(_accessToken, request) {
-    await delay(MOCK_LATENCY_MS)
-    const existing = readStore()
-    validateRequest(request, existing)
-
-    const tenant: TenantSummary = {
-      id: crypto.randomUUID(),
-      name: request.name.trim(),
-      slug: normalizeTenantSlug(request.slug),
-      status: 'Active',
-      // A tenant always starts with exactly one Owner membership.
-      memberCount: 1,
-      createdAtUtc: new Date().toISOString(),
-    }
-    writeStore([...existing, tenant])
-    return tenant
+  async createTenant(accessToken, body) {
+    const response = await request(TENANTS_PATH, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(accessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new TenantForbiddenError()
+    if (response.status === 409) throw new TenantConflictError()
+    if (response.status === 400) throw new TenantValidationError(mapServerValidation(await readJson(response)))
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseTenant(await readJson(response))
   },
 }
