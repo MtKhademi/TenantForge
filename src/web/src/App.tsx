@@ -4,6 +4,7 @@ import { SessionLoadingScreen } from './components/shell/SessionLoadingScreen'
 import { useAuth } from './features/auth/AuthContext'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
+import { UsersPage } from './pages/UsersPage'
 
 /**
  * S02 protected-route boundary:
@@ -37,6 +38,14 @@ export default function App() {
         element={
           <RequireSession>
             <DashboardPage />
+          </RequireSession>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <RequireSession>
+            <UsersPage />
           </RequireSession>
         }
       />
