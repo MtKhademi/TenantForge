@@ -14,17 +14,25 @@ public sealed class TestLogCollector
     public void Clear() => _entries.Clear();
 }
 
-public enum DevelopmentLoginMode
+/// <summary>
+/// Which IAM configuration the test host gets: the seeded-admin + signing-key
+/// sections (Complete), a partially-filled seed section (Partial, used to prove
+/// startup validation), or neither (Absent, used to prove fail-closed behavior).
+/// </summary>
+public enum IamSeedMode
 {
     Absent,
     Complete,
-    Partial
+    Partial,
+    NoSigningKey
 }
 
-public sealed class ApiFactory(string environment, DevelopmentLoginMode developmentLoginMode) : WebApplicationFactory<Program>, IDisposable
+public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFixture db)
+    : WebApplicationFactory<Program>, IDisposable
 {
     public const string Email = "admin@tenantforge.local";
     public const string Password = "local-development-password";
+    public const string DisplayName = "Platform Administrator";
     public const string SigningKey = "dev-only-tenantforge-signing-key-do-not-use-32b";
 
     public TestLogCollector LogCollector { get; } = new();
@@ -41,19 +49,31 @@ public sealed class ApiFactory(string environment, DevelopmentLoginMode developm
         {
             ["Logging:LogLevel:Default"] = "Debug",
             ["AllowedOrigins:0"] = "http://localhost:5173",
-            ["IAM:IamDb"] = "Host=localhost;Port=5432;Database=tenantforge_tests;Username=tenantforge;Password=tenantforge"
+            // Real PostgreSQL from the shared fixture: login is now
+            // database-backed, so the test host must point at a real, migrated
+            // database (an in-memory or absent database is not representative).
+            ["IAM:IamDb"] = db.ConnectionString
         };
 
-        switch (developmentLoginMode)
+        switch (seedMode)
         {
-            case DevelopmentLoginMode.Complete:
-                values["IAM:DevelopmentLogin:Email"] = Email;
-                values["IAM:DevelopmentLogin:Password"] = Password;
-                values["IAM:DevelopmentLogin:SigningKey"] = SigningKey;
+            case IamSeedMode.Complete:
+                values["IAM:Auth:SigningKey"] = SigningKey;
+                values["IAM:SeedAdmin:Email"] = Email;
+                values["IAM:SeedAdmin:Password"] = Password;
+                values["IAM:SeedAdmin:DisplayName"] = DisplayName;
                 break;
-            case DevelopmentLoginMode.Partial:
-                values["IAM:DevelopmentLogin:Email"] = Email;
-                values["IAM:DevelopmentLogin:Password"] = Password;
+            case IamSeedMode.Partial:
+                values["IAM:SeedAdmin:Email"] = Email;
+                values["IAM:SeedAdmin:Password"] = Password;
+                break;
+            case IamSeedMode.NoSigningKey:
+                // Seeding is configured, but no signing key: startup succeeds,
+                // but the login endpoint must fail closed because it cannot mint
+                // a verifiable token.
+                values["IAM:SeedAdmin:Email"] = Email;
+                values["IAM:SeedAdmin:Password"] = Password;
+                values["IAM:SeedAdmin:DisplayName"] = DisplayName;
                 break;
         }
 

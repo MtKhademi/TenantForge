@@ -6,16 +6,17 @@ using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
 
-public class LoginIntegrationTests : IDisposable
+[Collection(nameof(IamApiTestCollection))]
+public class LoginIntegrationTests(IamDbFixture db) : IDisposable
 {
-    private readonly ApiFactory _factory = new(environment: "Development", developmentLoginMode: DevelopmentLoginMode.Complete);
+    private readonly ApiFactory _factory = new(environment: "Development", seedMode: IamSeedMode.Complete, db);
 
     public void Dispose() => _factory.Dispose();
 
     private HttpClient CreateClient() => _factory.CreateClient();
 
     [Fact]
-    public async Task ValidDevelopmentCredentials_Return200_WithSignedTokenAndExactContract()
+    public async Task SeededCredentials_Return200_WithSignedTokenAndExactContract()
     {
         using var client = CreateClient();
 
@@ -38,14 +39,16 @@ public class LoginIntegrationTests : IDisposable
         Assert.True(expiresAtUtc > DateTimeOffset.UtcNow, "expiresAtUtc must be in the future");
 
         var user = root.GetProperty("user");
-        Assert.Equal("development-admin", user.GetProperty("id").GetString());
+        // The id now comes from the persisted account: a GUID, not a constant.
+        var id = user.GetProperty("id").GetString()!;
+        Assert.True(Guid.TryParse(id, out _), "user.id must be the persisted account id (a GUID)");
         Assert.Equal(ApiFactory.Email, user.GetProperty("email").GetString());
-        Assert.Equal("Platform Administrator", user.GetProperty("displayName").GetString());
+        Assert.Equal(ApiFactory.DisplayName, user.GetProperty("displayName").GetString());
         Assert.True(user.GetProperty("isPlatformAdmin").GetBoolean());
     }
 
     [Fact]
-    public async Task ValidDevelopmentCredentials_ReturnsJwtWithOnlyTheRequiredClaims()
+    public async Task SeededCredentials_ReturnsJwtWithClaimsFromPersistedAccount()
     {
         using var client = CreateClient();
 
@@ -62,9 +65,10 @@ public class LoginIntegrationTests : IDisposable
         handler.InboundClaimTypeMap = new Dictionary<string, string>();
         var jwt = handler.ReadJwtToken(accessToken);
 
-        Assert.Equal("development-admin", jwt.Claims.Single(c => c.Type == "sub").Value);
+        var sub = jwt.Claims.Single(c => c.Type == "sub").Value;
+        Assert.True(Guid.TryParse(sub, out _), "sub must be the persisted account id (a GUID)");
         Assert.Equal(ApiFactory.Email, jwt.Claims.Single(c => c.Type == "email").Value);
-        Assert.Equal("Platform Administrator", jwt.Claims.Single(c => c.Type == "name").Value);
+        Assert.Equal(ApiFactory.DisplayName, jwt.Claims.Single(c => c.Type == "name").Value);
         Assert.Equal("true", jwt.Claims.Single(c => c.Type == "isPlatformAdmin").Value);
         Assert.True(jwt.ValidTo > DateTime.UtcNow, "token must not be expired");
     }

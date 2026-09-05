@@ -10,9 +10,10 @@ using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
 
-public class CurrentAccountIntegrationTests : IDisposable
+[Collection(nameof(IamApiTestCollection))]
+public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
 {
-    private readonly ApiFactory _factory = new(environment: "Development", developmentLoginMode: DevelopmentLoginMode.Complete);
+    private readonly ApiFactory _factory = new(environment: "Development", seedMode: IamSeedMode.Complete, db);
 
     public void Dispose() => _factory.Dispose();
 
@@ -33,7 +34,7 @@ public class CurrentAccountIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task ValidDevelopmentToken_Returns200_WithExactCurrentAccountContract()
+    public async Task SeededAccountToken_Returns200_WithExactCurrentAccountContract()
     {
         using var client = CreateClient();
         var accessToken = await LoginAsync(client);
@@ -46,9 +47,10 @@ public class CurrentAccountIntegrationTests : IDisposable
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = document.RootElement;
 
-        Assert.Equal("development-admin", root.GetProperty("id").GetString());
+        var id = root.GetProperty("id").GetString()!;
+        Assert.True(Guid.TryParse(id, out _), "id must be the persisted account id (a GUID)");
         Assert.Equal(ApiFactory.Email, root.GetProperty("email").GetString());
-        Assert.Equal("Platform Administrator", root.GetProperty("displayName").GetString());
+        Assert.Equal(ApiFactory.DisplayName, root.GetProperty("displayName").GetString());
         Assert.True(root.GetProperty("isPlatformAdmin").GetBoolean());
     }
 
@@ -120,16 +122,16 @@ public class CurrentAccountIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task ProductionWithoutDevelopmentSection_MeEndpointFailsClosedWith401()
+    public async Task ProductionWithoutSeedOrKey_MeEndpointFailsClosedWith401()
     {
-        using var productionFactory = new ApiFactory(environment: "Production", developmentLoginMode: DevelopmentLoginMode.Absent);
+        using var productionFactory = new ApiFactory(environment: "Production", seedMode: IamSeedMode.Absent, db);
         using var client = productionFactory.CreateClient();
 
         // No Authorization header -> 401.
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
 
-        // Even a valid-looking development token is useless in Production: the
-        // JWT scheme is registered but has no development signing key there, so
+        // Even a valid-looking token signed with the known development key is
+        // useless in Production: the JWT scheme has no signing key there, so
         // signature validation fails and the endpoint must answer 401 (never
         // 500) and never trust client-provided identity.
         var devToken = TestJwtFactory.Issue(signingKey: ApiFactory.SigningKey);
@@ -142,13 +144,16 @@ internal static class TestJwtFactory
 {
     public static string Issue(string signingKey, string issuer = "TenantForge", string audience = "TenantForge", bool isPlatformAdmin = true)
     {
+        // The sub is an arbitrary GUID; these helpers exercise token validation
+        // (signature/issuer/audience/lifetime), so the specific id is not
+        // asserted. It is a GUID to mirror the real (persisted-account) shape.
         var descriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(
             [
-                new Claim(JwtRegisteredClaimNames.Sub, "development-admin"),
+                new Claim(JwtRegisteredClaimNames.Sub, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, ApiFactory.Email),
-                new Claim(JwtRegisteredClaimNames.Name, "Platform Administrator"),
+                new Claim(JwtRegisteredClaimNames.Name, ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", isPlatformAdmin ? "true" : "false")
             ]),
             Audience = audience,
@@ -178,9 +183,9 @@ internal static class TestJwtFactory
             audience: "TenantForge",
             claims: new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, "development-admin"),
+                new Claim(JwtRegisteredClaimNames.Sub, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, ApiFactory.Email),
-                new Claim(JwtRegisteredClaimNames.Name, "Platform Administrator"),
+                new Claim(JwtRegisteredClaimNames.Name, ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", "true")
             },
             notBefore: notBefore.UtcDateTime,

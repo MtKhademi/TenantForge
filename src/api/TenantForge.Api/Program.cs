@@ -31,6 +31,11 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Apply pending IAM migrations and seed the platform administrator (idempotent)
+// before the host starts serving. Runs after configuration validation, so the
+// connection string and seed section are known to be present/well-formed.
+await IamModule.SeedIamModuleAsync(app.Services);
+
 app.MapHealth();
 app.MapIamModule();
 
