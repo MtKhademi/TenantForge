@@ -24,25 +24,24 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * S10 audit log — mocked page (F015).
+ * S10 audit log — connected to the real B010 API (F016).
  *
  * Shows an immutable, tenant-scoped log of sensitive actions: each row carries
- * the actor, action, target, a one-line detail and the time. The data source is
- * F015's sessionStorage mock, which freezes the B010 contract and seeds a
- * previous role/permission change so the demo shows "the invitation and a
- * previous role/permission change" (S10 demo step 5). F016 swaps the mock for
- * the real endpoint without changing this page.
+ * the actor, action, target, a one-line detail and the time. F015's
+ * sessionStorage mock (with its seeded role-change event) is gone; every event
+ * shown here is now recorded server-side around a real sensitive command
+ * (invitation creation, role create/update/assign/unassign).
  *
  * States:
  * - loading: request in flight (skeleton);
  * - loaded: filter bar + event table (which may be empty);
  * - no matches: filters returned nothing (distinct from a truly empty log);
- * - forbidden: a member without audit permission — designed 403, modeled by
- *   `?auditViewer=member`;
+ * - forbidden: a caller without `IAM.Audit.View` — B010 returns a non-leaking
+ *   403;
  * - unavailable: network/server failure — retryable.
  *
- * Filters (action + from-date) are passed to the adapter exactly as the HTTP
- * query will send them, so the connected version behaves identically.
+ * Filters (action + from-date) are sent to B010 as `action`/`fromUtc` query
+ * parameters, unchanged from the F015 contract.
  */
 
 type AuditState =

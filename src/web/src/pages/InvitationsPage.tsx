@@ -19,10 +19,7 @@ import { Button, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
-import {
-  httpInvitationAdapter,
-  type InvitationActor,
-} from '@/features/invitations/invitationsAdapter'
+import { httpInvitationAdapter } from '@/features/invitations/invitationsAdapter'
 import {
   InvitationConflictError,
   InvitationForbiddenError,
@@ -33,24 +30,25 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * S10 tenant invitations — mocked page (F015).
+ * S10 tenant invitations — connected to the real B010 API (F016).
  *
  * A tenant Owner invites a person by email with a role, sees the pending
  * invitation and its expiry, and (development mode only) a clearly-labeled
- * stand-in for the emailed acceptance link. The data source is F015's
- * sessionStorage mock, which freezes the B010 contract; F016 swaps it for the
- * real endpoints without changing this page.
+ * stand-in for the emailed acceptance link. F015's sessionStorage mock is
+ * gone; this page now calls the real invitation endpoints, but keeps every
+ * state F015 established.
  *
  * States:
  * - loading: initial/tenant-change request in flight (skeleton);
  * - loaded: invite form + pending list (which may be empty);
- * - forbidden: a member without invitation permission — designed 403, modeled
- *   by `?invitationsViewer=member`;
+ * - forbidden: a caller without `IAM.Invitations.View`/`.Create` — B010
+ *   returns a non-leaking 403;
  * - unavailable: network/server failure — retryable.
  *
  * Form states: idle, field validation (email/role), submitting, success (with
- * dev-only acceptance link), and 409 duplicate conflict. Authorization remains
- * server-owned; the mock models the 403 the same way F013 did.
+ * dev-only acceptance link), and 409 duplicate conflict. Authorization is
+ * server-owned; the audit event's actor is resolved by B010 from the bearer
+ * token, not supplied by this page.
  */
 
 type InvitationsState =
@@ -175,20 +173,15 @@ export function InvitationsPage() {
 
   const onSubmit = useCallback(
     async (values: InviteFormValues) => {
-      if (!tenantId || !session?.user) return
+      if (!tenantId) return
       setIsSubmitting(true)
       setConflictError(null)
       setCreated(null)
-      const actor: InvitationActor = {
-        displayName: session.user.displayName,
-        email: session.user.email,
-      }
       try {
         const invitation = await httpInvitationAdapter.createInvitation(
           sessionRef.current?.accessToken ?? '',
           tenantId,
           { email: values.email, role: values.role as InvitationRole },
-          actor,
         )
         setState((current) =>
           current.kind === 'loaded'
@@ -218,7 +211,7 @@ export function InvitationsPage() {
         setIsSubmitting(false)
       }
     },
-    [reset, session?.user, setError, tenantId],
+    [reset, setError, tenantId],
   )
 
   const submitInvite = useCallback((event: FormEvent<HTMLFormElement>) => {
