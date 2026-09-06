@@ -48,6 +48,10 @@ one valid Spec link.
 | F015 | S10 | Audit and invitations mock | done | F014 | — |
 | F016 | S10 | Connect audit and invitations | done | F015, B010 | — |
 | F017 | S08 | Verify non-admin tenant isolation in browser | done | F012, B011 | — |
+| F018 | S11 | Navigate platform and tenant scopes correctly | planned | F017, B012 | [Spec](front/F018-scope-aware-shell.md) |
+| F019 | S12 | Render permissions from the server catalog | planned | F018, B013 | [Spec](front/F019-server-permission-matrix.md) |
+| F020 | S13 | Handle custom invitation roles and honest pending states | planned | F019, B014 | [Spec](front/F020-custom-role-invitations.md) |
+| F021 | S14 | Polish Persian product copy and current documentation | planned | F020 | [Spec](front/F021-product-copy-and-docs.md) |
 
 ## Backend queue
 
@@ -64,15 +68,29 @@ one valid Spec link.
 | B009 | S09 | Role permission API | done | B008, F013 | — |
 | B010 | S10 | Invitations and audit API | done | B009, F015 | — |
 | B011 | S02 | Current account for all authenticated users | done | B008 | — |
+| B012 | S11 | Close platform user access and expose my tenants | planned | B009, B011, F017 | [Spec](backend/B012-platform-access-and-my-tenants.md) |
+| B013 | S12 | Unify tenant permission semantics and protect administrators | planned | B012, F018 | [Spec](backend/B013-tenant-permission-consistency.md) |
+| B014 | S13 | Make invitation creation atomic and tenant scoped | planned | B013, F019 | [Spec](backend/B014-atomic-invitations.md) |
 
-## Useful parallel starts
+## Cleanup batch: S11–S14
 
-- F002 becomes runnable after F001 and B001 are done.
-- F002 is runnable now that F001 and B001 are done.
-- B003 can run while F004 and F005 establish the Persian RTL shell.
-- F006 can begin after F005; B003 may proceed independently once its own
-  dependencies are done.
-- F008 can begin while B004/B005 establish persistence and seeded login.
+Sources preserve the decisions and demos after executable Specs are removed:
+
+- [S11 — Platform and tenant access boundaries](slices/011-platform-tenant-boundaries.md)
+- [S12 — Consistent tenant permissions](slices/012-permission-consistency.md)
+- [S13 — Reliable existing invitations](slices/013-invitation-consistency.md)
+- [S14 — Clear Persian UI and accurate current documentation](slices/014-product-copy-and-current-docs.md)
+
+Execution order is B012 → F018 → B013 → F019 → B014 → F020 → F021.
+The dependencies deliberately require each contract change and its UI consumer
+to be delivered before the next cleanup pair begins. Do not run these tasks in
+parallel or start implementation as part of registering this batch. B012 is the
+first candidate once these planned rows and Specs are delivered to main; derive
+subsequent readiness from the table, not this explanatory text.
+
+Invitation acceptance/email delivery, broad architecture refactoring and
+frontend test repair are outside this batch. S14 records the existing frontend
+test ownership restriction; these Specs do not change agent permissions.
 
 When a dependency is pending, report its ID, current status, owning clone and
 exact command. Never bypass a dependency merely to keep an agent busy.
