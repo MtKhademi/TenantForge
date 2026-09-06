@@ -8,11 +8,15 @@ internal sealed class IamDbContext(DbContextOptions<IamDbContext> options) : DbC
     internal DbSet<Account> Accounts => Set<Account>();
     internal DbSet<Tenant> Tenants => Set<Tenant>();
     internal DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
+    internal DbSet<TenantRole> TenantRoles => Set<TenantRole>();
+    internal DbSet<TenantMemberRoleAssignment> TenantMemberRoleAssignments => Set<TenantMemberRoleAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new AccountMap());
         modelBuilder.ApplyConfiguration(new TenantMap());
         modelBuilder.ApplyConfiguration(new TenantMembershipMap());
+        modelBuilder.ApplyConfiguration(new TenantRoleMap());
+        modelBuilder.ApplyConfiguration(new TenantMemberRoleAssignmentMap());
     }
 }

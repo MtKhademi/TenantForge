@@ -12,7 +12,13 @@ internal sealed class TenantMembership
     {
     }
 
-    public static TenantMembership CreateOwner(Guid tenantId, Guid accountId, DateTimeOffset nowUtc)
+    public static TenantMembership CreateOwner(Guid tenantId, Guid accountId, DateTimeOffset nowUtc) =>
+        Create(tenantId, accountId, TenantMembershipRole.Owner, nowUtc);
+
+    public static TenantMembership CreateMember(Guid tenantId, Guid accountId, DateTimeOffset nowUtc) =>
+        Create(tenantId, accountId, TenantMembershipRole.Member, nowUtc);
+
+    private static TenantMembership Create(Guid tenantId, Guid accountId, TenantMembershipRole role, DateTimeOffset nowUtc)
     {
         if (tenantId == Guid.Empty)
         {
@@ -29,7 +35,7 @@ internal sealed class TenantMembership
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             AccountId = accountId,
-            Role = TenantMembershipRole.Owner,
+            Role = role,
             CreatedAtUtc = nowUtc.ToUniversalTime()
         };
     }
