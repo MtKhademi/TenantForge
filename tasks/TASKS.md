@@ -47,6 +47,7 @@ one valid Spec link.
 | F014 | S09 | Connect permission matrix | planned | F013, B009 | [Spec](front/F014-connect-permission-matrix.md) |
 | F015 | S10 | Audit and invitations mock | planned | F014 | [Spec](front/F015-audit-invitations-mock.md) |
 | F016 | S10 | Connect audit and invitations | planned | F015, B010 | [Spec](front/F016-connect-audit-invitations.md) |
+| F017 | S08 | Verify non-admin tenant isolation in browser | planned | F012, B011 | [Spec](front/F017-verify-non-admin-isolation.md) |
 
 ## Backend queue
 
@@ -62,6 +63,7 @@ one valid Spec link.
 | B008 | S08 | Tenant isolation | done | B007, F011 | — |
 | B009 | S09 | Role permission API | planned | B008, F013 | [Spec](backend/B009-role-permission-api.md) |
 | B010 | S10 | Invitations and audit API | planned | B009, F015 | [Spec](backend/B010-invitations-audit-api.md) |
+| B011 | S02 | Current account for all authenticated users | planned | B008 | [Spec](backend/B011-current-account-all-users.md) |
 
 ## Useful parallel starts
 
