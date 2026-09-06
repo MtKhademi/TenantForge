@@ -56,7 +56,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/platform/tenants" element={<TenantsPage />} />
-        <Route path="/t/:slug" element={<TenantScopePage />} />
+        <Route path="/t/:tenantId" element={<TenantScopePage />} />
       </Route>
       <Route path="*" element={<RedirectHome />} />
     </Routes>

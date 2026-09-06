@@ -5,10 +5,13 @@ import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 
 /**
- * S07 tenant switcher — the first functional tenant context control (F010).
+ * S07 tenant switcher (F010) — S08: selection is by tenant id.
  *
  * The trigger shows the active scope: «پلتفرم» on platform routes, or the
- * tenant name when a `/t/:slug` route is active. The menu lists «پلتفرم»
+ * tenant name when a `/t/:tenantId` route is active. When the route is a
+ * tenant the signed-in user cannot see in the platform list (e.g. a member
+ * whose tenant list fetch is denied), the trigger shows a neutral «مستأجر»
+ * rather than pretending the scope is the platform. The menu lists «پلتفرم»
  * plus every known tenant. Choosing an entry only navigates (selection,
  * never authorization — the server decides access in S08).
  *
@@ -21,21 +24,24 @@ import { cn } from '@/lib/utils'
  */
 export function TenantSwitcher() {
   const { tenants, isBusy, selectTenant, selectPlatform } = useTenantScope()
-  const { slug: activeSlug } = useParams<{ slug: string }>()
+  const { tenantId: activeTenantId } = useParams<{ tenantId: string }>()
   const location = useLocation()
   const onTenantRoute = location.pathname.startsWith('/t/')
-  const activeTenant = activeSlug && onTenantRoute ? tenants?.find((tenant) => tenant.slug === activeSlug) ?? null : null
+  const activeTenant =
+    activeTenantId && onTenantRoute
+      ? (tenants?.find((tenant) => tenant.id === activeTenantId) ?? null)
+      : null
 
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
 
   const options = [
-    { id: 'platform', label: 'پلتفرم', slug: null as string | null, icon: ShieldCheck },
+    { key: 'platform', label: 'پلتفرم', tenantId: null as string | null, icon: ShieldCheck },
     ...(tenants ?? []).map((tenant) => ({
-      id: tenant.id,
+      key: tenant.id,
       label: tenant.name,
-      slug: tenant.slug,
+      tenantId: tenant.id as string | null,
       icon: Building2,
     })),
   ]
@@ -79,11 +85,13 @@ export function TenantSwitcher() {
         aria-label={
           activeTenant
             ? `تغییر محدوده؛ اکنون در مستأجر ${activeTenant.name}`
-            : 'تغییر محدوده؛ اکنون در سطح پلتفرم'
+            : onTenantRoute
+              ? 'تغییر محدوده؛ اکنون در یک مستأجر'
+              : 'تغییر محدوده؛ اکنون در سطح پلتفرم'
         }
         className={cn(
           'inline-flex min-h-10 max-w-40 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium transition-colors hover:bg-muted sm:max-w-56',
-          activeTenant && 'border-primary/40 bg-primary/10 text-foreground',
+          (activeTenant || onTenantRoute) && 'border-primary/40 bg-primary/10 text-foreground',
         )}
         ref={(node) => {
           triggerRef.current = node
@@ -96,6 +104,8 @@ export function TenantSwitcher() {
         <span className="truncate">
           {activeTenant ? (
             <bdi className="font-semibold">{activeTenant.name}</bdi>
+          ) : onTenantRoute ? (
+            'مستأجر'
           ) : (
             'پلتفرم'
           )}
@@ -118,10 +128,10 @@ export function TenantSwitcher() {
           </p>
           <ul className="max-h-72 overflow-y-auto p-1">
             {options.map((option, index) => {
-              const selected = option.slug === activeTenant?.slug
+              const selected = option.tenantId !== null && option.tenantId === activeTenantId
               const OptionIcon = option.icon
               return (
-                <li key={option.id}>
+                <li key={option.key}>
                   <button
                     type="button"
                     role="option"
@@ -135,8 +145,8 @@ export function TenantSwitcher() {
                     )}
                     onClick={() => {
                       setOpen(false)
-                      if (option.slug === null) selectPlatform()
-                      else selectTenant(option.slug)
+                      if (option.tenantId === null) selectPlatform()
+                      else selectTenant(option.tenantId)
                     }}
                   >
                     <OptionIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />

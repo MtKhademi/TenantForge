@@ -400,7 +400,7 @@ export function TenantsPage() {
               </thead>
               <tbody>
                 {tenants.map((tenant) => (
-                  <TenantRow key={tenant.id} tenant={tenant} onEnter={() => selectTenant(tenant.slug)} />
+                  <TenantRow key={tenant.id} tenant={tenant} onEnter={() => selectTenant(tenant.id)} />
                 ))}
               </tbody>
             </table>
