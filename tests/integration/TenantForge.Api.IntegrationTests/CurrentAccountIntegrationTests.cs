@@ -55,6 +55,31 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
     }
 
     [Fact]
+    public async Task NonAdminAuthenticatedAccount_Returns200_WithIsPlatformAdminFalse()
+    {
+        using var client = CreateClient();
+        var accountId = Guid.NewGuid().ToString();
+        var accessToken = TestJwtFactory.Issue(
+            signingKey: ApiFactory.SigningKey,
+            subject: accountId,
+            email: "alice@tenantforge.local",
+            displayName: "Alice Tenant Member",
+            isPlatformAdmin: false);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.GetAsync("/api/auth/me");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var account = await response.Content.ReadFromJsonAsync<CurrentAccountContract>();
+        Assert.NotNull(account);
+        Assert.Equal(accountId, account.Id);
+        Assert.Equal("alice@tenantforge.local", account.Email);
+        Assert.Equal("Alice Tenant Member", account.DisplayName);
+        Assert.False(account.IsPlatformAdmin);
+    }
+
+    [Fact]
     public async Task MissingAuthorizationHeader_Returns401()
     {
         using var client = CreateClient();
@@ -140,20 +165,30 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
     }
 }
 
+internal sealed record CurrentAccountContract(string Id, string Email, string DisplayName, bool IsPlatformAdmin);
+
 internal static class TestJwtFactory
 {
-    public static string Issue(string signingKey, string issuer = "TenantForge", string audience = "TenantForge", bool isPlatformAdmin = true)
+    public static string Issue(
+        string signingKey,
+        string issuer = "TenantForge",
+        string audience = "TenantForge",
+        bool isPlatformAdmin = true,
+        string? subject = null,
+        string? email = null,
+        string? displayName = null)
     {
-        // The sub is an arbitrary GUID; these helpers exercise token validation
-        // (signature/issuer/audience/lifetime), so the specific id is not
-        // asserted. It is a GUID to mirror the real (persisted-account) shape.
+        // The default sub is an arbitrary GUID; these helpers exercise token
+        // validation (signature/issuer/audience/lifetime), so most tests do not
+        // assert the specific id. It is a GUID to mirror the real
+        // (persisted-account) shape.
         var descriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(
             [
-                new Claim(JwtRegisteredClaimNames.Sub, Guid.NewGuid().ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, ApiFactory.Email),
-                new Claim(JwtRegisteredClaimNames.Name, ApiFactory.DisplayName),
+                new Claim(JwtRegisteredClaimNames.Sub, subject ?? Guid.NewGuid().ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, email ?? ApiFactory.Email),
+                new Claim(JwtRegisteredClaimNames.Name, displayName ?? ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", isPlatformAdmin ? "true" : "false")
             ]),
             Audience = audience,
