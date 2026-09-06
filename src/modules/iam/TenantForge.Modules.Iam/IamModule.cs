@@ -6,7 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TenantForge.Modules.Iam.Features.Account;
+using TenantForge.Modules.Iam.Features.Audit;
 using TenantForge.Modules.Iam.Features.Dashboard;
+using TenantForge.Modules.Iam.Features.Invitations;
 using TenantForge.Modules.Iam.Features.Login;
 using TenantForge.Modules.Iam.Features.Roles;
 using TenantForge.Modules.Iam.Features.TenantMembers;
@@ -74,6 +76,8 @@ public static class IamModule
         endpoints.MapTenantsFeature();
         endpoints.MapTenantMembersFeature();
         endpoints.MapRolesFeature();
+        endpoints.MapInvitationsFeature();
+        endpoints.MapAuditFeature();
         return endpoints;
     }
 }

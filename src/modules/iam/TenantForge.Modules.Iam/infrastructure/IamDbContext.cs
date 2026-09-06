@@ -10,6 +10,8 @@ internal sealed class IamDbContext(DbContextOptions<IamDbContext> options) : DbC
     internal DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
     internal DbSet<TenantRole> TenantRoles => Set<TenantRole>();
     internal DbSet<TenantMemberRoleAssignment> TenantMemberRoleAssignments => Set<TenantMemberRoleAssignment>();
+    internal DbSet<TenantInvitation> TenantInvitations => Set<TenantInvitation>();
+    internal DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -18,5 +20,7 @@ internal sealed class IamDbContext(DbContextOptions<IamDbContext> options) : DbC
         modelBuilder.ApplyConfiguration(new TenantMembershipMap());
         modelBuilder.ApplyConfiguration(new TenantRoleMap());
         modelBuilder.ApplyConfiguration(new TenantMemberRoleAssignmentMap());
+        modelBuilder.ApplyConfiguration(new TenantInvitationMap());
+        modelBuilder.ApplyConfiguration(new AuditEventMap());
     }
 }
