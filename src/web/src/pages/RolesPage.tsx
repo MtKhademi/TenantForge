@@ -19,9 +19,7 @@ import { TextInput } from '@/components/ui/TextInput'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
 import { PERMISSION_CATALOG } from '@/features/roles/permissionCatalog'
-import {
-  mockRoleAdapter,
-} from '@/features/roles/roleAdapter'
+import { httpRoleAdapter } from '@/features/roles/roleAdapter'
 import {
   TenantRoleConflictError,
   TenantRoleForbiddenError,
@@ -37,11 +35,10 @@ import { cn } from '@/lib/utils'
 /**
  * S09 permission matrix mock (F013).
  *
- * This page defines the accepted B009 frontend contract with a sessionStorage
- * mock: tenant Owners can create custom roles, select grouped permissions and
- * assign roles to tenant members. Authorization remains server-owned in the
- * real contract; `?roleViewer=member` intentionally renders the designed 403
- * state so the demo can show denied role management before B009 exists.
+ * This page consumes the real B009 role endpoints: tenant Owners can create
+ * custom roles, select grouped permissions and assign roles to tenant members.
+ * Authorization remains server-owned; the UI renders B009's non-leaking 403
+ * and 409 responses without treating hidden controls as a security boundary.
  */
 
 type RolesState =
@@ -59,24 +56,6 @@ const roleSchema = z.object({
 
 type RoleFormValues = z.infer<typeof roleSchema>
 
-const fallbackMembers: TenantMember[] = [
-  {
-    id: 'owner-member',
-    userId: 'development-admin',
-    email: 'admin@tenantforge.local',
-    displayName: 'Platform Administrator',
-    role: 'Owner',
-    createdAtUtc: '2030-01-01T00:00:00Z',
-  },
-  {
-    id: 'viewer-member',
-    userId: 'demo-member',
-    email: 'member@tenantforge.local',
-    displayName: 'Acme Team Member',
-    role: 'Owner',
-    createdAtUtc: '2030-01-02T00:00:00Z',
-  },
-]
 
 export function RolesPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
@@ -124,19 +103,12 @@ export function RolesPage() {
     setSuccess(null)
 
     Promise.all([
-      mockRoleAdapter.listRoles(sessionRef.current?.accessToken ?? '', tenantId),
-      httpTenantMembersAdapter.getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId).catch((error) => {
-        if (error instanceof TenantAccessDeniedError) throw error
-        return {
-          tenant: { id: tenantId, name: 'Acme Demo', slug: 'acme-demo', status: 'Active' as const },
-          members: fallbackMembers,
-        }
-      }),
+      httpRoleAdapter.listRoles(sessionRef.current?.accessToken ?? '', tenantId),
+      httpTenantMembersAdapter.getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId),
     ])
       .then(([roleResponse, memberResponse]) => {
         if (requestId !== requestIdRef.current) return
-        const roles = normalizeDemoOwner(roleResponse.roles, memberResponse.members)
-        void mockRoleAdapter.replaceDemoRoles(sessionRef.current?.accessToken ?? '', tenantId, roles)
+        const roles = roleResponse.roles
         setState({ kind: 'loaded', roles, members: memberResponse.members, tenant: memberResponse.tenant })
         setSelectedRoleId((current) => current ?? roles.find((role) => role.kind === 'custom')?.id ?? roles[0]?.id ?? null)
       })
@@ -210,7 +182,7 @@ export function RolesPage() {
     setAssignmentError(null)
     try {
       if (selectedRole?.kind === 'custom') {
-        const updated = await mockRoleAdapter.updateRole(
+        const updated = await httpRoleAdapter.updateRole(
           sessionRef.current?.accessToken ?? '',
           tenantId,
           selectedRole.id,
@@ -220,7 +192,7 @@ export function RolesPage() {
         reset({ name: updated.name, permissionKeys: updated.permissionKeys })
         setSuccess(`مجوزهای نقش ${updated.name} ذخیره شد.`)
       } else {
-        const created = await mockRoleAdapter.createRole(sessionRef.current?.accessToken ?? '', tenantId, values)
+        const created = await httpRoleAdapter.createRole(sessionRef.current?.accessToken ?? '', tenantId, values)
         if (state.kind === 'loaded') replaceRoles([...state.roles, created])
         setSelectedRoleId(created.id)
         reset({ name: created.name, permissionKeys: created.permissionKeys })
@@ -255,8 +227,8 @@ export function RolesPage() {
     setSuccess(null)
     try {
       const response = role.memberIds.includes(memberId)
-        ? await mockRoleAdapter.unassignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
-        : await mockRoleAdapter.assignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
+        ? await httpRoleAdapter.unassignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
+        : await httpRoleAdapter.assignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
       replaceRoles(response.roles)
       setSuccess('انتساب نقش به‌روزرسانی شد.')
     } catch (error) {
@@ -388,18 +360,6 @@ export function RolesPage() {
       </section>
     </DashboardShell>
   )
-}
-
-function normalizeDemoOwner(roles: TenantRole[], members: TenantMember[]) {
-  const firstMemberId = members[0]?.id
-  if (!firstMemberId) return roles
-  return roles.map((role) => {
-    if (role.name !== 'Owner') return role
-    return {
-      ...role,
-      memberIds: [firstMemberId],
-    }
-  })
 }
 
 function RoleList({ roles, selectedRoleId, onSelect }: { roles: TenantRole[]; selectedRoleId: string | null; onSelect: (id: string) => void }) {
