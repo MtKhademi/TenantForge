@@ -43,7 +43,7 @@ one valid Spec link.
 | F010 | S07 | Tenant membership mock | done | F009 | — |
 | F011 | S07 | Connect tenant membership | done | F010, B007 | — |
 | F012 | S08 | Tenant isolation UI | done | F011, B008 | — |
-| F013 | S09 | Permission matrix mock | planned | F012 | [Spec](front/F013-permission-matrix-mock.md) |
+| F013 | S09 | Permission matrix mock | done | F012 | — |
 | F014 | S09 | Connect permission matrix | planned | F013, B009 | [Spec](front/F014-connect-permission-matrix.md) |
 | F015 | S10 | Audit and invitations mock | planned | F014 | [Spec](front/F015-audit-invitations-mock.md) |
 | F016 | S10 | Connect audit and invitations | planned | F015, B010 | [Spec](front/F016-connect-audit-invitations.md) |

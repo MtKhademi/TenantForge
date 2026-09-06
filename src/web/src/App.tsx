@@ -5,6 +5,7 @@ import { useAuth } from './features/auth/AuthContext'
 import { TenantScopeProvider } from './features/tenants/TenantScopeContext'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
+import { RolesPage } from './pages/RolesPage'
 import { TenantScopePage } from './pages/TenantScopePage'
 import { TenantsPage } from './pages/TenantsPage'
 import { UsersPage } from './pages/UsersPage'
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/platform/tenants" element={<TenantsPage />} />
         <Route path="/t/:tenantId" element={<TenantScopePage />} />
+        <Route path="/t/:tenantId/roles" element={<RolesPage />} />
       </Route>
       <Route path="*" element={<RedirectHome />} />
     </Routes>
