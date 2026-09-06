@@ -37,14 +37,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
 
   // The URL is the source of truth for the active tenant; resolve it here
-  // only to surface it in the header. Selection never grants access.
+  // only to surface it in the header. A tenant the user cannot see in the
+  // platform list still marks the header as "in a tenant scope" without
+  // leaking a name. Selection never grants access.
   const activeTenant = (() => {
     if (!location.pathname.startsWith('/t/')) return null
     const segment = location.pathname.split('/')[2]
     if (!segment) return null
-    const slug = decodeURIComponent(segment)
-    return tenants?.find((tenant) => tenant.slug === slug) ?? null
+    const id = decodeURIComponent(segment)
+    return tenants?.find((tenant) => tenant.id === id) ?? null
   })()
+  const inTenantScope = location.pathname.startsWith('/t/') && location.pathname.length > '/t/'.length
 
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null)
@@ -126,10 +129,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <div>
                 <p className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground">
                   TenantForge
-                  {activeTenant && (
+                  {(activeTenant || inTenantScope) && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                       <Building2 aria-hidden="true" className="size-3" />
-                      <bdi>{activeTenant.name}</bdi>
+                      {activeTenant ? <bdi>{activeTenant.name}</bdi> : 'مستأجر'}
                     </span>
                   )}
                 </p>

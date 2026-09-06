@@ -56,3 +56,44 @@ export class TenantConflictError extends Error {
     this.name = 'TenantConflictError'
   }
 }
+
+/**
+ * S08 tenant isolation — the fixed request/response contract (F012).
+ *
+ * `GET /api/tenants/{tenantId}/members` returns the requested tenant's context
+ * plus its member list, but **only** when the authenticated user holds an
+ * active membership in that tenant. `tenantId` is the tenant's Guid; there is
+ * no "my memberships" endpoint, so the client can prove access only by calling
+ * this endpoint. `200` carries the data below; `401` is missing/invalid auth;
+ * `403` covers missing membership, an unknown/inactive tenant, or a malformed
+ * id — all non-leaking and indistinguishable from the client's side.
+ */
+
+/** Membership role. B008 only ever issues `Owner`; later slices extend this. */
+export type TenantMemberRole = 'Owner'
+
+/** The requested tenant's identity, as confirmed by the server. */
+export type TenantContext = {
+  id: string
+  name: string
+  slug: string
+  status: TenantStatus
+}
+
+/** One row of a tenant's member list. `userId` is the platform account id. */
+export type TenantMember = {
+  /** Membership record id (stable row key). */
+  id: string
+  userId: string
+  email: string
+  displayName: string
+  role: TenantMemberRole
+  /** UTC timestamp of the membership (ISO 8601). */
+  createdAtUtc: string
+}
+
+/** `GET /api/tenants/{tenantId}/members` — authenticated, authorized response. */
+export type TenantMembersResponse = {
+  tenant: TenantContext
+  members: TenantMember[]
+}

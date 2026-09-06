@@ -12,8 +12,8 @@ type ShellNavItem = {
   href: string
   placeholder?: boolean
   /**
-   * Match a whole pathname prefix instead of an exact route (used by
-   * مستأجران, which is active on the platform page and inside `/t/:slug`).
+    * Match a whole pathname prefix instead of an exact route (used by
+    * مستأجران, which is active on the platform page and inside `/t/:tenantId`).
    */
   activePrefixes?: string[]
 }

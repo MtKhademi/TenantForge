@@ -21,11 +21,16 @@ import type { TenantSummary } from './tenantTypes'
  * header) and the tenants page both read the same in-flight/loaded data.
  *
  * It represents **selection**, not authorization: `selectTenant`/
- * `selectPlatform` only navigate. The **URL (`/t/:slug`) is the single source
- * of truth** for which tenant is active — consumers derive it with
+ * `selectPlatform` only navigate. The **URL (`/t/:tenantId`) is the single
+ * source of truth** for which tenant is active — consumers derive it with
  * `useParams`, so there is no second "active tenant" state to drift. Whether
  * the signed-in user may actually work inside a tenant is always decided
  * server-side (S08); nothing here grants or hides privileged behavior.
+ *
+ * The route carries the tenant **id** (not the slug) because S08's
+ * `GET /api/tenants/{tenantId}/members` is keyed by id, and non-admin members
+ * cannot call the platform tenant list to resolve a slug. The switcher and
+ * the tenants page navigate by id; lookups against the loaded list are by id.
  */
 export type TenantScopeState = {
   /** `null` until the first list fetch settles. */
@@ -36,10 +41,10 @@ export type TenantScopeState = {
   failure: 'unavailable' | 'forbidden' | null
   /** Re-fetch (e.g. after creating a tenant). Superseding is safe. */
   refresh(): void
-  /** Look up a tenant by its URL slug; `null` when unknown. */
-  getTenantBySlug(slug: string): TenantSummary | null
+  /** Look up a tenant by its id; `null` when unknown. */
+  getTenantById(id: string): TenantSummary | null
   /** Navigate into a tenant's scoped shell (selection only). */
-  selectTenant(slug: string): void
+  selectTenant(id: string): void
   /** Navigate back to the platform tenants page. */
   selectPlatform(): void
 }
@@ -115,14 +120,14 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
     void startInitialFetch()
   }, [startInitialFetch])
 
-  const getTenantBySlug = useCallback(
-    (slug: string) => tenants?.find((tenant) => tenant.slug === slug) ?? null,
+  const getTenantById = useCallback(
+    (id: string) => tenants?.find((tenant) => tenant.id === id) ?? null,
     [tenants],
   )
 
   const selectTenant = useCallback(
-    (slug: string) => {
-      navigate(`/t/${encodeURIComponent(slug)}`)
+    (id: string) => {
+      navigate(`/t/${encodeURIComponent(id)}`)
     },
     [navigate],
   )
@@ -132,8 +137,8 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
   }, [navigate])
 
   const value = useMemo<TenantScopeState>(
-    () => ({ tenants, isBusy, failure, refresh, getTenantBySlug, selectTenant, selectPlatform }),
-    [tenants, isBusy, failure, refresh, getTenantBySlug, selectTenant, selectPlatform],
+    () => ({ tenants, isBusy, failure, refresh, getTenantById, selectTenant, selectPlatform }),
+    [tenants, isBusy, failure, refresh, getTenantById, selectTenant, selectPlatform],
   )
 
   return <TenantScopeContext.Provider value={value}>{children}</TenantScopeContext.Provider>
