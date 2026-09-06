@@ -68,8 +68,14 @@ internal static class RolesFeature
                 return Results.ValidationProblem(errors);
             }
 
-            var role = TenantRole.Create(tenantGuid.Value, request.Name!, request.PermissionKeys ?? [], DateTimeOffset.UtcNow);
+            var now = DateTimeOffset.UtcNow;
+            var role = TenantRole.Create(tenantGuid.Value, request.Name!, request.PermissionKeys ?? [], now);
             db.TenantRoles.Add(role);
+            var actor = await GetActorAsync(db, accountId.Value);
+            if (actor is not null)
+            {
+                db.AuditEvents.Add(AuditEvent.Create(tenantGuid.Value, accountId.Value, actor.DisplayName, actor.Email, "Role.Created", role.Name, $"نقش {role.Name} ایجاد شد.", now));
+            }
             try
             {
                 await db.SaveChangesAsync();
@@ -116,7 +122,13 @@ internal static class RolesFeature
                 return Results.Conflict();
             }
 
-            role.ReplacePermissions(request.PermissionKeys!, DateTimeOffset.UtcNow);
+            var now = DateTimeOffset.UtcNow;
+            role.ReplacePermissions(request.PermissionKeys!, now);
+            var actor = await GetActorAsync(db, accountId.Value);
+            if (actor is not null)
+            {
+                db.AuditEvents.Add(AuditEvent.Create(tenantGuid.Value, accountId.Value, actor.DisplayName, actor.Email, "Role.Updated", role.Name, $"مجوزهای نقش {role.Name} به‌روزرسانی شد.", now));
+            }
             await db.SaveChangesAsync();
             return Results.Ok((await BuildRoleResponsesAsync(db, tenantGuid.Value)).Single(item => item.Id == role.Id));
         }).RequireAuthorization();
@@ -129,7 +141,14 @@ internal static class RolesFeature
             var exists = await db.TenantMemberRoleAssignments.AnyAsync(a => a.TenantMembershipId == parsed.MemberId && a.TenantRoleId == parsed.RoleId);
             if (!exists)
             {
-                db.TenantMemberRoleAssignments.Add(TenantMemberRoleAssignment.Create(parsed.MemberId, parsed.RoleId, DateTimeOffset.UtcNow));
+                var now = DateTimeOffset.UtcNow;
+                db.TenantMemberRoleAssignments.Add(TenantMemberRoleAssignment.Create(parsed.MemberId, parsed.RoleId, now));
+                var actor = await GetActorAsync(db, parsed.AccountId);
+                var role = await db.TenantRoles.AsNoTracking().SingleAsync(r => r.Id == parsed.RoleId);
+                if (actor is not null)
+                {
+                    db.AuditEvents.Add(AuditEvent.Create(parsed.TenantId, parsed.AccountId, actor.DisplayName, actor.Email, "Role.Assigned", role.Name, $"نقش {role.Name} به عضو مستأجر اختصاص یافت.", now));
+                }
                 await db.SaveChangesAsync();
             }
 
@@ -154,6 +173,11 @@ internal static class RolesFeature
             }
 
             db.TenantMemberRoleAssignments.Remove(assignment);
+            var actor = await GetActorAsync(db, parsed.AccountId);
+            if (actor is not null)
+            {
+                db.AuditEvents.Add(AuditEvent.Create(parsed.TenantId, parsed.AccountId, actor.DisplayName, actor.Email, "Role.Unassigned", role.Name, $"نقش {role.Name} از عضو مستأجر حذف شد.", DateTimeOffset.UtcNow));
+            }
             await db.SaveChangesAsync();
             return Results.Ok(new TenantRolesResponse(await BuildRoleResponsesAsync(db, parsed.TenantId)));
         }).RequireAuthorization();
@@ -185,18 +209,24 @@ internal static class RolesFeature
         var accountId = GetAuthenticatedAccountId(principal);
         if (tenantGuid is null || memberGuid is null || roleGuid is null || accountId is null || !await IsOwnerAsync(db, tenantGuid.Value, accountId.Value))
         {
-            return new(Guid.Empty, Guid.Empty, Guid.Empty, Results.Forbid());
+            return new(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, Results.Forbid());
         }
 
         var memberExists = await db.TenantMemberships.AnyAsync(member => member.TenantId == tenantGuid.Value && member.Id == memberGuid.Value);
         var roleExists = await db.TenantRoles.AnyAsync(role => role.TenantId == tenantGuid.Value && role.Id == roleGuid.Value);
         if (!memberExists || !roleExists)
         {
-            return new(tenantGuid.Value, memberGuid.Value, roleGuid.Value, Results.NotFound());
+            return new(tenantGuid.Value, memberGuid.Value, roleGuid.Value, accountId.Value, Results.NotFound());
         }
 
-        return new(tenantGuid.Value, memberGuid.Value, roleGuid.Value, null);
+        return new(tenantGuid.Value, memberGuid.Value, roleGuid.Value, accountId.Value, null);
     }
+
+    private static async Task<ActorSnapshot?> GetActorAsync(IamDbContext db, Guid accountId) =>
+        await db.Accounts.AsNoTracking()
+            .Where(account => account.Id == accountId)
+            .Select(account => new ActorSnapshot(account.DisplayName, account.Email))
+            .SingleOrDefaultAsync();
 
     private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Guid tenantId)
     {
@@ -281,6 +311,7 @@ internal static class RolesFeature
     private static IResult DuplicateRoleProblem() => Results.Problem(title: "Duplicate tenant role", detail: "A role with this name already exists in this tenant.", statusCode: StatusCodes.Status409Conflict);
 }
 
+internal sealed record ActorSnapshot(string DisplayName, string Email);
 internal sealed record PermissionCatalogResponse(IReadOnlyList<PermissionGroupResponse> Groups);
 internal sealed record PermissionGroupResponse(string Id, string Label, string Description, IReadOnlyList<PermissionResponse> Permissions);
 internal sealed record PermissionResponse(string Key, string Label, string Description, string Kind);
@@ -289,4 +320,4 @@ internal sealed record TenantRoleResponse(Guid Id, string Name, string Descripti
 internal sealed record CreateRoleRequest(string? Name, IReadOnlyList<string>? PermissionKeys);
 internal sealed record UpdateRoleRequest(IReadOnlyList<string>? PermissionKeys);
 internal sealed record ResolvedPermissionsResponse(IReadOnlyList<string> Permissions);
-internal sealed record AssignmentValidation(Guid TenantId, Guid MemberId, Guid RoleId, IResult? Result);
+internal sealed record AssignmentValidation(Guid TenantId, Guid MemberId, Guid RoleId, Guid AccountId, IResult? Result);
