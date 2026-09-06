@@ -1,5 +1,7 @@
-import { SessionExpiredError } from '@/features/auth/authTypes'
-import { httpAuditAdapter } from '@/features/audit/auditAdapter'
+import {
+  ApiUnavailableError,
+  SessionExpiredError,
+} from '@/features/auth/authTypes'
 import {
   InvitationConflictError,
   InvitationForbiddenError,
@@ -7,186 +9,160 @@ import {
   type CreateInvitationRequest,
   type Invitation,
   type InvitationListResponse,
+  type InvitationRole,
+  type InvitationStatus,
 } from './invitationsTypes'
 
 /**
- * S10 tenant invitations — mock data source (F015).
+ * S10 tenant invitations — real API data source (F016).
  *
- * F015 freezes the B010 contract while using an in-tab sessionStorage-backed
- * mock. The adapter keeps active invitations per tenant, simulates latency so
- * loading and saving states are visible, and models server-side behavior:
- * - a real bearer token is required;
- * - `?invitationsViewer=member` receives a non-leaking 403;
- * - invalid email or missing role yields per-field validation errors;
- * - a duplicate active email in the same tenant yields a 409 conflict;
- * - creating an invitation also records an immutable `Invitation.Created`
- *   audit event, exactly as B010 will capture it server-side around the
- *   command.
- *
- * No acceptance token is ever generated, stored or returned: the one-time
- * token is a B010 server-side responsibility. The mock returns only the safe
- * {@link Invitation} fields. F016 replaces this adapter with HTTP calls without
- * changing page code or request/response shapes.
+ * F015's sessionStorage mock is gone. This adapter calls the B010 tenant
+ * invitation endpoints with the current bearer token and validates response
+ * bodies strictly so the page never renders half-parsed invitation data. The
+ * actor recorded on the resulting audit event is resolved server-side from
+ * the bearer token — the mock's explicit-actor parameter is no longer needed.
+ * UI visibility is still only presentation: B010 owns authorization and
+ * returns 403/409 for denied invitation management and duplicate-active
+ * emails.
  */
-
-/**
- * The signed-in principal who performs the create. In F016 the server derives
- * this from the bearer token; the mock receives it explicitly from the page,
- * which is the equivalent trusted source. It is used only to fill the audit
- * event's actor fields — it never influences authorization here beyond the
- * token/denial check.
- */
-export type InvitationActor = {
-  displayName: string
-  email: string
-}
-
 export type InvitationAdapter = {
   listInvitations(accessToken: string, tenantId: string): Promise<InvitationListResponse>
-  createInvitation(
-    accessToken: string,
-    tenantId: string,
-    request: CreateInvitationRequest,
-    actor: InvitationActor,
-  ): Promise<Invitation>
+  createInvitation(accessToken: string, tenantId: string, request: CreateInvitationRequest): Promise<Invitation>
 }
 
-const STORAGE_KEY = 'tenantforge.invitations.v1'
-const MOCK_LATENCY_MS = 450
-/** Fixed 7-day validity window (UTC), independent of the local clock. */
-const EXPIRY_DAYS = 7
-const EMAIL_MAX = 254
+const REQUEST_TIMEOUT_MS = 8_000
 
-type InvitationStore = Record<string, Invitation[]>
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function delay() {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, MOCK_LATENCY_MS))
-}
-
-function assertAuthorized(accessToken: string) {
-  if (accessToken.trim().length === 0) throw new SessionExpiredError()
-  const mode = new URLSearchParams(window.location.search).get('invitationsViewer')
-  if (mode === 'member' || mode === 'denied') throw new InvitationForbiddenError()
-}
-
-function readStore(): InvitationStore {
-  let raw: string | null
-  try {
-    raw = window.sessionStorage.getItem(STORAGE_KEY)
-  } catch {
-    return {}
-  }
-  if (raw === null) return {}
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return {}
-  }
-  return typeof parsed === 'object' && parsed !== null ? (parsed as InvitationStore) : {}
-}
-
-function writeStore(store: InvitationStore) {
-  try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(store))
-  } catch {
-    // Storage can be full or blocked; the mock degrades to in-memory-only.
+function createRequestAbortSignal() {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  return {
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timeoutId),
   }
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase()
+function invitationsPath(tenantId: string) {
+  return `/api/tenants/${encodeURIComponent(tenantId)}/invitations`
 }
 
-function isInvitationRole(value: unknown): value is Invitation['role'] {
+function authHeaders(accessToken: string) {
+  return { Authorization: `Bearer ${accessToken}` }
+}
+
+async function request(path: string, init: RequestInit): Promise<Response> {
+  const abort = createRequestAbortSignal()
+  try {
+    return await fetch(path, { ...init, signal: abort.signal })
+  } catch {
+    throw new ApiUnavailableError()
+  } finally {
+    abort.clear()
+  }
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json()
+  } catch {
+    throw new ApiUnavailableError()
+  }
+}
+
+function isInvitationRole(value: unknown): value is InvitationRole {
   return value === 'Owner' || value === 'Viewer'
 }
 
-/** Persian labels for the audit trail's free-text detail (UI-facing, not the wire `role`). */
-const ROLE_LABELS: Record<Invitation['role'], string> = {
-  Owner: 'مالک',
-  Viewer: 'مشاهده‌گر',
+function isInvitationStatus(value: unknown): value is InvitationStatus {
+  return value === 'Pending'
 }
 
-function mockId(prefix: string, ...parts: string[]) {
-  const seed = parts.join('|')
-  let hash = 0
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+/**
+ * B010 emits `expiresAtUtc`/`createdAtUtc` as a .NET "O" UTC value
+ * (`yyyy-MM-ddTHH:mm:ss.fffffff+00:00`). The value is UTC by contract; if it
+ * ever arrives as a bare date-time with no zone, `Date.parse` would read it as
+ * *local* time and shift the column, so the zone is marked explicitly in that
+ * case, matching the same guard already used by `tenantAdapter.ts`.
+ */
+function normalizeUtcTimestamp(value: string): string {
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)) {
+    return `${value}Z`
   }
-  return `${prefix}-${hash.toString(16)}`
+  return value
 }
 
-function cloneInvitation(invitation: Invitation): Invitation {
-  return { ...invitation }
+function parseInvitation(payload: unknown): Invitation {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const invitation = payload as Record<string, unknown>
+  if (
+    typeof invitation.id !== 'string' ||
+    invitation.id.length === 0 ||
+    typeof invitation.email !== 'string' ||
+    invitation.email.length === 0 ||
+    !isInvitationRole(invitation.role) ||
+    !isInvitationStatus(invitation.status) ||
+    typeof invitation.expiresAtUtc !== 'string' ||
+    Number.isNaN(Date.parse(invitation.expiresAtUtc)) ||
+    typeof invitation.createdAtUtc !== 'string' ||
+    Number.isNaN(Date.parse(invitation.createdAtUtc))
+  ) {
+    throw new ApiUnavailableError()
+  }
+  return {
+    id: invitation.id,
+    email: invitation.email,
+    role: invitation.role,
+    status: invitation.status,
+    expiresAtUtc: normalizeUtcTimestamp(invitation.expiresAtUtc),
+    createdAtUtc: normalizeUtcTimestamp(invitation.createdAtUtc),
+  }
+}
+
+function parseInvitationList(payload: unknown): InvitationListResponse {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const body = payload as Record<string, unknown>
+  if (!Array.isArray(body.invitations)) throw new ApiUnavailableError()
+  return { invitations: body.invitations.map(parseInvitation) }
+}
+
+function mapServerValidation(payload: unknown): Partial<Record<keyof CreateInvitationRequest, string>> {
+  const fallback = 'مقدار واردشده معتبر نیست.'
+  if (typeof payload !== 'object' || payload === null) return { email: fallback }
+  const body = payload as Record<string, unknown>
+  const errors = body.errors
+  if (typeof errors !== 'object' || errors === null) return { email: fallback }
+  const mapped: Partial<Record<keyof CreateInvitationRequest, string>> = {}
+  for (const field of ['email', 'role'] as const) {
+    const value = (errors as Record<string, unknown>)[field]
+    if (Array.isArray(value) && typeof value[0] === 'string') mapped[field] = value[0]
+    else if (typeof value === 'string') mapped[field] = value
+  }
+  return Object.keys(mapped).length > 0 ? mapped : { email: fallback }
 }
 
 export const httpInvitationAdapter: InvitationAdapter = {
   async listInvitations(accessToken, tenantId) {
-    assertAuthorized(accessToken)
-    await delay()
-    const store = readStore()
-    const list = Array.isArray(store[tenantId]) ? store[tenantId] : []
-    // Newest first.
-    const sorted = [...list].sort(
-      (a, b) => Date.parse(b.createdAtUtc) - Date.parse(a.createdAtUtc),
-    )
-    return { invitations: sorted.map(cloneInvitation) }
+    const response = await request(invitationsPath(tenantId), {
+      method: 'GET',
+      headers: authHeaders(accessToken),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new InvitationForbiddenError()
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseInvitationList(await readJson(response))
   },
 
-  async createInvitation(accessToken, tenantId, request, actor) {
-    assertAuthorized(accessToken)
-    await delay()
-
-    const email = normalizeEmail(request.email)
-    const fieldErrors: Partial<Record<keyof CreateInvitationRequest, string>> = {}
-    if (email.length === 0 || !EMAIL_PATTERN.test(email)) {
-      fieldErrors.email = 'ایمیل معتبر وارد کنید.'
-    } else if (email.length > EMAIL_MAX) {
-      fieldErrors.email = 'ایمیل نباید بیشتر از ۲۵۴ نویسه باشد.'
-    }
-    if (!isInvitationRole(request.role)) {
-      fieldErrors.role = 'نقش را انتخاب کنید.'
-    }
-    if (Object.keys(fieldErrors).length > 0) {
-      throw new InvitationValidationError(fieldErrors)
-    }
-
-    const store = readStore()
-    const list = Array.isArray(store[tenantId]) ? store[tenantId] : []
-    const duplicate = list.some(
-      (invitation) => invitation.status === 'Pending' && invitation.email === email,
-    )
-    if (duplicate) {
-      throw new InvitationConflictError()
-    }
-
-    const createdAtUtc = new Date().toISOString()
-    const expiresAtUtc = new Date(Date.parse(createdAtUtc) + EXPIRY_DAYS * 86_400_000).toISOString()
-    const invitation: Invitation = {
-      id: mockId('inv', tenantId, email, createdAtUtc),
-      email,
-      role: request.role,
-      status: 'Pending',
-      expiresAtUtc,
-      createdAtUtc,
-    }
-    list.unshift(invitation)
-    store[tenantId] = list
-    writeStore(store)
-
-    // Mirror the real backend: record an immutable audit event for the
-    // invitation creation, scoped to this tenant, attributed to the caller.
-    await httpAuditAdapter.recordEvent(accessToken, tenantId, {
-      actor: actor.displayName,
-      actorEmail: actor.email,
-      action: 'Invitation.Created',
-      target: email,
-      details: `${email} با نقش ${ROLE_LABELS[request.role]} دعوت شد.`,
+  async createInvitation(accessToken, tenantId, body) {
+    const response = await request(invitationsPath(tenantId), {
+      method: 'POST',
+      headers: { ...authHeaders(accessToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     })
-
-    return cloneInvitation(invitation)
+    if (response.status === 400) throw new InvitationValidationError(mapServerValidation(await readJson(response)))
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new InvitationForbiddenError()
+    if (response.status === 409) throw new InvitationConflictError()
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseInvitation(await readJson(response))
   },
 }

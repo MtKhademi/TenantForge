@@ -1,172 +1,137 @@
-import { SessionExpiredError } from '@/features/auth/authTypes'
+import {
+  ApiUnavailableError,
+  SessionExpiredError,
+} from '@/features/auth/authTypes'
 import { AuditForbiddenError } from './auditTypes'
-import type { AuditEvent, AuditListResponse, AuditQuery } from './auditTypes'
+import type { AuditAction, AuditEvent, AuditListResponse, AuditQuery } from './auditTypes'
 
 /**
- * S10 audit log — mock data source (F015).
+ * S10 audit log — real API data source (F016).
  *
- * F015 freezes the B010 contract while using an in-tab sessionStorage-backed
- * mock. The adapter keeps immutable events per tenant, seeds a previous
- * role/permission change (so the demo shows more than just the invitation) and
- * simulates server-side behavior: a real token is required, `?auditViewer=member`
- * receives a non-leaking 403, results are bounded newest-first, and the
- * `action` / `fromUtc` filters work exactly as the HTTP query will. F016
- * replaces this adapter with HTTP calls without changing page code or
- * request/response shapes.
- *
- * Immutability is modeled here by design: there is no update or remove path in
- * this store — events are only ever seeded or appended.
+ * F015's sessionStorage mock is gone. This adapter calls the B010 tenant
+ * audit endpoint with the current bearer token and validates response bodies
+ * strictly so the page never renders half-parsed event data. Every audit
+ * event is now recorded server-side around the sensitive commands that
+ * created it (invitation creation, role changes) — there is no client-side
+ * `recordEvent` path; the mock's seeding and append behavior are gone.
  */
 export type AuditAdapter = {
   listAuditEvents(accessToken: string, tenantId: string, query?: AuditQuery): Promise<AuditListResponse>
-  /**
-   * Appends one immutable event to the tenant's store. Exposed so the
-   * invitation mock can record `Invitation.Created` the same way the real
-   * backend would record it server-side around the create command.
-   */
-  recordEvent(accessToken: string, tenantId: string, event: Omit<AuditEvent, 'id' | 'createdAtUtc'> & { createdAtUtc?: string }): Promise<AuditEvent>
 }
 
-const STORAGE_KEY = 'tenantforge.audit.v1'
-const MOCK_LATENCY_MS = 450
-/** Bounded result window, mirroring the server-side pagination B010 enforces. */
-const MAX_EVENTS = 50
-/** Fixed seed timestamp so the demo is deterministic (matches F013's convention). */
-const SEED_TIMESTAMP = '2030-01-01T00:00:00Z'
+const REQUEST_TIMEOUT_MS = 8_000
 
-type AuditStore = Record<string, AuditEvent[]>
-
-function delay() {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, MOCK_LATENCY_MS))
-}
-
-function assertAuthorized(accessToken: string) {
-  if (accessToken.trim().length === 0) throw new SessionExpiredError()
-  const mode = new URLSearchParams(window.location.search).get('auditViewer')
-  if (mode === 'member' || mode === 'denied') throw new AuditForbiddenError()
-}
-
-function readStore(): AuditStore {
-  let raw: string | null
-  try {
-    raw = window.sessionStorage.getItem(STORAGE_KEY)
-  } catch {
-    return {}
+function createRequestAbortSignal() {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  return {
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timeoutId),
   }
-  if (raw === null) return {}
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return {}
-  }
-  return typeof parsed === 'object' && parsed !== null ? (parsed as AuditStore) : {}
 }
 
-function writeStore(store: AuditStore) {
+function auditPath(tenantId: string, query?: AuditQuery) {
+  const params = new URLSearchParams()
+  if (query?.action) params.set('action', query.action)
+  if (query?.fromUtc) params.set('fromUtc', query.fromUtc)
+  const suffix = params.toString()
+  return `/api/tenants/${encodeURIComponent(tenantId)}/audit${suffix ? `?${suffix}` : ''}`
+}
+
+function authHeaders(accessToken: string) {
+  return { Authorization: `Bearer ${accessToken}` }
+}
+
+async function request(path: string, init: RequestInit): Promise<Response> {
+  const abort = createRequestAbortSignal()
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(store))
+    return await fetch(path, { ...init, signal: abort.signal })
   } catch {
-    // Storage can be full or blocked; the mock degrades to in-memory-only.
+    throw new ApiUnavailableError()
+  } finally {
+    abort.clear()
   }
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json()
+  } catch {
+    throw new ApiUnavailableError()
+  }
+}
+
+const KNOWN_ACTIONS: readonly AuditAction[] = [
+  'Invitation.Created',
+  'Role.Created',
+  'Role.Updated',
+  'Role.Assigned',
+  'Role.Unassigned',
+]
+
+function isAuditAction(value: unknown): value is AuditAction {
+  return typeof value === 'string' && (KNOWN_ACTIONS as readonly string[]).includes(value)
 }
 
 /**
- * Deterministic, collision-resistant-enough id for mock rows. Not a GUID: the
- * mock does not need global uniqueness, only per-tab stability.
+ * B010 emits `createdAtUtc` as a .NET "O" UTC value. The value is UTC by
+ * contract; if it ever arrives as a bare date-time with no zone, mark the
+ * zone explicitly so `Date.parse` does not read it as local time (same guard
+ * as `tenantAdapter.ts`/`tenantMembersAdapter.ts`).
  */
-function mockId(prefix: string, ...parts: string[]) {
-  const seed = parts.join('|')
-  let hash = 0
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+function normalizeUtcTimestamp(value: string): string {
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)) {
+    return `${value}Z`
   }
-  return `${prefix}-${hash.toString(16)}`
+  return value
 }
 
-/**
- * One previous role/permission change, seeded so the audit page demonstrates
- * "the invitation and a previous role/permission change" (S10 demo step 5).
- */
-function seededEvents(): AuditEvent[] {
-  return [
-    {
-      id: 'evt-seed-role-created',
-      actor: 'Sara Rahimi',
-      actorEmail: 'sara.rahimi@acme.test',
-      action: 'Role.Created',
-      target: 'Viewer',
-      details: 'نقش سیستمی Viewer برای این مستأجر ایجاد شد.',
-      createdAtUtc: SEED_TIMESTAMP,
-    },
-    {
-      id: 'evt-seed-role-updated',
-      actor: 'Sara Rahimi',
-      actorEmail: 'sara.rahimi@acme.test',
-      action: 'Role.Updated',
-      target: 'User Manager',
-      details: 'مجوز IAM.Users.View به نقش سفارشی User Manager افزوده شد.',
-      createdAtUtc: SEED_TIMESTAMP,
-    },
-  ]
-}
-
-/** Ensure the tenant's store exists and contains its seed events (idempotent). */
-function ensureSeeded(store: AuditStore, tenantId: string): AuditEvent[] {
-  if (!Array.isArray(store[tenantId]) || store[tenantId].length === 0) {
-    store[tenantId] = seededEvents()
+function parseAuditEvent(payload: unknown): AuditEvent {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const event = payload as Record<string, unknown>
+  if (
+    typeof event.id !== 'string' ||
+    event.id.length === 0 ||
+    typeof event.actor !== 'string' ||
+    event.actor.length === 0 ||
+    typeof event.actorEmail !== 'string' ||
+    event.actorEmail.length === 0 ||
+    !isAuditAction(event.action) ||
+    typeof event.target !== 'string' ||
+    typeof event.details !== 'string' ||
+    typeof event.createdAtUtc !== 'string' ||
+    Number.isNaN(Date.parse(event.createdAtUtc))
+  ) {
+    throw new ApiUnavailableError()
   }
-  return store[tenantId]
+  return {
+    id: event.id,
+    actor: event.actor,
+    actorEmail: event.actorEmail,
+    action: event.action,
+    target: event.target,
+    details: event.details,
+    createdAtUtc: normalizeUtcTimestamp(event.createdAtUtc),
+  }
 }
 
-function cloneEvent(event: AuditEvent): AuditEvent {
-  return { ...event }
+function parseAuditList(payload: unknown): AuditListResponse {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const body = payload as Record<string, unknown>
+  if (!Array.isArray(body.events)) throw new ApiUnavailableError()
+  return { events: body.events.map(parseAuditEvent) }
 }
 
 export const httpAuditAdapter: AuditAdapter = {
   async listAuditEvents(accessToken, tenantId, query) {
-    assertAuthorized(accessToken)
-    await delay()
-    const store = readStore()
-    const events = ensureSeeded(store, tenantId)
-    writeStore(store)
-
-    let result = events
-    if (query?.action) {
-      result = result.filter((event) => event.action === query.action)
-    }
-    if (query?.fromUtc) {
-      const from = Date.parse(query.fromUtc)
-      if (!Number.isNaN(from)) {
-        result = result.filter((event) => Date.parse(event.createdAtUtc) >= from)
-      }
-    }
-
-    // Newest first, then truncated to the bounded window.
-    const sorted = [...result].sort(
-      (a, b) => Date.parse(b.createdAtUtc) - Date.parse(a.createdAtUtc),
-    )
-    return { events: sorted.slice(0, MAX_EVENTS).map(cloneEvent) }
-  },
-
-  async recordEvent(accessToken, tenantId, event) {
-    assertAuthorized(accessToken)
-    await delay()
-    const store = readStore()
-    const events = ensureSeeded(store, tenantId)
-    const createdAtUtc = event.createdAtUtc ?? new Date().toISOString()
-    const fullEvent: AuditEvent = {
-      id: mockId('evt', tenantId, event.action, event.target, createdAtUtc),
-      actor: event.actor,
-      actorEmail: event.actorEmail,
-      action: event.action,
-      target: event.target,
-      details: event.details,
-      createdAtUtc,
-    }
-    events.unshift(fullEvent)
-    store[tenantId] = events.slice(0, MAX_EVENTS)
-    writeStore(store)
-    return cloneEvent(fullEvent)
+    const response = await request(auditPath(tenantId, query), {
+      method: 'GET',
+      headers: authHeaders(accessToken),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (response.status === 403) throw new AuditForbiddenError()
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseAuditList(await readJson(response))
   },
 }
