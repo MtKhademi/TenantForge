@@ -1,6 +1,7 @@
 import {
   Building2,
   ChevronRight,
+  KeyRound,
   Loader2,
   Lock,
   RefreshCw,
@@ -8,7 +9,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { SecondaryButton } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -130,6 +131,22 @@ export function TenantScopePage() {
           <ChevronRight aria-hidden="true" className="size-4" />
           بازگشت به پلتفرم
         </button>
+
+        {tenantId && (
+          <nav className="flex flex-wrap gap-2" aria-label="ناوبری محدوده مستأجر">
+            <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground">
+              <Users aria-hidden="true" className="size-4" />
+              اعضا
+            </span>
+            <Link
+              to={`/t/${encodeURIComponent(tenantId)}/roles`}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <KeyRound aria-hidden="true" className="size-4" />
+              نقش‌ها
+            </Link>
+          </nav>
+        )}
 
         {state.kind === 'loading' && !invalidSelection && <MembersSkeleton />}
 

@@ -1,4 +1,4 @@
-import { Building2, IdCard, LayoutDashboard, ShieldCheck, Shield, Users } from 'lucide-react'
+import { Building2, IdCard, KeyRound, LayoutDashboard, ShieldCheck, Shield, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -26,6 +26,7 @@ type ShellNavItem = {
 const navItems: ShellNavItem[] = [
   { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard' },
   { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'] },
+  { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '#roles', placeholder: true, activePrefixes: ['/t/'] },
   { id: 'users', label: 'کاربران', icon: Users, href: '/users' },
   { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true },
   { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true },
@@ -59,21 +60,25 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
 
       <ul className="space-y-1">
         {navItems.map((item) => {
+          const tenantId = location.pathname.startsWith('/t/') ? location.pathname.split('/')[2] : ''
+          const rolesAvailable = item.id === 'roles' && tenantId.length > 0
+          const href = rolesAvailable ? `/t/${tenantId}/roles` : item.href
+          const placeholder = item.placeholder && !rolesAvailable
           const active =
-            !item.placeholder &&
+            !placeholder &&
             (item.activePrefixes
               ? item.activePrefixes.some((prefix) => location.pathname.startsWith(prefix))
-              : location.pathname === item.href)
+              : location.pathname === href)
           const Icon = item.icon
           const link = (
             <a
               key={item.id}
-              href={item.href}
+              href={href}
               aria-label={collapsed ? item.label : undefined}
               aria-describedby={collapsed ? `${item.id}-tooltip` : undefined}
               aria-current={active ? 'page' : undefined}
               onClick={(event) => {
-                if (item.placeholder) {
+                if (placeholder) {
                   // Keep the named item discoverable without jumping to an
                   // anchor that does not exist in this slice.
                   event.preventDefault()
@@ -84,7 +89,7 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
                 active
                   ? 'bg-muted text-foreground'
                   : 'text-sidebar-foreground/80 hover:text-foreground',
-                item.placeholder && 'cursor-default opacity-60',
+                placeholder && 'cursor-default opacity-60',
                 collapsed ? 'justify-center px-0' : 'px-3',
               )}
             >
