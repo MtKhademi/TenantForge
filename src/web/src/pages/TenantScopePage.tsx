@@ -4,7 +4,9 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  MailPlus,
   RefreshCw,
+  ScrollText,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -144,6 +146,20 @@ export function TenantScopePage() {
             >
               <KeyRound aria-hidden="true" className="size-4" />
               نقش‌ها
+            </Link>
+            <Link
+              to={`/t/${encodeURIComponent(tenantId)}/invitations`}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <MailPlus aria-hidden="true" className="size-4" />
+              دعوت‌ها
+            </Link>
+            <Link
+              to={`/t/${encodeURIComponent(tenantId)}/audit`}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <ScrollText aria-hidden="true" className="size-4" />
+              گزارش فعالیت
             </Link>
           </nav>
         )}

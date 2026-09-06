@@ -3,7 +3,9 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { SessionLoadingScreen } from './components/shell/SessionLoadingScreen'
 import { useAuth } from './features/auth/AuthContext'
 import { TenantScopeProvider } from './features/tenants/TenantScopeContext'
+import { AuditLogPage } from './pages/AuditLogPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { InvitationsPage } from './pages/InvitationsPage'
 import { LoginPage } from './pages/LoginPage'
 import { RolesPage } from './pages/RolesPage'
 import { TenantScopePage } from './pages/TenantScopePage'
@@ -59,6 +61,8 @@ export default function App() {
         <Route path="/platform/tenants" element={<TenantsPage />} />
         <Route path="/t/:tenantId" element={<TenantScopePage />} />
         <Route path="/t/:tenantId/roles" element={<RolesPage />} />
+        <Route path="/t/:tenantId/invitations" element={<InvitationsPage />} />
+        <Route path="/t/:tenantId/audit" element={<AuditLogPage />} />
       </Route>
       <Route path="*" element={<RedirectHome />} />
     </Routes>
