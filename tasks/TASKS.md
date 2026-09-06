@@ -61,7 +61,7 @@ one valid Spec link.
 | B006 | S06 | User management API | done | B005, F008 | — |
 | B007 | S07 | Tenant membership API | done | B006, F010 | — |
 | B008 | S08 | Tenant isolation | done | B007, F011 | — |
-| B009 | S09 | Role permission API | planned | B008, F013 | [Spec](backend/B009-role-permission-api.md) |
+| B009 | S09 | Role permission API | done | B008, F013 | — |
 | B010 | S10 | Invitations and audit API | planned | B009, F015 | [Spec](backend/B010-invitations-audit-api.md) |
 | B011 | S02 | Current account for all authenticated users | done | B008 | — |
 
