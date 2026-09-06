@@ -28,8 +28,7 @@ internal static class CurrentAccountFeature
 
             if (string.IsNullOrWhiteSpace(id)
                 || string.IsNullOrWhiteSpace(email)
-                || string.IsNullOrWhiteSpace(displayName)
-                || !isPlatformAdmin)
+                || string.IsNullOrWhiteSpace(displayName))
             {
                 return Results.Unauthorized();
             }

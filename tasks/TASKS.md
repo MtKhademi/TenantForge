@@ -63,7 +63,7 @@ one valid Spec link.
 | B008 | S08 | Tenant isolation | done | B007, F011 | — |
 | B009 | S09 | Role permission API | planned | B008, F013 | [Spec](backend/B009-role-permission-api.md) |
 | B010 | S10 | Invitations and audit API | planned | B009, F015 | [Spec](backend/B010-invitations-audit-api.md) |
-| B011 | S02 | Current account for all authenticated users | planned | B008 | [Spec](backend/B011-current-account-all-users.md) |
+| B011 | S02 | Current account for all authenticated users | done | B008 | — |
 
 ## Useful parallel starts
 
