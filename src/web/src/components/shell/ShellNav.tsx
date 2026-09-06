@@ -1,4 +1,4 @@
-import { Building2, IdCard, KeyRound, LayoutDashboard, ShieldCheck, Shield, Users } from 'lucide-react'
+import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
@@ -17,11 +17,17 @@ type ShellNavItem = {
   href: string
   placeholder?: boolean
   /**
-    * Match a whole pathname prefix instead of an exact route (used by
-    * مستأجران, which is active on the platform page and inside `/t/:tenantId`).
+   * Match a whole pathname prefix instead of an exact route (used by
+   * مستأجران, which is active on the platform page and inside `/t/:tenantId`).
    */
   activePrefixes?: string[]
   requiredPermission?: PermissionKey
+  /**
+   * Tenant-scoped destination: the real href is `/t/:tenantId` + this suffix,
+   * shown only inside a tenant (otherwise the item is an inert placeholder,
+   * like the remaining named destinations).
+   */
+  tenantScopedSuffix?: string
 }
 
 /**
@@ -32,7 +38,9 @@ type ShellNavItem = {
 const navItems: ShellNavItem[] = [
   { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', requiredPermission: 'IAM.Dashboard.View' },
   { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'], requiredPermission: 'IAM.Tenants.View' },
-  { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '#roles', placeholder: true, activePrefixes: ['/t/'] },
+  { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', placeholder: true, tenantScopedSuffix: '/roles' },
+  { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', placeholder: true, tenantScopedSuffix: '/invitations' },
+  { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', placeholder: true, tenantScopedSuffix: '/audit' },
   { id: 'users', label: 'کاربران', icon: Users, href: '/users', requiredPermission: 'IAM.Users.View' },
   { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true },
   { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true },
@@ -92,19 +100,21 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
 
       <ul className="space-y-1">
         {visibleItems.map((item) => {
-          const rolesAvailable = item.id === 'roles' && tenantId.length > 0
-          const href = rolesAvailable ? `/t/${tenantId}/roles` : item.href
-          const placeholder = item.placeholder && !rolesAvailable
+          const scopedAvailable = Boolean(item.tenantScopedSuffix) && tenantId.length > 0
+          const resolvedHref = scopedAvailable && item.tenantScopedSuffix
+            ? `/t/${encodeURIComponent(tenantId)}${item.tenantScopedSuffix}`
+            : item.href
+          const placeholder = item.placeholder && !scopedAvailable
           const active =
             !placeholder &&
             (item.activePrefixes
               ? item.activePrefixes.some((prefix) => location.pathname.startsWith(prefix))
-              : location.pathname === href)
+              : location.pathname === resolvedHref)
           const Icon = item.icon
           const link = (
             <a
               key={item.id}
-              href={href}
+              href={resolvedHref}
               aria-label={collapsed ? item.label : undefined}
               aria-describedby={collapsed ? `${item.id}-tooltip` : undefined}
               aria-current={active ? 'page' : undefined}
