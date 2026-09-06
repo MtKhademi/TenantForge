@@ -1,7 +1,12 @@
 import { Building2, IdCard, KeyRound, LayoutDashboard, ShieldCheck, Shield, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { useAuth } from '@/features/auth/AuthContext'
+import { SessionExpiredError } from '@/features/auth/authTypes'
+import { httpRoleAdapter } from '@/features/roles/roleAdapter'
+import type { PermissionKey } from '@/features/roles/roleTypes'
 import { cn } from '@/lib/utils'
 
 type ShellNavItem = {
@@ -16,6 +21,7 @@ type ShellNavItem = {
     * مستأجران, which is active on the platform page and inside `/t/:tenantId`).
    */
   activePrefixes?: string[]
+  requiredPermission?: PermissionKey
 }
 
 /**
@@ -24,10 +30,10 @@ type ShellNavItem = {
  * for later slices, so they keep inert anchors and dimmed tooltips.
  */
 const navItems: ShellNavItem[] = [
-  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard' },
-  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'] },
+  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', requiredPermission: 'IAM.Dashboard.View' },
+  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'], requiredPermission: 'IAM.Tenants.View' },
   { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '#roles', placeholder: true, activePrefixes: ['/t/'] },
-  { id: 'users', label: 'کاربران', icon: Users, href: '/users' },
+  { id: 'users', label: 'کاربران', icon: Users, href: '/users', requiredPermission: 'IAM.Users.View' },
   { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true },
   { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true },
 ]
@@ -53,14 +59,39 @@ type ShellNavProps = {
  */
 export function ShellNav({ collapsed = false }: ShellNavProps) {
   const location = useLocation()
+  const { session, signOut } = useAuth()
+  const tenantId = location.pathname.startsWith('/t/') ? location.pathname.split('/')[2] : ''
+  const [tenantPermissions, setTenantPermissions] = useState<{ tenantId: string; permissions: PermissionKey[] } | null>(null)
+
+  useEffect(() => {
+    if (!tenantId) return
+    let cancelled = false
+    httpRoleAdapter
+      .getCurrentTenantPermissions(session?.accessToken ?? '', tenantId)
+      .then((response) => {
+        if (!cancelled) setTenantPermissions({ tenantId, permissions: response.permissions })
+      })
+      .catch((error) => {
+        if (error instanceof SessionExpiredError) void signOut()
+        if (!cancelled) setTenantPermissions(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [session?.accessToken, signOut, tenantId])
+
+  const visibleItems = useMemo(() => {
+    if (!tenantId || tenantPermissions?.tenantId !== tenantId) return navItems
+    const allowed = new Set(tenantPermissions.permissions)
+    return navItems.filter((item) => !item.requiredPermission || allowed.has(item.requiredPermission))
+  }, [tenantId, tenantPermissions])
 
   return (
     <nav className="flex h-full flex-col gap-6 p-4" aria-label="ناوبری اصلی">
       <BrandRow collapsed={collapsed} />
 
       <ul className="space-y-1">
-        {navItems.map((item) => {
-          const tenantId = location.pathname.startsWith('/t/') ? location.pathname.split('/')[2] : ''
+        {visibleItems.map((item) => {
           const rolesAvailable = item.id === 'roles' && tenantId.length > 0
           const href = rolesAvailable ? `/t/${tenantId}/roles` : item.href
           const placeholder = item.placeholder && !rolesAvailable
