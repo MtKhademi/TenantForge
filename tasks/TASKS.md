@@ -52,6 +52,7 @@ one valid Spec link.
 | F019 | S12 | Render permissions from the server catalog | planned | F018, B013 | [Spec](front/F019-server-permission-matrix.md) |
 | F020 | S13 | Handle custom invitation roles and honest pending states | planned | F019, B014 | [Spec](front/F020-custom-role-invitations.md) |
 | F021 | S14 | Polish Persian product copy and current documentation | planned | F020 | [Spec](front/F021-product-copy-and-docs.md) |
+| F022 | S15 | Connect server pagination to tables and selectors | planned | F021, B015 | [Spec](front/F022-server-pagination.md) |
 
 ## Backend queue
 
@@ -71,6 +72,7 @@ one valid Spec link.
 | B012 | S11 | Close platform user access and expose my tenants | planned | B009, B011, F017 | [Spec](backend/B012-platform-access-and-my-tenants.md) |
 | B013 | S12 | Unify tenant permission semantics and protect administrators | planned | B012, F018 | [Spec](backend/B013-tenant-permission-consistency.md) |
 | B014 | S13 | Make invitation creation atomic and tenant scoped | planned | B013, F019 | [Spec](backend/B014-atomic-invitations.md) |
+| B015 | S15 | Add consistent pagination to collection APIs and query filters | planned | B014, F021 | [Spec](backend/B015-list-pagination.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -94,3 +96,12 @@ test ownership restriction; these Specs do not change agent permissions.
 
 When a dependency is pending, report its ID, current status, owning clone and
 exact command. Never bypass a dependency merely to keep an agent busy.
+
+## Pagination: S15
+
+- [S15 — Server pagination for lists and their UI consumers](slices/015-list-pagination.md)
+- Continue after the cleanup batch: F021 → B015 → F022.
+- B015 adds pagination query parameters and response metadata to the seven
+  business collection reads; F022 connects tables, role lists and selectors.
+- Both tasks remain planned. Registering these Specs does not implement them
+  or change the status, dependencies or scope of existing tasks.
