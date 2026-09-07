@@ -49,7 +49,8 @@ one valid Spec link.
 | F016 | S10 | Connect audit and invitations | done | F015, B010 | — |
 | F017 | S08 | Verify non-admin tenant isolation in browser | done | F012, B011 | — |
 | F018 | S11 | Navigate platform and tenant scopes correctly | planned | F017, B012 | [Spec](front/F018-scope-aware-shell.md) |
-| F019 | S12 | Render permissions from the server catalog | planned | F018, B013 | [Spec](front/F019-server-permission-matrix.md) |
+| F023 | S16 | Keep member navigation inside the selected tenant | planned | F018 | [Spec](front/F023-tenant-member-navigation.md) |
+| F019 | S12 | Render permissions from the server catalog | planned | F023, B013 | [Spec](front/F019-server-permission-matrix.md) |
 | F020 | S13 | Handle custom invitation roles and honest pending states | planned | F019, B014 | [Spec](front/F020-custom-role-invitations.md) |
 | F021 | S14 | Polish Persian product copy and current documentation | planned | F020 | [Spec](front/F021-product-copy-and-docs.md) |
 | F022 | S15 | Connect server pagination to tables and selectors | planned | F021, B015 | [Spec](front/F022-server-pagination.md) |
@@ -83,7 +84,8 @@ Sources preserve the decisions and demos after executable Specs are removed:
 - [S13 — Reliable existing invitations](slices/013-invitation-consistency.md)
 - [S14 — Clear Persian UI and accurate current documentation](slices/014-product-copy-and-current-docs.md)
 
-Execution order is B012 → F018 → B013 → F019 → B014 → F020 → F021.
+Execution order, including the S16 navigation fix, is
+B012 → F018 → F023 → B013 → F019 → B014 → F020 → F021.
 The dependencies deliberately require each contract change and its UI consumer
 to be delivered before the next cleanup pair begins. Do not run these tasks in
 parallel or start implementation as part of registering this batch. B012 is the
@@ -105,3 +107,13 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   business collection reads; F022 connects tables, role lists and selectors.
 - Both tasks remain planned. Registering these Specs does not implement them
   or change the status, dependencies or scope of existing tasks.
+
+## Tenant member navigation: S16
+
+- [S16 — Tenant members and honest navigation scope](slices/016-tenant-member-navigation.md)
+- F023 follows F018 and precedes F019 despite its later numeric ID. It completes
+  the tenant member destination after F018 removes the ambiguous global Users
+  link. B013 retains its backend dependencies; do not run overlapping work in
+  parallel. Read execution readiness from the ledger.
+- F019 now requires F023 as well as B013. All other existing dependencies and
+  task statuses are unchanged; pagination remains downstream of this fix.
