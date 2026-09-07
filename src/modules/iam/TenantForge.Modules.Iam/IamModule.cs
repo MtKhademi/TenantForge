@@ -71,6 +71,7 @@ public static class IamModule
     {
         endpoints.MapLoginFeature();
         endpoints.MapCurrentAccountFeature();
+        endpoints.MapTenantDiscoveryFeature();
         endpoints.MapDashboardSummaryFeature();
         endpoints.MapUsersFeature();
         endpoints.MapTenantsFeature();

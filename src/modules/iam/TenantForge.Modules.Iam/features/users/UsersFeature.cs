@@ -1,12 +1,10 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using TenantForge.Modules.Iam.Features.Roles;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Users;
@@ -18,13 +16,8 @@ internal static class UsersFeature
 
     public static IEndpointRouteBuilder MapUsersFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/platform/users", async (string? tenantId, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/platform/users", async (IamDbContext db) =>
         {
-            if (!await IsPlatformAdminOrTenantPermissionAsync(principal, db, tenantId, "IAM.Users.View"))
-            {
-                return Results.Forbid();
-            }
-
             var accounts = await db.Accounts
                 .AsNoTracking()
                 .OrderBy(account => account.CreatedAtUtc)
@@ -35,20 +28,21 @@ internal static class UsersFeature
             var users = accounts.Select(UserResponse.FromAccount).ToList();
             return Results.Ok(new UsersListResponse(users));
         })
-        .RequireAuthorization();
+        // S11: the global account directory belongs exclusively to a platform
+        // administrator. The named claim policy (registered in IAMConfig) does
+        // the authorization: unauthenticated -> 401 (challenge), authenticated
+        // but missing/incorrect isPlatformAdmin claim -> 403 (forbid). A
+        // supplied tenantId is deliberately not bound at all, so it can never
+        // grant platform authority (see docs/design/s11-platform-tenant-boundaries.md).
+        .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
 
         endpoints.MapPost("/api/platform/users", async (
             CreateUserRequest request,
-            string? tenantId,
-            ClaimsPrincipal principal,
             [FromServices] IamDbContext db,
             [FromServices] IPasswordHasher<global::TenantForge.Modules.Iam.Domain.Account> passwordHasher) =>
         {
-            if (!await IsPlatformAdminOrTenantPermissionAsync(principal, db, tenantId, "IAM.Users.Create"))
-            {
-                return Results.Forbid();
-            }
-
+            // S11: platform account creation is admin-only; tenantId never grants
+            // it. See the GET mapping above for the policy's 401/403 semantics.
             var validationErrors = Validate(request);
             if (validationErrors.Count > 0)
             {
@@ -82,27 +76,9 @@ internal static class UsersFeature
             var response = UserResponse.FromAccount(account);
             return Results.Created($"/api/platform/users/{account.Id}", response);
         })
-        .RequireAuthorization();
+        .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
 
         return endpoints;
-    }
-
-    private static async Task<bool> IsPlatformAdminOrTenantPermissionAsync(ClaimsPrincipal principal, IamDbContext db, string? tenantId, string permissionKey)
-    {
-        if (string.Equals(principal.FindFirstValue("isPlatformAdmin"), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (!Guid.TryParse(principal.FindFirstValue("sub"), out var accountId)
-            || accountId == Guid.Empty
-            || !Guid.TryParse(tenantId, out var tenantGuid)
-            || tenantGuid == Guid.Empty)
-        {
-            return false;
-        }
-
-        return await RolesFeature.HasPermissionAsync(db, tenantGuid, accountId, permissionKey);
     }
 
     private static Dictionary<string, string[]> Validate(CreateUserRequest request)

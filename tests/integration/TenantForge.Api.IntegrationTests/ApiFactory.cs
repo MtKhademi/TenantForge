@@ -27,7 +27,7 @@ public enum IamSeedMode
     NoSigningKey
 }
 
-public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFixture db)
+public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFixtureBase db)
     : WebApplicationFactory<Program>, IDisposable
 {
     public const string Email = "admin@tenantforge.local";
