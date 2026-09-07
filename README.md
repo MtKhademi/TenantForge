@@ -59,6 +59,73 @@ Run the project
 
 Versions are introduced and locked by the task that first needs them. The bootstrap repository intentionally contains no application code yet.
 
+## Running the project
+
+### Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Node.js](https://nodejs.org/) 20+ and npm
+- [Docker](https://www.docker.com/) (for local PostgreSQL via Docker Compose)
+
+### 1. Start PostgreSQL
+
+```bash
+docker compose up -d
+```
+
+### 2. Run the backend API
+
+```bash
+dotnet run --project src/api/TenantForge.Api
+```
+
+The API applies pending EF Core migrations and seeds the development platform
+administrator automatically on startup, then listens on `http://localhost:5000`.
+
+### 3. Run the frontend
+
+In a second terminal:
+
+```bash
+cd src/web
+npm install
+npm run dev
+```
+
+The frontend listens on `http://localhost:5173` and proxies `/api` requests to
+the backend, so no CORS setup is needed in development.
+
+### 4. Open the app
+
+Open `http://localhost:5173/login` and sign in with the seeded development
+administrator:
+
+```text
+Email: admin@tenantforge.local
+Password: local-development-password
+```
+
+### Running tests
+
+```bash
+# Backend
+dotnet test
+
+# Frontend unit tests
+cd src/web && npm run test
+
+# Frontend end-to-end tests
+cd src/web && npm run test:e2e
+```
+
+### Stopping
+
+```bash
+docker compose down
+```
+
+Add `-v` to also remove the PostgreSQL data volume for a clean database on next start.
+
 ## Delivery principles
 
 1. **Visible first** — every slice changes something a person can see or exercise in the browser.
