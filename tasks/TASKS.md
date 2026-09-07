@@ -54,6 +54,7 @@ one valid Spec link.
 | F020 | S13 | Handle custom invitation roles and honest pending states | planned | F019, B014 | [Spec](front/F020-custom-role-invitations.md) |
 | F021 | S14 | Polish Persian product copy and current documentation | planned | F020 | [Spec](front/F021-product-copy-and-docs.md) |
 | F022 | S15 | Connect server pagination to tables and selectors | planned | F021, B015 | [Spec](front/F022-server-pagination.md) |
+| F024 | S17 | Write a practical Persian user-guide README | planned | F022 | [Spec](front/F024-persian-user-guide.md) |
 
 ## Backend queue
 
@@ -117,3 +118,12 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   parallel. Read execution readiness from the ledger.
 - F019 now requires F023 as well as B013. All other existing dependencies and
   task statuses are unchanged; pagination remains downstream of this fix.
+
+## Practical user guide: S17
+
+- [S17 — Learn to use TenantForge through one working example](slices/017-persian-user-guide.md)
+- F024 follows F022 so the guide documents the delivered navigation, Persian
+  labels, permission behavior and pagination. F023 and F021 are transitive
+  prerequisites; existing task dependencies and statuses remain unchanged.
+- The deliverable is docs/user-guide/README.md in Persian, linked prominently
+  from the root README. This row registers the writing task, not a completed guide.
