@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
@@ -14,6 +16,32 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private HttpClient CreateClient() => _factory.CreateClient();
+
+    private async Task<TenantPair> CreateTenantWithOwnerAndMemberAsync()
+    {
+        await using var context = db.CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var owner = Account.CreateUser($"owner-{Guid.NewGuid():N}@tenantforge.local", "Tenant Owner", "hash", now);
+        var member = Account.CreateUser($"member-{Guid.NewGuid():N}@tenantforge.local", "Tenant Member", "hash", now);
+        var tenant = Tenant.Create($"S11 Tenant {Guid.NewGuid():N}"[..18], $"s11-{Guid.NewGuid():N}"[..18], now);
+        context.Accounts.AddRange(owner, member);
+        context.Tenants.Add(tenant);
+        context.TenantMemberships.Add(TenantMembership.CreateOwner(tenant.Id, owner.Id, now));
+        context.TenantMemberships.Add(TenantMembership.CreateMember(tenant.Id, member.Id, now));
+        await context.SaveChangesAsync();
+        return new TenantPair(tenant.Id, owner.Id, member.Id);
+    }
+
+    private static void Authorize(HttpClient client, Guid accountId)
+    {
+        var token = TestJwtFactory.Issue(
+            signingKey: ApiFactory.SigningKey,
+            isPlatformAdmin: false,
+            subject: accountId.ToString(),
+            email: $"{accountId:N}@tenantforge.local",
+            displayName: "Tenant Account");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }
 
     private static async Task<string> LoginAsync(HttpClient client)
     {
@@ -185,4 +213,91 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
             password = "valid-password"
         })).StatusCode);
     }
+
+    /// <summary>
+    /// S11: tenantId must never grant platform authority. Both an ordinary
+    /// Member and an Owner receive 403 on list and create — with no tenantId,
+    /// their own tenantId and a foreign tenantId — and the denied create
+    /// persists no account while the denied read leaks no identity fields.
+    /// </summary>
+    [Fact]
+    public async Task TenantMemberAndOwner_AreDeniedPlatformUsers_WithOwnOrForeignTenantId()
+    {
+        var tenant = await CreateTenantWithOwnerAndMemberAsync();
+        var foreignTenant = await CreateTenantWithOwnerAndMemberAsync();
+        var deniedEmails = new List<string>();
+
+        foreach (var (accountId, role) in new[]
+        {
+            (tenant.MemberAccountId, "Member"),
+            (tenant.OwnerAccountId, "Owner")
+        })
+        {
+            using var client = CreateClient();
+            Authorize(client, accountId);
+
+            var email = $"{role.ToLowerInvariant()}-denied-{Guid.NewGuid():N}@tenantforge.local";
+            deniedEmails.Add(Account.NormalizeEmail(email));
+
+            // No tenantId.
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/platform/users")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/platform/users", new
+            {
+                email,
+                displayName = "Denied",
+                password = "valid-password"
+            })).StatusCode);
+
+            // Own tenantId.
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await client.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={tenant.TenantId}", new
+                {
+                    email,
+                    displayName = "Denied",
+                    password = "valid-password"
+                })).StatusCode);
+
+            // Foreign tenantId.
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await client.GetAsync($"/api/platform/users?tenantId={foreignTenant.TenantId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={foreignTenant.TenantId}", new
+                {
+                    email,
+                    displayName = "Denied",
+                    password = "valid-password"
+                })).StatusCode);
+        }
+
+        // Denied creation persisted no account (exact normalized emails, so the
+        // predicate stays translatable to SQL).
+        await using var verifyCtx = db.CreateContext();
+        Assert.False(await verifyCtx.Accounts.AnyAsync(a => deniedEmails.Contains(a.NormalizedEmail)));
+    }
+
+    /// <summary>
+    /// S11: a 403 denied read must expose no identity fields (no user array,
+    /// no account id, email or display name).
+    /// </summary>
+    [Fact]
+    public async Task DeniedRead_Returns403_WithNoIdentityFields()
+    {
+        var tenant = await CreateTenantWithOwnerAndMemberAsync();
+        using var client = CreateClient();
+        Authorize(client, tenant.MemberAccountId);
+
+        var response = await client.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        // Results.Forbid() yields an empty body by default; assert the shape
+        // does not leak anything either way.
+        Assert.DoesNotContain("users", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("email", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("displayName", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed record TenantPair(Guid TenantId, Guid OwnerAccountId, Guid MemberAccountId);
 }

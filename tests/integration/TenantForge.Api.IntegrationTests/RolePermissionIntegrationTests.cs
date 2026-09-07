@@ -166,12 +166,21 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
         })).StatusCode);
     }
 
+    /// <summary>
+    /// S11 supersession of the S09 example: a legacy tenant custom role holding
+    /// IAM.Users.View / IAM.Users.Create no longer grants access to the global
+    /// platform users endpoints. The role and its permission resolution still
+    /// work (verified below), but /api/platform/users is admin-only regardless
+    /// of tenant permissions.
+    /// </summary>
     [Fact]
-    public async Task GrantedPermission_AllowsUsersApi_AndUngrantedDirectCallReturns403()
+    public async Task LegacyUserPermissionRole_CanNoLongerAccessPlatformUsers()
     {
         var tenant = await CreateTenantWithOwnerAndMemberAsync();
         using var ownerClient = CreateClient();
         Authorize(ownerClient, tenant.OwnerAccountId);
+
+        // Create the legacy role exactly as S09 demonstrated.
         var create = await ownerClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
         {
             name = "User Creator",
@@ -179,20 +188,59 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
         });
         using var document = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
         var roleId = document.RootElement.GetProperty("id").GetGuid();
-        Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{tenant.TenantId}/members/{tenant.MemberMembershipId}/roles/{roleId}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync(
+            $"/api/tenants/{tenant.TenantId}/members/{tenant.MemberMembershipId}/roles/{roleId}", null)).StatusCode);
 
+        // The member's resolved permissions still include both keys — the role
+        // system is intact.
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await memberClient.PostAsJsonAsync($"/api/platform/users?tenantId={tenant.TenantId}", new
-        {
-            email = $"created-{Guid.NewGuid():N}@tenantforge.local",
-            displayName = "Created By Permission",
-            password = "permission-password"
-        })).StatusCode);
+        var resolved = await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/me/permissions");
+        Assert.Equal(HttpStatusCode.OK, resolved.StatusCode);
+        using var permDoc = JsonDocument.Parse(await resolved.Content.ReadAsStringAsync());
+        var permissions = permDoc.RootElement.GetProperty("permissions")
+            .EnumerateArray().Select(p => p.GetString()).ToList();
+        Assert.Contains("IAM.Users.View", permissions);
+        Assert.Contains("IAM.Users.Create", permissions);
 
+        // But the platform users endpoints deny them, even with their own
+        // tenantId supplied.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await memberClient.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await memberClient.GetAsync("/api/platform/users")).StatusCode);
+
+        var deniedEmailA = $"denied-{Guid.NewGuid():N}@tenantforge.local";
+        var deniedEmailB = $"denied2-{Guid.NewGuid():N}@tenantforge.local";
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await memberClient.PostAsJsonAsync($"/api/platform/users?tenantId={tenant.TenantId}", new
+            {
+                email = deniedEmailA,
+                displayName = "Denied By S11",
+                password = "permission-password"
+            })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await memberClient.PostAsJsonAsync("/api/platform/users", new
+            {
+                email = deniedEmailB,
+                displayName = "Denied By S11",
+                password = "permission-password"
+            })).StatusCode);
+
+        // A foreign tenantId also yields 403 (not a different error).
         var otherTenant = await CreateTenantWithOwnerAndMemberAsync();
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/platform/users?tenantId={otherTenant.TenantId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await memberClient.GetAsync($"/api/platform/users?tenantId={otherTenant.TenantId}")).StatusCode);
+
+        // Denied creation persisted no account.
+        await using var verifyCtx = db.CreateContext();
+        var deniedEmails = new[]
+        {
+            Account.NormalizeEmail(deniedEmailA),
+            Account.NormalizeEmail(deniedEmailB)
+        };
+        Assert.False(await verifyCtx.Accounts.AnyAsync(a => deniedEmails.Contains(a.NormalizedEmail)));
     }
 
     [Fact]
