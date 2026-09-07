@@ -10,7 +10,10 @@ answer those questions.
 ## Deliverable and ownership
 
 - Create docs/user-guide/README.md: a practical Persian user guide with a short
-  table of contents, an immediate quick start and progressive reference sections.
+  table of contents and two independent audience entry points: «راهنمای ادمین
+  پلتفرم» and «راهنمای کار با یک مستأجر». Each has a quick start and complete
+  page/workflow reference; an owner/member must not need the admin walkthrough
+  to understand how to use their already-provisioned tenant.
 - Add a prominent «راهنمای استفاده از برنامه» relative link near the beginning
   of the root README.md. F024 is the sole shared-file owner of that small README
   change, after F021 has delivered its setup/copy reconciliation.
@@ -18,6 +21,7 @@ answer those questions.
   numbered steps. English identifiers, emails and URLs remain readable as code.
 - Aim for a roughly ten-minute first walkthrough. Put additional explanations
   and troubleshooting after it so a beginner can start without reading a manual.
+  This is a quick-start target, not a length limit on either audience's guide.
 - The guide describes implemented behavior at the checked-out commit, not task
   plans or intended features. Record the verified commit/date in a small note.
   Link setup instructions rather than copying commands and credentials that
@@ -41,6 +45,76 @@ answer those questions.
 Use a compact action matrix with columns for acting account, current scope,
 menu/action and expected result. Do not flatten ownership and permission-based
 access into a claim that every ordinary member has the same permissions.
+
+## Mandatory track A: platform administrator
+
+Start with the configured admin login and recognition of platform scope. Cover
+every actually delivered platform page and action, including:
+
+1. Dashboard: what each displayed metric represents, its scope, what it helps
+   the admin inspect and the meaning of any actual linked action. Do not invent
+   tenant-specific analytics for a platform-wide summary.
+2. Platform users: listing, supported filters/pagination, creating an account,
+   field explanations and validation/conflict recovery. Explain the difference
+   between an account and membership; do not promise edit/delete/reset-password
+   controls unless they actually exist.
+3. Tenants: listing/status/count meanings, creating a tenant, name/slug/Owner
+   fields, selecting an Owner from later pages and duplicate/invalid-input
+   feedback. Explain the resulting Owner membership and which account to use
+   next. Show the case where the creator is not that Owner.
+4. Tenant entry and return: how Enter/switcher changes scope, the conditions
+   under which an admin can access tenant pages, explicit return to platform
+   and the distinction between switching account and switching tenant.
+5. Admin daily reference and FAQ: find a user/tenant, understand an empty table,
+   locate an off-page Owner, handle an inaccessible tenant and expired login.
+   Document only supported actions; list missing capabilities as limitations.
+
+End with an admin completion checklist: the ordinary account exists, Aftab was
+created with the intended Owner, and the reader knows how that Owner signs in.
+
+## Mandatory track B: one tenant's owner and members
+
+Start from an existing account and membership. State how those prerequisites
+are obtained in the delivered version, with a short link to the admin handoff;
+do not tell every member to create a platform account/tenant themselves.
+
+1. Login and orientation: owner versus ordinary-member entry, single/multiple
+   memberships, no-membership state, tenant name/header, switcher, current-page
+   indicator and access to another authorized tenant. Platform navigation is
+   not a required step for a member's daily work.
+2. Members: whose records are displayed, actual fields and membership roles,
+   paging and the difference from global Users. Explain that creating a global
+   account or assigning a role does not by itself add a membership.
+3. Roles and permissions: built-in/custom roles, actual view/create/edit/assign/
+   unassign actions, permission selection and save, effect on existing members,
+   read-only cases and last-administrator restrictions. Clearly distinguish
+   membership Owner/Member from permission roles. Include one allowed action and
+   one unavailable action for an ordinary member with a stated permission set.
+4. Invitations: prerequisites, email/role fields, custom roles, pending list,
+   duplicates/expiry, who can view/create, and current email/acceptance limits.
+   Do not turn invitation registration into a fictitious completed onboarding.
+5. Activity log: who can view it, which supported operations generate events,
+   meaning of fields, action/date filters, totals, page navigation and no matches.
+6. Daily reference and FAQ: missing menu/tenant, forbidden page, unchanged access
+   after role editing, missing member, invitation not received, no audit matches,
+   and a disabled Next control. Explain a supported next action in each case.
+
+End with separate owner/member completion checklists. The owner knows how to
+configure supported access and invitations; an ordinary member knows how to
+identify their scope, use permitted pages and seek help for unavailable actions.
+
+## Required recipe and access matrix for both tracks
+
+For every delivered page, state its purpose, eligible account and permissions,
+how to reach it, field meanings, each supported action, expected result and
+common empty/error outcomes with a next action. Use actual Persian UI labels.
+
+Include one comparison matrix with columns for action, platform admin, tenant
+owner, ordinary member and required scope/permission. Derive access from the
+delivered contract and verification, including admin membership requirements;
+do not mark every tenant action universally available to a platform admin.
+Treat an account with both platform and tenant roles explicitly according to
+its current scope. Keep the recipe useful to readers without API knowledge.
 
 ## Worked journey: company Aftab
 
@@ -85,7 +159,12 @@ is changed, or instruct users to remove the last administrator.
 Follow the written quick start literally in a real browser, then follow the
 reference sections for roles, denied/empty states and pagination. Record the
 actual result of each step and correct wrong labels/order before delivery.
-The browser demo is a newcomer using the README to complete the example.
+The browser demo includes three independent sessions: platform admin following
+track A, tenant owner following track B, and an existing ordinary member
+following the member instructions in track B. Record the ordinary member's
+fixture and permissions explicitly. Check every delivered page/action against
+its guide track and at least one relevant denied/empty state per track. Neither
+track is complete merely because the mixed-account Aftab example works.
 Review Markdown rendering, internal headings and relative links for readability.
 
 No product implementation, in-app help screen, new backend endpoint, test-policy
