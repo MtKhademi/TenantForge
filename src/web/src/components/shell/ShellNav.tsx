@@ -1,12 +1,9 @@
 import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
-import { useAuth } from '@/features/auth/AuthContext'
-import { SessionExpiredError } from '@/features/auth/authTypes'
-import { httpRoleAdapter } from '@/features/roles/roleAdapter'
-import type { PermissionKey } from '@/features/roles/roleTypes'
+import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 
 type ShellNavItem = {
@@ -21,7 +18,13 @@ type ShellNavItem = {
    * مستأجران, which is active on the platform page and inside `/t/:tenantId`).
    */
   activePrefixes?: string[]
-  requiredPermission?: PermissionKey
+  /**
+   * S11 (F018): a platform-only destination (داشبورد، مستأجران، کاربران،
+   * هویت پلتفرم). Shown only to a platform administrator — gated by
+   * `isPlatformAdmin`, never by tenant permission keys. An ordinary account
+   * never sees the global Users link to the account directory.
+   */
+  platform?: boolean
   /**
    * Tenant-scoped destination: the real href is `/t/:tenantId` + this suffix,
    * shown only inside a tenant (otherwise the item is an inert placeholder,
@@ -31,19 +34,20 @@ type ShellNavItem = {
 }
 
 /**
- * The destinations the shell exposes so far. داشبورد, کاربران and مستأجران
- * are real routes (S02/S06/S07); the remaining items are named placeholders
- * for later slices, so they keep inert anchors and dimmed tooltips.
+ * The destinations the shell exposes so far. The platform items (داشبورد،
+ * مستأجران، کاربران) are admin-only; نقش‌ها، دعوت‌ها and گزارش فعالیت are
+ * tenant-scoped; هویت پلتفرم and وضعیت امنیتی are inert placeholders for
+ * later slices.
  */
 const navItems: ShellNavItem[] = [
-  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', requiredPermission: 'IAM.Dashboard.View' },
-  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'], requiredPermission: 'IAM.Tenants.View' },
+  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', platform: true },
+  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'], platform: true },
   { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', placeholder: true, tenantScopedSuffix: '/roles' },
   { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', placeholder: true, tenantScopedSuffix: '/invitations' },
   { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', placeholder: true, tenantScopedSuffix: '/audit' },
-  { id: 'users', label: 'کاربران', icon: Users, href: '/users', requiredPermission: 'IAM.Users.View' },
-  { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true },
-  { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true },
+  { id: 'users', label: 'کاربران', icon: Users, href: '/users', platform: true },
+  { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true, platform: true },
+  { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true, platform: true },
 ]
 
 type ShellNavProps = {
@@ -67,32 +71,16 @@ type ShellNavProps = {
  */
 export function ShellNav({ collapsed = false }: ShellNavProps) {
   const location = useLocation()
-  const { session, signOut } = useAuth()
+  const { isPlatformAdmin } = useTenantScope()
   const tenantId = location.pathname.startsWith('/t/') ? location.pathname.split('/')[2] : ''
-  const [tenantPermissions, setTenantPermissions] = useState<{ tenantId: string; permissions: PermissionKey[] } | null>(null)
 
-  useEffect(() => {
-    if (!tenantId) return
-    let cancelled = false
-    httpRoleAdapter
-      .getCurrentTenantPermissions(session?.accessToken ?? '', tenantId)
-      .then((response) => {
-        if (!cancelled) setTenantPermissions({ tenantId, permissions: response.permissions })
-      })
-      .catch((error) => {
-        if (error instanceof SessionExpiredError) void signOut()
-        if (!cancelled) setTenantPermissions(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [session?.accessToken, signOut, tenantId])
-
+  // S11 (F018): platform destinations are shown only to a platform
+  // administrator, gated by `isPlatformAdmin` — never by tenant permission
+  // keys. Tenant-scoped items resolve against the URL's tenant id and are
+  // inert placeholders outside a tenant.
   const visibleItems = useMemo(() => {
-    if (!tenantId || tenantPermissions?.tenantId !== tenantId) return navItems
-    const allowed = new Set(tenantPermissions.permissions)
-    return navItems.filter((item) => !item.requiredPermission || allowed.has(item.requiredPermission))
-  }, [tenantId, tenantPermissions])
+    return navItems.filter((item) => !item.platform || isPlatformAdmin)
+  }, [isPlatformAdmin])
 
   return (
     <nav className="flex h-full flex-col gap-6 p-4" aria-label="ناوبری اصلی">

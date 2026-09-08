@@ -58,6 +58,36 @@ export class TenantConflictError extends Error {
 }
 
 /**
+ * S11 tenant discovery — the fixed contract (F018, connected to B012).
+ *
+ * `GET /api/auth/me/tenants` returns the **caller's own** active-tenant
+ * memberships. These DTOs are deliberately separate from the richer platform
+ * `TenantSummary` above: they carry only the fields the switcher and the
+ * in-shell membership chooser need — no `memberCount`, no `createdAtUtc`. A
+ * platform administrator receives exactly their own memberships here, never a
+ * bypass to the full platform list.
+ */
+
+/** The caller's own membership kind for a tenant. */
+export type MembershipRole = 'Owner' | 'Member'
+
+/** One row of the caller's membership list. */
+export type MyTenant = {
+  id: string
+  name: string
+  slug: string
+  /** Always `Active` — suspended tenants are excluded, not returned. */
+  status: 'Active'
+  /** The caller's own membership kind for this tenant. */
+  membershipRole: MembershipRole
+}
+
+/** `GET /api/auth/me/tenants` — the caller's active memberships (may be `[]`). */
+export type MyTenantListResponse = {
+  tenants: MyTenant[]
+}
+
+/**
  * S08 tenant isolation — the fixed request/response contract (F012).
  *
  * `GET /api/tenants/{tenantId}/members` returns the requested tenant's context
@@ -69,8 +99,13 @@ export class TenantConflictError extends Error {
  * id — all non-leaking and indistinguishable from the client's side.
  */
 
-/** Membership role. B008 only ever issues `Owner`; later slices extend this. */
-export type TenantMemberRole = 'Owner'
+/**
+ * Membership role in a tenant's member list. The S11 discovery contract
+ * standardizes the membership kind as `Owner | Member`, so the member list
+ * uses the same union (B008 issues `Owner`; a `Member` membership is now a
+ * valid, expected value rather than an open-ended string).
+ */
+export type TenantMemberRole = MembershipRole
 
 /** The requested tenant's identity, as confirmed by the server. */
 export type TenantContext = {

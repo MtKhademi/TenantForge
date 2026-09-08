@@ -42,15 +42,16 @@ export function LoginPage() {
 
   // While a stored session is being verified on this tab, do not show the
   // sign-in form — the shell is either about to open or the redirect below
-  // will take the user there. After verification, land on the dashboard.
-  if (status === 'authenticated') return <Navigate to="/dashboard" replace />
+  // will take the user there. After verification, land on the account home
+  // (admin → dashboard, member → membership chooser), never a platform page.
+  if (status === 'authenticated') return <Navigate to="/" replace />
   if (status === 'bootstrapping') return <SessionLoadingScreen />
 
   async function onSubmit(values: LoginFormValues) {
     setCredentialError(null)
     try {
       await login(values)
-      navigate('/dashboard', { replace: true })
+      navigate('/', { replace: true })
     } catch (error) {
       if (error instanceof InvalidCredentialsError) {
         setCredentialError('ایمیل یا رمز عبور درست نیست. دوباره تلاش کنید.')
