@@ -5,14 +5,15 @@ import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 
 /**
- * S07 tenant switcher (F010) — S08: selection is by tenant id.
+ * S07 tenant switcher (F010) — S08: selection is by tenant id; S11 (F018):
+ * scope-aware.
  *
  * The trigger shows the active scope: «پلتفرم» on platform routes, or the
- * tenant name when a `/t/:tenantId` route is active. When the route is a
- * tenant the signed-in user cannot see in the platform list (e.g. a member
- * whose tenant list fetch is denied), the trigger shows a neutral «مستأجر»
- * rather than pretending the scope is the platform. The menu lists «پلتفرم»
- * plus every known tenant. Choosing an entry only navigates (selection,
+ * tenant name when a `/t/:tenantId` route is active. The menu lists the
+ * scopes the signed-in user may enter — for a **platform administrator** that
+ * is «پلتفرم» plus the full tenant list; for an **ordinary account** it is
+ * only their own active memberships (never a platform entry, since the
+ * platform list is not theirs). Choosing an entry only navigates (selection,
  * never authorization — the server decides access in S08).
  *
  * Behavior contract:
@@ -20,16 +21,16 @@ import { cn } from '@/lib/utils'
  * - the menu is a `listbox` of `option`s with `aria-selected`;
  * - Escape closes and returns focus to the trigger; clicking the backdrop
  *   closes; ArrowUp/ArrowDown move focus across the options;
- * - while the tenant list is still loading the menu shows one busy row.
+ * - while the scope list is still loading the menu shows one busy row.
  */
 export function TenantSwitcher() {
-  const { tenants, isBusy, selectTenant, selectPlatform } = useTenantScope()
+  const { scopes, isBusy, isPlatformAdmin, selectTenant, selectHome } = useTenantScope()
   const { tenantId: activeTenantId } = useParams<{ tenantId: string }>()
   const location = useLocation()
   const onTenantRoute = location.pathname.startsWith('/t/')
   const activeTenant =
     activeTenantId && onTenantRoute
-      ? (tenants?.find((tenant) => tenant.id === activeTenantId) ?? null)
+      ? (scopes?.find((tenant) => tenant.id === activeTenantId) ?? null)
       : null
 
   const [open, setOpen] = useState(false)
@@ -37,8 +38,10 @@ export function TenantSwitcher() {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
 
   const options = [
-    { key: 'platform', label: 'پلتفرم', tenantId: null as string | null, icon: ShieldCheck },
-    ...(tenants ?? []).map((tenant) => ({
+    ...(isPlatformAdmin
+      ? [{ key: 'platform', label: 'پلتفرم', tenantId: null as string | null, icon: ShieldCheck }]
+      : []),
+    ...(scopes ?? []).map((tenant) => ({
       key: tenant.id,
       label: tenant.name,
       tenantId: tenant.id as string | null,
@@ -87,7 +90,9 @@ export function TenantSwitcher() {
             ? `تغییر محدوده؛ اکنون در مستأجر ${activeTenant.name}`
             : onTenantRoute
               ? 'تغییر محدوده؛ اکنون در یک مستأجر'
-              : 'تغییر محدوده؛ اکنون در سطح پلتفرم'
+              : isPlatformAdmin
+                ? 'تغییر محدوده؛ اکنون در سطح پلتفرم'
+                : 'تغییر محدوده؛ مستأجران من'
         }
         className={cn(
           'inline-flex min-h-10 max-w-40 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium transition-colors hover:bg-muted sm:max-w-56',
@@ -106,8 +111,10 @@ export function TenantSwitcher() {
             <bdi className="font-semibold">{activeTenant.name}</bdi>
           ) : onTenantRoute ? (
             'مستأجر'
-          ) : (
+          ) : isPlatformAdmin ? (
             'پلتفرم'
+          ) : (
+            'مستأجران من'
           )}
         </span>
         <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
@@ -124,7 +131,7 @@ export function TenantSwitcher() {
           className="absolute top-full end-0 z-40 mt-2 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-raised"
         >
           <p className="border-b border-border px-3 py-2 text-xs font-semibold text-muted-foreground">
-            {isBusy && tenants === null ? 'در حال بارگذاری مستأجران…' : 'انتخاب محدوده'}
+            {isBusy && scopes === null ? 'در حال بارگذاری مستأجران…' : 'انتخاب محدوده'}
           </p>
           <ul className="max-h-72 overflow-y-auto p-1">
             {options.map((option, index) => {
@@ -145,7 +152,7 @@ export function TenantSwitcher() {
                     )}
                     onClick={() => {
                       setOpen(false)
-                      if (option.tenantId === null) selectPlatform()
+                      if (option.tenantId === null) selectHome()
                       else selectTenant(option.tenantId)
                     }}
                   >
@@ -158,15 +165,15 @@ export function TenantSwitcher() {
                 </li>
               )
             })}
-            {isBusy && tenants === null && (
+            {isBusy && scopes === null && (
               <li className="flex items-center gap-2 px-2.5 py-2 text-sm text-muted-foreground" role="presentation">
                 <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
                 فهرست مستأجران بارگذاری می‌شود…
               </li>
             )}
-            {!isBusy && tenants !== null && tenants.length === 0 && (
+            {!isBusy && scopes !== null && scopes.length === 0 && (
               <li className="px-2.5 py-2 text-xs text-muted-foreground" role="presentation">
-                هنوز مستأجری ایجاد نشده است.
+                {isPlatformAdmin ? 'هنوز مستأجری ایجاد نشده است.' : 'عضویت فعالی در مستأجری ندارید.'}
               </li>
             )}
           </ul>

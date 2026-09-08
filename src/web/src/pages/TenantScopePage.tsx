@@ -49,7 +49,7 @@ type MembersState =
 
 export function TenantScopePage() {
   const { tenantId } = useParams<{ tenantId: string }>()
-  const { tenants, selectPlatform, getTenantById } = useTenantScope()
+  const { isPlatformAdmin, scopes, getScopeById, selectHome } = useTenantScope()
   const { session, signOut } = useAuth()
 
   const [state, setState] = useState<MembersState>({ kind: 'loading' })
@@ -112,26 +112,29 @@ export function TenantScopePage() {
       })
   }, [tenantId])
 
-  const listSettled = tenants !== null
-  // "Invalid selection" only makes sense when the signed-in user can see the
-  // platform list (a platform admin). A non-member gets a 403 from the
-  // members endpoint instead — the two cases are intentionally indistinguishable.
+  // "Invalid selection" means the URL's tenant id is not in the signed-in
+  // user's own scope list (admin platform list, or the member's memberships).
+  // It is checked only once the scope list has settled: before that, a valid
+  // tenant must still be able to render its members, so we never declare an
+  // unknown id merely because the list has not loaded yet. A tenant the user
+  // does not belong to shows this denial without rendering any member data.
+  const scopeSettled = scopes !== null
   const invalidSelection =
-    listSettled &&
+    scopeSettled &&
     state.kind !== 'loading' &&
     tenantId !== undefined &&
-    getTenantById(tenantId) === null
+    getScopeById(tenantId) === null
 
   return (
     <DashboardShell>
       <section aria-label="محدوده مستأجر" className="space-y-6">
         <button
           type="button"
-          onClick={selectPlatform}
+          onClick={selectHome}
           className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <ChevronRight aria-hidden="true" className="size-4" />
-          بازگشت به پلتفرم
+          {isPlatformAdmin ? 'بازگشت به پلتفرم' : 'بازگشت به مستأجران من'}
         </button>
 
         {tenantId && (
@@ -167,11 +170,13 @@ export function TenantScopePage() {
         {state.kind === 'loading' && !invalidSelection && <MembersSkeleton />}
 
         {invalidSelection ? (
-          <InvalidSelection onRecover={selectPlatform} />
+          <InvalidSelection onRecover={selectHome} isPlatformAdmin={isPlatformAdmin} />
         ) : (
           <>
             {state.kind === 'loaded' && <MembersLoaded data={state.data} />}
-            {state.kind === 'forbidden' && <ForbiddenTenant onRecover={selectPlatform} />}
+            {state.kind === 'forbidden' && (
+              <ForbiddenTenant onRecover={selectHome} isPlatformAdmin={isPlatformAdmin} />
+            )}
             {state.kind === 'unavailable' && <Unavailable onRetry={retry} />}
           </>
         )}
@@ -264,6 +269,7 @@ function MemberRow({ member }: { member: TenantMember }) {
   )
 }
 
+/** Localized membership kind: `Owner` → مالک, `Member` → عضو. */
 function MemberRoleBadge({ role }: { role: TenantMember['role'] }) {
   const isOwner = role === 'Owner'
   return (
@@ -277,12 +283,18 @@ function MemberRoleBadge({ role }: { role: TenantMember['role'] }) {
         aria-hidden="true"
         className={cn('size-1.5 rounded-full', isOwner ? 'bg-primary' : 'bg-muted-foreground')}
       />
-      {isOwner ? 'مالک' : role}
+      {isOwner ? 'مالک' : 'عضو'}
     </span>
   )
 }
 
-function ForbiddenTenant({ onRecover }: { onRecover: () => void }) {
+function ForbiddenTenant({
+  onRecover,
+  isPlatformAdmin,
+}: {
+  onRecover: () => void
+  isPlatformAdmin: boolean
+}) {
   return (
     <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-6 shadow-soft" role="alert">
       <div className="flex items-start gap-4">
@@ -296,7 +308,7 @@ function ForbiddenTenant({ onRecover }: { onRecover: () => void }) {
             اساس عضویت شما کنترل می‌شود؛ تغییر آدرس مرورگر این محدودیت را دور نمی‌زند.
           </p>
           <SecondaryButton type="button" className="mt-4" onClick={onRecover}>
-            بازگشت به فهرست مستأجران
+            {isPlatformAdmin ? 'بازگشت به فهرست مستأجران' : 'بازگشت به مستأجران من'}
           </SecondaryButton>
         </div>
       </div>
@@ -304,7 +316,13 @@ function ForbiddenTenant({ onRecover }: { onRecover: () => void }) {
   )
 }
 
-function InvalidSelection({ onRecover }: { onRecover: () => void }) {
+function InvalidSelection({
+  onRecover,
+  isPlatformAdmin,
+}: {
+  onRecover: () => void
+  isPlatformAdmin: boolean
+}) {
   return (
     <div className="rounded-xl border border-border bg-surface p-6 shadow-soft" role="alert">
       <div className="flex items-start gap-4">
@@ -317,7 +335,7 @@ function InvalidSelection({ onRecover }: { onRecover: () => void }) {
             این محدوده در فهرست مستأجران شما موجود نیست.
           </p>
           <SecondaryButton type="button" className="mt-4" onClick={onRecover}>
-            بازگشت به پلتفرم
+            {isPlatformAdmin ? 'بازگشت به پلتفرم' : 'بازگشت به مستأجران من'}
           </SecondaryButton>
         </div>
       </div>

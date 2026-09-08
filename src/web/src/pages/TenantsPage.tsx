@@ -57,7 +57,9 @@ type CreateTenantFormValues = z.infer<typeof createTenantSchema>
 
 export function TenantsPage() {
   const { session, signOut } = useAuth()
-  const { tenants, isBusy, failure, refresh, selectTenant } = useTenantScope()
+  // S11 (F018): this page is platform-admin-only (guarded in App.tsx). It reads
+  // the rich platform tenant list — never the member's discovery list.
+  const { platformTenants: tenants, isBusy, failure, refresh, selectTenant } = useTenantScope()
 
   const [users, setUsers] = useState<PlatformUser[] | null>(null)
   const [usersBusy, setUsersBusy] = useState(true)

@@ -32,20 +32,21 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { session, isSigningOut, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { tenants } = useTenantScope()
+  const { getScopeById } = useTenantScope()
   const location = useLocation()
   const navigate = useNavigate()
 
   // The URL is the source of truth for the active tenant; resolve it here
-  // only to surface it in the header. A tenant the user cannot see in the
-  // platform list still marks the header as "in a tenant scope" without
-  // leaking a name. Selection never grants access.
+  // only to surface its name in the header. The lookup is against the
+  // signed-in user's own scope list (admin platform list or the member's
+  // memberships), so a foreign tenant id still marks the header as "in a
+  // tenant scope" without leaking a name. Selection never grants access.
   const activeTenant = (() => {
     if (!location.pathname.startsWith('/t/')) return null
     const segment = location.pathname.split('/')[2]
     if (!segment) return null
     const id = decodeURIComponent(segment)
-    return tenants?.find((tenant) => tenant.id === id) ?? null
+    return getScopeById(id) ?? null
   })()
   const inTenantScope = location.pathname.startsWith('/t/') && location.pathname.length > '/t/'.length
 
