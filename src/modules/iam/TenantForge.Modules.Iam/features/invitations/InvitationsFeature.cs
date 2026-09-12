@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Features.Roles;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Invitations;
@@ -18,7 +19,7 @@ internal static class InvitationsFeature
     {
         endpoints.MapGet("/api/tenants/{tenantId}/invitations", async (string tenantId, ClaimsPrincipal principal, IamDbContext db) =>
         {
-            var auth = await AuthorizeTenantPermissionAsync(tenantId, principal, db, "IAM.Invitations.View");
+            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.InvitationsViewPermission);
             if (auth.Result is not null) return auth.Result;
 
             var now = DateTimeOffset.UtcNow;
@@ -37,7 +38,7 @@ internal static class InvitationsFeature
 
         endpoints.MapPost("/api/tenants/{tenantId}/invitations", async (string tenantId, CreateInvitationRequest request, ClaimsPrincipal principal, IamDbContext db) =>
         {
-            var auth = await AuthorizeTenantPermissionAsync(tenantId, principal, db, "IAM.Invitations.Create");
+            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.InvitationsCreatePermission);
             if (auth.Result is not null) return auth.Result;
 
             var errors = Validate(request);
@@ -72,33 +73,6 @@ internal static class InvitationsFeature
         return endpoints;
     }
 
-    internal static async Task<TenantAuthorization> AuthorizeTenantPermissionAsync(string tenantId, ClaimsPrincipal principal, IamDbContext db, string permissionKey)
-    {
-        var tenantGuid = ParseGuid(tenantId);
-        var accountId = ParseGuid(principal.FindFirstValue("sub"));
-        if (tenantGuid is null || accountId is null) return TenantAuthorization.Forbidden;
-
-        var actor = await db.Accounts.AsNoTracking().SingleOrDefaultAsync(account => account.Id == accountId.Value);
-        if (actor is null) return TenantAuthorization.Forbidden;
-
-        var membership = await db.TenantMemberships.AsNoTracking().SingleOrDefaultAsync(member => member.TenantId == tenantGuid.Value && member.AccountId == accountId.Value);
-        if (membership is null) return TenantAuthorization.Forbidden;
-
-        if (membership.Role == TenantMembershipRole.Owner)
-        {
-            return new(tenantGuid.Value, accountId.Value, actor.DisplayName, actor.Email, null);
-        }
-
-        var hasPermission = await db.TenantMemberRoleAssignments.AsNoTracking()
-            .Where(assignment => assignment.TenantMembershipId == membership.Id)
-            .Join(db.TenantRoles.AsNoTracking(), assignment => assignment.TenantRoleId, role => role.Id, (_, role) => role.PermissionKeys)
-            .AnyAsync(keys => keys.Contains(permissionKey));
-
-        return hasPermission
-            ? new(tenantGuid.Value, accountId.Value, actor.DisplayName, actor.Email, null)
-            : TenantAuthorization.Forbidden;
-    }
-
     private static Dictionary<string, string[]> Validate(CreateInvitationRequest request)
     {
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
@@ -115,13 +89,6 @@ internal static class InvitationsFeature
 
         return errors;
     }
-
-    private static Guid? ParseGuid(string? value) => Guid.TryParse(value, out var guid) && guid != Guid.Empty ? guid : null;
-}
-
-internal sealed record TenantAuthorization(Guid TenantId, Guid AccountId, string Actor, string ActorEmail, IResult? Result)
-{
-    public static TenantAuthorization Forbidden { get; } = new(Guid.Empty, Guid.Empty, string.Empty, string.Empty, Results.Forbid());
 }
 
 internal sealed record CreateInvitationRequest(string? Email, string? Role);

@@ -84,7 +84,19 @@ public sealed class IamApiTestCollection : ICollectionFixture<IamDbFixture>
 {
 }
 
+public sealed class RolePermissionDbFixture : IamDbFixtureBase
+{
+    public RolePermissionDbFixture() : base("tenantforge_role_permission_tests")
+    {
+    }
+}
+
 [CollectionDefinition(nameof(TenantDiscoveryIsolatedCollection))]
 public sealed class TenantDiscoveryIsolatedCollection : ICollectionFixture<TenantDiscoveryDbFixture>
+{
+}
+
+[CollectionDefinition(nameof(RolePermissionIsolatedCollection))]
+public sealed class RolePermissionIsolatedCollection : ICollectionFixture<RolePermissionDbFixture>
 {
 }

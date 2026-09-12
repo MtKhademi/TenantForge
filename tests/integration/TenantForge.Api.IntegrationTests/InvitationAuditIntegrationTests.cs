@@ -140,20 +140,56 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
     }
 
     [Fact]
+    public async Task SpecificPermissions_AllowOnlyTheirTenantOperations()
+    {
+        var tenant = await CreateTenantAsync();
+        using var ownerClient = CreateClient();
+        Authorize(ownerClient, tenant.OwnerAccountId);
+
+        async Task AssignRoleAsync(string name, string permission)
+        {
+            var create = await ownerClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new { name, permissionKeys = new[] { permission } });
+            Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+            using var document = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
+            var roleId = document.RootElement.GetProperty("id").GetGuid();
+            await using var context = db.CreateContext();
+            var membershipId = await context.TenantMemberships
+                .Where(m => m.TenantId == tenant.TenantId && m.AccountId == tenant.MemberAccountId)
+                .Select(m => m.Id)
+                .SingleAsync();
+            Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{tenant.TenantId}/members/{membershipId}/roles/{roleId}", null)).StatusCode);
+        }
+
+        await AssignRoleAsync("Invitation Viewer", "IAM.Invitations.View");
+        using var memberClient = CreateClient();
+        Authorize(memberClient, tenant.MemberAccountId);
+        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/invitations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "viewer@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/audit")).StatusCode);
+
+        await AssignRoleAsync("Invitation Creator", "IAM.Invitations.Create");
+        Assert.Equal(HttpStatusCode.Created, (await memberClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "creator@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/audit")).StatusCode);
+
+        await AssignRoleAsync("Audit Reader", "IAM.Audit.View");
+        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/audit")).StatusCode);
+    }
+
+    [Fact]
     public async Task RoleChanges_CreateAuditEvents()
     {
         var tenant = await CreateTenantAsync();
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        var create = await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new { name = "Audited Role", permissionKeys = new[] { "IAM.Users.View" } });
+        var create = await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new { name = "Audited Role", permissionKeys = new[] { "IAM.Invitations.View" } });
         using var createDocument = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
         var roleId = createDocument.RootElement.GetProperty("id").GetGuid();
         var roles = await client.GetFromJsonAsync<JsonElement>($"/api/tenants/{tenant.TenantId}/roles");
         var memberId = roles.GetProperty("roles").EnumerateArray().Single(role => role.GetProperty("id").GetGuid() == roleId).GetProperty("memberIds").EnumerateArray().ToList();
         Assert.Empty(memberId);
 
-        await client.PutAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles/{roleId}", new { permissionKeys = new[] { "IAM.Users.View", "IAM.Users.Create" } });
+        await client.PutAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles/{roleId}", new { permissionKeys = new[] { "IAM.Invitations.View", "IAM.Invitations.Create" } });
         await using var context = db.CreateContext();
         var membershipId = await context.TenantMemberships.Where(m => m.TenantId == tenant.TenantId && m.AccountId == tenant.MemberAccountId).Select(m => m.Id).SingleAsync();
         await client.PutAsync($"/api/tenants/{tenant.TenantId}/members/{membershipId}/roles/{roleId}", null);

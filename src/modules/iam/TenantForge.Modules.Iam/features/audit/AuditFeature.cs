@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using TenantForge.Modules.Iam.Features.Invitations;
+using TenantForge.Modules.Iam.Features.Roles;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Audit;
@@ -23,7 +23,7 @@ internal static class AuditFeature
     {
         endpoints.MapGet("/api/tenants/{tenantId}/audit", async (string tenantId, string? action, string? fromUtc, System.Security.Claims.ClaimsPrincipal principal, IamDbContext db) =>
         {
-            var auth = await InvitationsFeature.AuthorizeTenantPermissionAsync(tenantId, principal, db, "IAM.Audit.View");
+            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.AuditViewPermission);
             if (auth.Result is not null) return auth.Result;
 
             if (!string.IsNullOrWhiteSpace(action) && !KnownActions.Contains(action))
