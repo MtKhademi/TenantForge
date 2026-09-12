@@ -1,7 +1,7 @@
-import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, Users } from 'lucide-react'
+import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, Users, UsersRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useMemo } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation, useMatch } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
@@ -14,38 +14,39 @@ type ShellNavItem = {
   href: string
   placeholder?: boolean
   /**
-   * Match a whole pathname prefix instead of an exact route (used by
-   * مستأجران, which is active on the platform page and inside `/t/:tenantId`).
-   */
-  activePrefixes?: string[]
-  /**
-   * S11 (F018): a platform-only destination (داشبورد، مستأجران، کاربران،
-   * هویت پلتفرم). Shown only to a platform administrator — gated by
-   * `isPlatformAdmin`, never by tenant permission keys. An ordinary account
-   * never sees the global Users link to the account directory.
+   * S11 (F018): a platform-only destination (داشبورد، مستأجران،
+   * کاربران پلتفرم، هویت پلتفرم). Gated by `isPlatformAdmin`, never by
+   * tenant permission keys. S16 (F023): shown only in **platform scope** —
+   * inside a tenant the nav exposes the tenant destinations only, and an
+   * admin enters platform scope explicitly through the header switcher, so
+   * the platform directory links are never visible from within a tenant.
    */
   platform?: boolean
   /**
-   * Tenant-scoped destination: the real href is `/t/:tenantId` + this suffix,
-   * shown only inside a tenant (otherwise the item is an inert placeholder,
-   * like the remaining named destinations).
+   * Tenant-scoped destination: the real href is `/t/:tenantId` + this
+   * suffix; an empty suffix is the tenant root, i.e. the member page.
+   * Outside a tenant the item is an inert placeholder, like the remaining
+   * named destinations.
    */
   tenantScopedSuffix?: string
 }
 
 /**
- * The destinations the shell exposes so far. The platform items (داشبورد،
- * مستأجران، کاربران) are admin-only; نقش‌ها، دعوت‌ها and گزارش فعالیت are
- * tenant-scoped; هویت پلتفرم and وضعیت امنیتی are inert placeholders for
- * later slices.
+ * The destinations the shell exposes so far. S16 (F023) makes the nav
+ * scope-aware: the tenant items — اعضای مستأجر، نقش‌ها، دعوت‌ها، گزارش
+ * فعالیت — keep the URL's tenant id and are the only real destinations
+ * inside a tenant; the platform items (admin-only) appear only in platform
+ * scope. هویت پلتفرم and وضعیت امنیتی remain inert placeholders for later
+ * slices.
  */
 const navItems: ShellNavItem[] = [
   { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', platform: true },
-  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', activePrefixes: ['/platform/tenants', '/t/'], platform: true },
-  { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', placeholder: true, tenantScopedSuffix: '/roles' },
-  { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', placeholder: true, tenantScopedSuffix: '/invitations' },
-  { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', placeholder: true, tenantScopedSuffix: '/audit' },
-  { id: 'users', label: 'کاربران', icon: Users, href: '/users', platform: true },
+  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', platform: true },
+  { id: 'members', label: 'اعضای مستأجر', icon: UsersRound, href: '/t/', tenantScopedSuffix: '' },
+  { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', tenantScopedSuffix: '/roles' },
+  { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations' },
+  { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit' },
+  { id: 'users', label: 'کاربران پلتفرم', icon: Users, href: '/users', platform: true },
   { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true, platform: true },
   { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true, platform: true },
 ]
@@ -61,7 +62,21 @@ type ShellNavProps = {
 
 /**
  * S02 application navigation, shared by the desktop rail and the mobile
- * drawer so both stay in sync.
+ * drawer so both stay in sync. S16 (F023) makes it scope-aware:
+ *
+ * - the URL is the only source of scope. `useMatch` on the real tenant route
+ *   yields the current tenant id; platform and tenant destination sets are
+ *   derived from it, never from stored state.
+ * - inside a tenant, the nav shows the tenant destinations (اعضای مستأجر،
+ *   نقش‌ها، دعوت‌ها، گزارش فعالیت) with the URL's tenant id preserved; an
+ *   admin sees the platform items only in platform scope, entered
+ *   explicitly through the header switcher.
+ * - active state is **exact route matching**: `/t/{id}` highlights only
+ *   members, each child highlights only its own item, and the platform
+ *   مستأجران entry is never current on `/t/...`. At most one visible item
+ *   per navigation instance carries `aria-current="page"`.
+ * - items navigate through the router (`Link`) — no document reload;
+ *   placeholders stay inert anchors.
  *
  * - Every item keeps a meaningful icon in every mode (no dot placeholders).
  * - In collapsed mode the visible text is hidden, but the accessible name is
@@ -72,15 +87,23 @@ type ShellNavProps = {
 export function ShellNav({ collapsed = false }: ShellNavProps) {
   const location = useLocation()
   const { isPlatformAdmin } = useTenantScope()
-  const tenantId = location.pathname.startsWith('/t/') ? location.pathname.split('/')[2] : ''
+  // Matched-route tenant id — `useMatch` keeps this in sync with the router,
+  // so rapid navigation, reload and Back/Forward always re-derive the scope.
+  const tenantMatch = useMatch('/t/:tenantId/*')
+  const inTenantScope = Boolean(tenantMatch)
+  const rawTenantId = tenantMatch?.params.tenantId ?? ''
+  const tenantId = inTenantScope && rawTenantId.length > 0 ? decodeURIComponent(rawTenantId) : ''
 
-  // S11 (F018): platform destinations are shown only to a platform
-  // administrator, gated by `isPlatformAdmin` — never by tenant permission
-  // keys. Tenant-scoped items resolve against the URL's tenant id and are
-  // inert placeholders outside a tenant.
+  // S11 (F018) + S16 (F023): platform destinations are shown only to a
+  // platform administrator (`isPlatformAdmin`, never tenant permission keys)
+  // and only in platform scope. Tenant-scoped items resolve against the
+  // URL's tenant id and are inert placeholders outside a tenant.
   const visibleItems = useMemo(() => {
-    return navItems.filter((item) => !item.platform || isPlatformAdmin)
-  }, [isPlatformAdmin])
+    return navItems.filter(
+      (item) =>
+        !item.platform || (isPlatformAdmin && !inTenantScope),
+    )
+  }, [isPlatformAdmin, inTenantScope])
 
   return (
     <nav className="flex h-full flex-col gap-6 p-4" aria-label="ناوبری اصلی">
@@ -88,21 +111,30 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
 
       <ul className="space-y-1">
         {visibleItems.map((item) => {
-          const scopedAvailable = Boolean(item.tenantScopedSuffix) && tenantId.length > 0
-          const resolvedHref = scopedAvailable && item.tenantScopedSuffix
+          const scopedAvailable =
+            item.tenantScopedSuffix !== undefined && inTenantScope && tenantId.length > 0
+          const resolvedHref = scopedAvailable
             ? `/t/${encodeURIComponent(tenantId)}${item.tenantScopedSuffix}`
             : item.href
-          const placeholder = item.placeholder && !scopedAvailable
-          const active =
-            !placeholder &&
-            (item.activePrefixes
-              ? item.activePrefixes.some((prefix) => location.pathname.startsWith(prefix))
-              : location.pathname === resolvedHref)
+          // S16 (F023): a tenant-scoped item (اعضای مستأجر، نقش‌ها، …) is a real,
+          // active link only while the URL's tenant id makes it available;
+          // outside a tenant it is an inert placeholder — discoverable but not
+          // navigable — exactly as the platform placeholders are (F018 parity).
+          // `item.placeholder` additionally marks the always-inert platform
+          // items (هویت پلتفرم، وضعیت امنیتی).
+          const placeholder =
+            !scopedAvailable &&
+            (Boolean(item.placeholder) || item.tenantScopedSuffix !== undefined)
+          // Exact match only: the member item matches `/t/{id}` itself, each
+          // child item its own child route, and platform items their own
+          // routes. No prefix matches, so the platform tenant-list entry
+          // never masquerades as the current page inside a tenant.
+          const active = !placeholder && location.pathname === resolvedHref
           const Icon = item.icon
           const link = (
-            <a
+            <Link
               key={item.id}
-              href={resolvedHref}
+              to={placeholder ? item.href : resolvedHref}
               aria-label={collapsed ? item.label : undefined}
               aria-describedby={collapsed ? `${item.id}-tooltip` : undefined}
               aria-current={active ? 'page' : undefined}
@@ -134,7 +166,7 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
                 className={cn('size-5 shrink-0', collapsed && 'mx-auto')}
               />
               {!collapsed && <span className="ms-3 truncate">{item.label}</span>}
-            </a>
+            </Link>
           )
 
           if (!collapsed) return <li key={item.id}>{link}</li>
