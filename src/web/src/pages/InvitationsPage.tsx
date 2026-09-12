@@ -27,6 +27,7 @@ import {
   type Invitation,
   type InvitationRole,
 } from '@/features/invitations/invitationsTypes'
+import { useTenantPermissions } from '@/features/roles/tenantPermissions'
 import { cn } from '@/lib/utils'
 
 /**
@@ -41,9 +42,14 @@ import { cn } from '@/lib/utils'
  * States:
  * - loading: initial/tenant-change request in flight (skeleton);
  * - loaded: invite form + pending list (which may be empty);
- * - forbidden: a caller without `IAM.Invitations.View`/`.Create` — B010
+ * - forbidden: a caller without `IAM.Invitations.View` — B010
  *   returns a non-leaking 403;
  * - unavailable: network/server failure — retryable.
+ *
+ * S12 (F019): the create form follows the server-resolved
+ * `IAM.Invitations.Create`. A viewer (`Invitations.View` without
+ * `Invitations.Create`) sees the pending list plus an honest «فقط مشاهده»
+ * notice — no dead form; B013 still denies a direct `POST` with 403.
  *
  * Form states: idle, field validation (email/role), submitting, success (with
  * dev-only acceptance link), and 409 duplicate conflict. Authorization is
@@ -111,6 +117,12 @@ function DevelopmentAcceptanceLink({ invitationId }: { invitationId: string }) {
 export function InvitationsPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const { session, signOut } = useAuth()
+  // S12 (F019): the list follows `IAM.Invitations.View` (already enforced by
+  // the route guard/navigation); the create form follows `IAM.Invitations.Create`.
+  // A viewer sees the pending invitations and an honest notice instead of a
+  // form the server would deny with 403 anyway.
+  const permissions = useTenantPermissions(tenantId)
+  const canCreateInvitations = permissions.canCreateInvitations
   const [state, setState] = useState<InvitationsState>({ kind: 'loading' })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [created, setCreated] = useState<Invitation | null>(null)
@@ -226,8 +238,9 @@ export function InvitationsPage() {
             <p className="text-sm font-semibold text-primary">مدیریت مستأجر</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">دعوت‌ها</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              یک نفر را با ایمیل و نقش مشخص به این مستأجر دعوت کنید؛ دعوت‌های در انتظار و تاریخ
-              انقضای آن‌ها همین‌جا دیده می‌شود.
+              {canCreateInvitations
+                ? 'یک نفر را با ایمیل و نقش مشخص به این مستأجر دعوت کنید؛ دعوت‌های در انتظار و تاریخ انقضای آن‌ها همین‌جا دیده می‌شود.'
+                : 'دعوت‌های در انتظار این مستأجر و تاریخ انقضای آن‌ها همین‌جا دیده می‌شود.'}
             </p>
           </div>
           {state.kind === 'loaded' && (
@@ -246,8 +259,13 @@ export function InvitationsPage() {
 
         {state.kind === 'loaded' && (
           <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_1fr]">
+            {permissions.isResolving ? (
+              <CreateFormSkeleton />
+            ) : !canCreateInvitations ? (
+              <CreateRestrictedNotice />
+            ) : (
             <form
-              className="space-y-5 rounded-xl border border-border bg-surface p-5 shadow-soft"
+              className="min-w-0 space-y-5 rounded-xl border border-border bg-surface p-5 shadow-soft"
               onSubmit={submitInvite}
               noValidate
               aria-label="فرم دعوت"
@@ -331,6 +349,7 @@ export function InvitationsPage() {
                 </p>
               )}
             </form>
+            )}
 
             <PendingInvitations invitations={state.invitations} created={created} />
           </div>
@@ -342,7 +361,7 @@ export function InvitationsPage() {
 
 function PendingInvitations({ invitations, created }: { invitations: Invitation[]; created: Invitation | null }) {
   return (
-    <section className="rounded-xl border border-border bg-surface p-5 shadow-soft" aria-label="دعوت‌های در انتظار">
+    <section className="min-w-0 rounded-xl border border-border bg-surface p-5 shadow-soft" aria-label="دعوت‌های در انتظار">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold">دعوت‌های در انتظار</h3>
         <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
@@ -408,6 +427,43 @@ function PendingInvitations({ invitations, created }: { invitations: Invitation[
         </div>
       )}
     </section>
+  )
+}
+
+function CreateFormSkeleton() {
+  return (
+    <div className="space-y-5 rounded-xl border border-border bg-surface p-5 shadow-soft" aria-busy="true">
+      <p className="sr-only">در حال بررسی مجوزهای شما برای ایجاد دعوت…</p>
+      <div className="h-6 w-40 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+      <div className="h-11 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+      <div className="h-11 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+      <div className="h-10 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+    </div>
+  )
+}
+
+/**
+ * S12 (F019): the caller resolves `IAM.Invitations.View` but not
+ * `IAM.Invitations.Create` — the honest counterpart of the hidden form. The
+ * server still denies a direct `POST` with 403; this notice only keeps the
+ * page consistent with the resolved permission set.
+ */
+function CreateRestrictedNotice() {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-5 shadow-soft" role="status">
+      <div className="flex items-start gap-3">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <Lock aria-hidden="true" className="size-5" />
+        </span>
+        <div className="space-y-1.5">
+          <h3 className="text-base font-semibold">فقط مشاهده</h3>
+          <p className="text-sm leading-6 text-muted-foreground">
+            حساب فعلی مجوز «ایجاد دعوت» را در این مستأجر ندارد؛ فقط دعوت‌های در انتظار قابل
+            مشاهده است. برای ایجاد دعوت، یک نقش دارای این مجوز را از صفحهٔ نقش‌ها دریافت کنید.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 

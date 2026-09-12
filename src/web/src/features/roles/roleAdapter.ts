@@ -9,6 +9,8 @@ import {
   TenantRoleInvariantError,
   TenantRoleValidationError,
   type CreateTenantRoleRequest,
+  type PermissionCatalogResponse,
+  type PermissionItem,
   type PermissionKey,
   type TenantRole,
   type TenantRoleListResponse,
@@ -16,15 +18,21 @@ import {
 } from './roleTypes'
 
 /**
- * S09 role and permission matrix — real API data source (F014).
+ * S09 role and permission matrix — real API data source (F014), extended in
+ * S12 (F019/B013).
  *
- * F013's sessionStorage mock is gone. This adapter calls the B009 tenant role
- * endpoints with the current bearer token and validates responses strictly so
- * the page never renders half-parsed role or assignment data. UI visibility is
- * still only presentation: B009 owns authorization and returns 403/409 for
- * denied role management and last-effective-Owner protection.
+ * This adapter calls the B009/B013 tenant role endpoints with the current
+ * bearer token and validates responses strictly so the page never renders
+ * half-parsed role or assignment data. S12 adds the server permission catalog
+ * (`GET /api/permissions/catalog`) as the only source of permission labels,
+ * descriptions and grouping, and resolves the caller's current-tenant
+ * permissions (`GET /api/tenants/{id}/me/permissions`) so navigation and
+ * actions follow the server's decision. UI visibility is still only
+ * presentation: B013 owns authorization and returns 403/409 for denied role
+ * management and last-effective-role-administrator protection.
  */
 export type RoleAdapter = {
+  fetchPermissionCatalog(accessToken: string): Promise<PermissionCatalogResponse>
   listRoles(accessToken: string, tenantId: string): Promise<TenantRoleListResponse>
   createRole(accessToken: string, tenantId: string, request: CreateTenantRoleRequest): Promise<TenantRole>
   updateRole(accessToken: string, tenantId: string, roleId: string, request: UpdateTenantRoleRequest): Promise<TenantRole>
@@ -59,6 +67,8 @@ function assignmentPath(tenantId: string, memberId: string, roleId: string) {
 function currentPermissionsPath(tenantId: string) {
   return `/api/tenants/${encodeURIComponent(tenantId)}/me/permissions`
 }
+
+const CATALOG_PATH = '/api/permissions/catalog'
 
 function authHeaders(accessToken: string) {
   return { Authorization: `Bearer ${accessToken}` }
@@ -132,6 +142,72 @@ function parseCurrentPermissions(payload: unknown): { permissions: PermissionKey
   return { permissions: body.permissions }
 }
 
+function parseCatalogPermission(payload: unknown): PermissionItem {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const permission = payload as Record<string, unknown>
+  if (
+    !isPermissionKey(permission.key) ||
+    typeof permission.label !== 'string' ||
+    permission.label.length === 0 ||
+    typeof permission.description !== 'string' ||
+    (permission.kind !== 'read' && permission.kind !== 'write')
+  ) {
+    throw new ApiUnavailableError()
+  }
+  return {
+    key: permission.key,
+    label: permission.label,
+    description: permission.description,
+    kind: permission.kind,
+  }
+}
+
+function parseCatalog(payload: unknown): PermissionCatalogResponse {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const body = payload as Record<string, unknown>
+  if (!Array.isArray(body.groups) || body.groups.length === 0) throw new ApiUnavailableError()
+  return {
+    groups: body.groups.map((group) => {
+      if (typeof group !== 'object' || group === null) throw new ApiUnavailableError()
+      const value = group as Record<string, unknown>
+      if (
+        typeof value.id !== 'string' ||
+        value.id.length === 0 ||
+        typeof value.label !== 'string' ||
+        value.label.length === 0 ||
+        typeof value.description !== 'string' ||
+        !Array.isArray(value.permissions) ||
+        value.permissions.length === 0
+      ) {
+        throw new ApiUnavailableError()
+      }
+      return {
+        id: value.id,
+        label: value.label,
+        description: value.description,
+        permissions: value.permissions.map(parseCatalogPermission),
+      }
+    }),
+  }
+}
+
+/**
+ * S12 (B013): a `409` on role create/update can mean either a duplicate role
+ * name (server problem `Duplicate tenant role`) or the final-state
+ * invariant — the mutation would remove the tenant's last effective role
+ * administrator (plain `Results.Conflict()`). The body is the only signal,
+ * so the UI can keep an unsaved draft on the invariant case and surface the
+ * name conflict on the field.
+ */
+async function isDuplicateRoleConflict(response: Response): Promise<boolean> {
+  try {
+    const body = (await response.json()) as Record<string, unknown>
+    return body?.title === 'Duplicate tenant role'
+  } catch {
+    return false
+  }
+}
+
 function mapServerValidation(payload: unknown): Partial<Record<keyof CreateTenantRoleRequest, string>> {
   const fallback = 'مقدار واردشده معتبر نیست.'
   if (typeof payload !== 'object' || payload === null) return { name: fallback }
@@ -156,6 +232,16 @@ async function mapRoleResponse(response: Response): Promise<never | null> {
 }
 
 export const httpRoleAdapter: RoleAdapter = {
+  async fetchPermissionCatalog(accessToken) {
+    const response = await request(CATALOG_PATH, {
+      method: 'GET',
+      headers: authHeaders(accessToken),
+    })
+    if (response.status === 401) throw new SessionExpiredError()
+    if (!response.ok) throw new ApiUnavailableError()
+    return parseCatalog(await readJson(response))
+  },
+
   async listRoles(accessToken, tenantId) {
     const response = await request(rolePath(tenantId), {
       method: 'GET',
@@ -172,7 +258,10 @@ export const httpRoleAdapter: RoleAdapter = {
       body: JSON.stringify(body),
     })
     if (response.status === 400) throw new TenantRoleValidationError(mapServerValidation(await readJson(response)))
-    if (response.status === 409) throw new TenantRoleConflictError()
+    if (response.status === 409) {
+      if (await isDuplicateRoleConflict(response)) throw new TenantRoleConflictError()
+      throw new TenantRoleInvariantError()
+    }
     await mapRoleResponse(response)
     return parseRole(await readJson(response))
   },
@@ -184,7 +273,12 @@ export const httpRoleAdapter: RoleAdapter = {
       body: JSON.stringify(body),
     })
     if (response.status === 400) throw new TenantRoleValidationError(mapServerValidation(await readJson(response)))
-    if (response.status === 409) throw new TenantRoleConflictError('مجوزهای نقش سیستمی قابل تغییر نیست.')
+    if (response.status === 409) {
+      if (await isDuplicateRoleConflict(response)) throw new TenantRoleConflictError()
+      // Built-in roles and the last-effective-administrator protection both
+      // answer with a plain conflict; the UI keeps the draft in both cases.
+      throw new TenantRoleInvariantError()
+    }
     await mapRoleResponse(response)
     return parseRole(await readJson(response))
   },

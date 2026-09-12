@@ -123,12 +123,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex min-h-16 items-center justify-between gap-3 px-4 md:px-6">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <SecondaryButton
                 type="button"
                 aria-label="باز کردن ناوبری"
                 aria-haspopup="dialog"
-                className="px-3 lg:hidden"
+                className="shrink-0 px-3 lg:hidden"
                 onClick={() => setDrawerOpen(true)}
                 ref={(node) => {
                   menuButtonRef.current = node
@@ -150,7 +150,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   <PanelRightClose aria-hidden="true" className="size-4" />
                 )}
               </SecondaryButton>
-              <div>
+              <div className="min-w-0">
                 <p className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground">
                   TenantForge
                   {(activeTenant || inTenantScope) && (
@@ -165,7 +165,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 </h1>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <TenantSwitcher />
               <button
                 type="button"
