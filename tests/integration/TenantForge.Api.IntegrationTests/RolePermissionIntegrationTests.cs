@@ -8,8 +8,8 @@ using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
 
-[Collection(nameof(IamApiTestCollection))]
-public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
+[Collection(nameof(RolePermissionIsolatedCollection))]
+public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDisposable
 {
     private readonly ApiFactory _factory = new(environment: "Development", seedMode: IamSeedMode.Complete, db);
 
@@ -45,7 +45,7 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
     }
 
     [Fact]
-    public async Task Catalog_ReturnsFrozenPermissionKeys()
+    public async Task Catalog_ReturnsS12PermissionKeysOnly()
     {
         using var client = CreateClient();
         Authorize(client, Guid.NewGuid());
@@ -62,11 +62,10 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
             .ToList();
 
         Assert.Equal([
-            "IAM.Dashboard.View",
-            "IAM.Tenants.Create",
-            "IAM.Tenants.View",
-            "IAM.Users.Create",
-            "IAM.Users.View"
+            "IAM.Audit.View",
+            "IAM.Invitations.Create",
+            "IAM.Invitations.View",
+            "IAM.Roles.Manage"
         ], keys);
     }
 
@@ -79,8 +78,8 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
 
         var create = await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
         {
-            name = "User Manager",
-            permissionKeys = new[] { "IAM.Users.View", "IAM.Users.Create" }
+            name = "Invitation Viewer",
+            permissionKeys = new[] { "IAM.Invitations.View" }
         });
 
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
@@ -97,8 +96,7 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
         Assert.Equal(HttpStatusCode.OK, resolved.StatusCode);
         using var permissionsDocument = JsonDocument.Parse(await resolved.Content.ReadAsStringAsync());
         var permissions = permissionsDocument.RootElement.GetProperty("permissions").EnumerateArray().Select(item => item.GetString()).ToList();
-        Assert.Contains("IAM.Users.View", permissions);
-        Assert.Contains("IAM.Users.Create", permissions);
+        Assert.Equal(["IAM.Invitations.View"], permissions);
 
         var reload = await client.GetAsync($"/api/tenants/{tenant.TenantId}/roles");
         Assert.Equal(HttpStatusCode.OK, reload.StatusCode);
@@ -119,13 +117,13 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
 
         Assert.Equal(HttpStatusCode.Created, (await firstClient.PostAsJsonAsync($"/api/tenants/{first.TenantId}/roles", new
         {
-            name = "User Manager",
-            permissionKeys = new[] { "IAM.Users.View" }
+            name = "Invitation Viewer",
+            permissionKeys = new[] { "IAM.Invitations.View" }
         })).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await secondClient.PostAsJsonAsync($"/api/tenants/{second.TenantId}/roles", new
         {
-            name = "User Manager",
-            permissionKeys = new[] { "IAM.Tenants.View" }
+            name = "Invitation Viewer",
+            permissionKeys = new[] { "IAM.Audit.View" }
         })).StatusCode);
     }
 
@@ -142,14 +140,29 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
             permissionKeys = new[] { "IAM.Unknown" }
         });
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        using (var doc = JsonDocument.Parse(await invalid.Content.ReadAsStringAsync()))
+        {
+            Assert.True(doc.RootElement.GetProperty("errors").TryGetProperty("permissionKeys", out _));
+        }
 
-        var request = new { name = "User Manager", permissionKeys = new[] { "IAM.Users.View" } };
+        var obsolete = await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
+        {
+            name = "Old Permission",
+            permissionKeys = new[] { "IAM.Users.View" }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, obsolete.StatusCode);
+        using (var doc = JsonDocument.Parse(await obsolete.Content.ReadAsStringAsync()))
+        {
+            Assert.True(doc.RootElement.GetProperty("errors").TryGetProperty("permissionKeys", out _));
+        }
+
+        var request = new { name = "Invitation Viewer", permissionKeys = new[] { "IAM.Invitations.View" } };
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", request)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", request)).StatusCode);
     }
 
     [Fact]
-    public async Task NonMemberAndNonOwner_AreDeniedForRoleManagement()
+    public async Task NonMemberAndNonManager_AreDeniedForRoleManagement()
     {
         var tenant = await CreateTenantWithOwnerAndMemberAsync();
         var outsider = await CreateTenantWithOwnerAndMemberAsync();
@@ -162,108 +175,175 @@ public class RolePermissionIntegrationTests(IamDbFixture db) : IDisposable
         Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
         {
             name = "Denied",
-            permissionKeys = new[] { "IAM.Users.View" }
+            permissionKeys = new[] { "IAM.Invitations.View" }
         })).StatusCode);
     }
 
-    /// <summary>
-    /// S11 supersession of the S09 example: a legacy tenant custom role holding
-    /// IAM.Users.View / IAM.Users.Create no longer grants access to the global
-    /// platform users endpoints. The role and its permission resolution still
-    /// work (verified below), but /api/platform/users is admin-only regardless
-    /// of tenant permissions.
-    /// </summary>
     [Fact]
-    public async Task LegacyUserPermissionRole_CanNoLongerAccessPlatformUsers()
+    public async Task RolesManageMember_CanManageRoles_WithoutPlatformAccess()
     {
         var tenant = await CreateTenantWithOwnerAndMemberAsync();
         using var ownerClient = CreateClient();
         Authorize(ownerClient, tenant.OwnerAccountId);
 
-        // Create the legacy role exactly as S09 demonstrated.
-        var create = await ownerClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
+        var createManager = await ownerClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
         {
-            name = "User Creator",
-            permissionKeys = new[] { "IAM.Users.View", "IAM.Users.Create" }
+            name = "Role Manager",
+            permissionKeys = new[] { "IAM.Roles.Manage" }
         });
-        using var document = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
-        var roleId = document.RootElement.GetProperty("id").GetGuid();
-        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync(
-            $"/api/tenants/{tenant.TenantId}/members/{tenant.MemberMembershipId}/roles/{roleId}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, createManager.StatusCode);
+        using var managerDoc = JsonDocument.Parse(await createManager.Content.ReadAsStringAsync());
+        var managerRoleId = managerDoc.RootElement.GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{tenant.TenantId}/members/{tenant.MemberMembershipId}/roles/{managerRoleId}", null)).StatusCode);
 
-        // The member's resolved permissions still include both keys — the role
-        // system is intact.
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        var resolved = await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/me/permissions");
-        Assert.Equal(HttpStatusCode.OK, resolved.StatusCode);
-        using var permDoc = JsonDocument.Parse(await resolved.Content.ReadAsStringAsync());
-        var permissions = permDoc.RootElement.GetProperty("permissions")
-            .EnumerateArray().Select(p => p.GetString()).ToList();
-        Assert.Contains("IAM.Users.View", permissions);
-        Assert.Contains("IAM.Users.Create", permissions);
-
-        // But the platform users endpoints deny them, even with their own
-        // tenantId supplied.
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await memberClient.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await memberClient.GetAsync("/api/platform/users")).StatusCode);
-
-        var deniedEmailA = $"denied-{Guid.NewGuid():N}@tenantforge.local";
-        var deniedEmailB = $"denied2-{Guid.NewGuid():N}@tenantforge.local";
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await memberClient.PostAsJsonAsync($"/api/platform/users?tenantId={tenant.TenantId}", new
-            {
-                email = deniedEmailA,
-                displayName = "Denied By S11",
-                password = "permission-password"
-            })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await memberClient.PostAsJsonAsync("/api/platform/users", new
-            {
-                email = deniedEmailB,
-                displayName = "Denied By S11",
-                password = "permission-password"
-            })).StatusCode);
-
-        // A foreign tenantId also yields 403 (not a different error).
-        var otherTenant = await CreateTenantWithOwnerAndMemberAsync();
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await memberClient.GetAsync($"/api/platform/users?tenantId={otherTenant.TenantId}")).StatusCode);
-
-        // Denied creation persisted no account.
-        await using var verifyCtx = db.CreateContext();
-        var deniedEmails = new[]
+        var createManaged = await memberClient.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new
         {
-            Account.NormalizeEmail(deniedEmailA),
-            Account.NormalizeEmail(deniedEmailB)
-        };
-        Assert.False(await verifyCtx.Accounts.AnyAsync(a => deniedEmails.Contains(a.NormalizedEmail)));
+            name = "Audit Reader",
+            permissionKeys = new[] { "IAM.Audit.View" }
+        });
+        Assert.Equal(HttpStatusCode.Created, createManaged.StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/invitations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/audit")).StatusCode);
     }
 
     [Fact]
-    public async Task LastEffectiveOwnerProtection_Returns409()
+    public async Task OwnerAndOrdinaryMemberResolvedPermissionsMatchServerDecisions()
+    {
+        var tenant = await CreateTenantWithOwnerAndMemberAsync();
+        using var ownerClient = CreateClient();
+        Authorize(ownerClient, tenant.OwnerAccountId);
+        using var memberClient = CreateClient();
+        Authorize(memberClient, tenant.MemberAccountId);
+
+        var ownerPermissions = await ownerClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{tenant.TenantId}/me/permissions");
+        Assert.Equal([
+            "IAM.Audit.View",
+            "IAM.Invitations.Create",
+            "IAM.Invitations.View",
+            "IAM.Roles.Manage"
+        ], ownerPermissions.GetProperty("permissions").EnumerateArray().Select(item => item.GetString()).OrderBy(item => item).ToList());
+
+        var memberPermissions = await memberClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{tenant.TenantId}/me/permissions");
+        Assert.Empty(memberPermissions.GetProperty("permissions").EnumerateArray());
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/invitations")).StatusCode);
+    }
+
+    [Fact]
+    public async Task TenantAuthorizationRejectsRemovedMembershipSuspendedTenantAndDisabledAccount()
+    {
+        var tenant = await CreateTenantWithOwnerAndMemberAsync();
+        using var memberClient = CreateClient();
+        Authorize(memberClient, tenant.MemberAccountId);
+
+        await using (var context = db.CreateContext())
+        {
+            var membership = await context.TenantMemberships.SingleAsync(m => m.Id == tenant.MemberMembershipId);
+            context.TenantMemberships.Remove(membership);
+            await context.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{tenant.TenantId}/roles")).StatusCode);
+
+        var suspended = await CreateTenantWithOwnerAndMemberAsync();
+        using var suspendedClient = CreateClient();
+        Authorize(suspendedClient, suspended.OwnerAccountId);
+        await using (var context = db.CreateContext())
+        {
+            var tenantEntity = await context.Tenants.SingleAsync(t => t.Id == suspended.TenantId);
+            SetStatus(tenantEntity, TenantStatus.Suspended);
+            await context.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await suspendedClient.GetAsync($"/api/tenants/{suspended.TenantId}/roles")).StatusCode);
+
+        var disabled = await CreateTenantWithOwnerAndMemberAsync();
+        using var disabledClient = CreateClient();
+        Authorize(disabledClient, disabled.OwnerAccountId);
+        await using (var context = db.CreateContext())
+        {
+            var account = await context.Accounts.SingleAsync(a => a.Id == disabled.OwnerAccountId);
+            SetStatus(account, AccountStatus.Disabled);
+            await context.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await disabledClient.GetAsync($"/api/tenants/{disabled.TenantId}/roles")).StatusCode);
+    }
+
+    [Fact]
+    public async Task LastAdministratorProtection_EvaluatesDistinctFinalActiveAccounts()
     {
         await using var context = db.CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var account = Account.CreateUser($"only-owner-{Guid.NewGuid():N}@tenantforge.local", "Only Owner", "hash", now);
-        var tenantEntity = Tenant.Create($"Only Owner {Guid.NewGuid():N}"[..24], $"only-{Guid.NewGuid():N}"[..18], now);
-        var membership = TenantMembership.CreateMember(tenantEntity.Id, account.Id, now);
-        var ownerRole = TenantRole.Create(tenantEntity.Id, "Delegated Owner", ["IAM.Tenants.Create"], now);
-        context.Accounts.Add(account);
+        var admin = Account.CreateUser($"admin-{Guid.NewGuid():N}@tenantforge.local", "Delegated Admin", "hash", now);
+        var member = Account.CreateUser($"member-{Guid.NewGuid():N}@tenantforge.local", "Plain Member", "hash", now);
+        var tenantEntity = Tenant.Create($"Admin {Guid.NewGuid():N}"[..18], $"admin-{Guid.NewGuid():N}"[..18], now);
+        var adminMembership = TenantMembership.CreateMember(tenantEntity.Id, admin.Id, now);
+        var memberMembership = TenantMembership.CreateMember(tenantEntity.Id, member.Id, now);
+        var adminRole = TenantRole.Create(tenantEntity.Id, "Delegated Admin", ["IAM.Roles.Manage"], now);
+        var duplicateAdminRole = TenantRole.Create(tenantEntity.Id, "Duplicate Admin", ["IAM.Roles.Manage"], now);
+        context.Accounts.AddRange(admin, member);
         context.Tenants.Add(tenantEntity);
-        context.TenantMemberships.Add(membership);
-        context.TenantRoles.Add(ownerRole);
-        context.TenantMemberRoleAssignments.Add(TenantMemberRoleAssignment.Create(membership.Id, ownerRole.Id, now));
+        context.TenantMemberships.AddRange(adminMembership, memberMembership);
+        context.TenantRoles.AddRange(adminRole, duplicateAdminRole);
+        context.TenantMemberRoleAssignments.AddRange(
+            TenantMemberRoleAssignment.Create(adminMembership.Id, adminRole.Id, now),
+            TenantMemberRoleAssignment.Create(adminMembership.Id, duplicateAdminRole.Id, now));
         await context.SaveChangesAsync();
 
-        using var ownerClient = CreateClient();
-        Authorize(ownerClient, account.Id);
+        using var adminClient = CreateClient();
+        Authorize(adminClient, admin.Id);
 
-        Assert.Equal(HttpStatusCode.Conflict, (await ownerClient.DeleteAsync($"/api/tenants/{tenantEntity.Id}/members/{membership.Id}/roles/{ownerRole.Id}")).StatusCode);
+        // Two admin role assignments on the same account still count as one
+        // distinct administrator account. Removing one duplicate assignment is
+        // safe because the same account still holds the second manager role.
+        Assert.Equal(HttpStatusCode.OK, (await adminClient.DeleteAsync($"/api/tenants/{tenantEntity.Id}/members/{adminMembership.Id}/roles/{adminRole.Id}")).StatusCode);
+
+        // Removing or weakening the remaining grant would leave zero distinct
+        // administrator accounts and must be rejected.
+        Assert.Equal(HttpStatusCode.Conflict, (await adminClient.DeleteAsync($"/api/tenants/{tenantEntity.Id}/members/{adminMembership.Id}/roles/{duplicateAdminRole.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await adminClient.PutAsJsonAsync($"/api/tenants/{tenantEntity.Id}/roles/{duplicateAdminRole.Id}", new { permissionKeys = new[] { "IAM.Audit.View" } })).StatusCode);
+
+        var secondAdminRole = TenantRole.Create(tenantEntity.Id, "Second Admin", ["IAM.Roles.Manage"], now);
+        context.TenantRoles.Add(secondAdminRole);
+        context.TenantMemberRoleAssignments.Add(TenantMemberRoleAssignment.Create(memberMembership.Id, secondAdminRole.Id, now));
+        await context.SaveChangesAsync();
+
+        Assert.Equal(HttpStatusCode.OK, (await adminClient.DeleteAsync($"/api/tenants/{tenantEntity.Id}/members/{adminMembership.Id}/roles/{duplicateAdminRole.Id}")).StatusCode);
     }
+
+    [Fact]
+    public async Task ConcurrentLastAdministratorDemotions_DoNotBothSucceed()
+    {
+        await using var context = db.CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var admin = Account.CreateUser($"concurrent-admin-{Guid.NewGuid():N}@tenantforge.local", "Concurrent Admin", "hash", now);
+        var tenantEntity = Tenant.Create($"Concurrent {Guid.NewGuid():N}"[..24], $"concurrent-{Guid.NewGuid():N}"[..22], now);
+        var membership = TenantMembership.CreateMember(tenantEntity.Id, admin.Id, now);
+        var firstRole = TenantRole.Create(tenantEntity.Id, "First Manager", ["IAM.Roles.Manage"], now);
+        var secondRole = TenantRole.Create(tenantEntity.Id, "Second Manager", ["IAM.Roles.Manage"], now);
+        context.Accounts.Add(admin);
+        context.Tenants.Add(tenantEntity);
+        context.TenantMemberships.Add(membership);
+        context.TenantRoles.AddRange(firstRole, secondRole);
+        context.TenantMemberRoleAssignments.AddRange(
+            TenantMemberRoleAssignment.Create(membership.Id, firstRole.Id, now),
+            TenantMemberRoleAssignment.Create(membership.Id, secondRole.Id, now));
+        await context.SaveChangesAsync();
+
+        using var adminClient = CreateClient();
+        Authorize(adminClient, admin.Id);
+
+        var removeA = adminClient.DeleteAsync($"/api/tenants/{tenantEntity.Id}/members/{membership.Id}/roles/{firstRole.Id}");
+        var updateB = adminClient.PutAsJsonAsync($"/api/tenants/{tenantEntity.Id}/roles/{secondRole.Id}", new { permissionKeys = new[] { "IAM.Audit.View" } });
+        var results = await Task.WhenAll(removeA, updateB);
+
+        Assert.Contains(results, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Contains(results, response => response.StatusCode == HttpStatusCode.Conflict);
+    }
+
+    private static void SetStatus<T>(T entity, Enum status) where T : notnull =>
+        typeof(T).GetProperty("Status")!.SetValue(entity, status);
 
     private sealed record TestTenant(Guid TenantId, Guid OwnerAccountId, Guid OwnerMembershipId, Guid MemberAccountId, Guid MemberMembershipId);
 }

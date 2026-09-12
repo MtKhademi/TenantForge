@@ -72,7 +72,7 @@ one valid Spec link.
 | B010 | S10 | Invitations and audit API | done | B009, F015 | — |
 | B011 | S02 | Current account for all authenticated users | done | B008 | — |
 | B012 | S11 | Close platform user access and expose my tenants | done | B009, B011, F017 | — |
-| B013 | S12 | Unify tenant permission semantics and protect administrators | planned | B012, F018 | [Spec](backend/B013-tenant-permission-consistency.md) |
+| B013 | S12 | Unify tenant permission semantics and protect administrators | done | B012, F018 | — |
 | B014 | S13 | Make invitation creation atomic and tenant scoped | planned | B013, F019 | [Spec](backend/B014-atomic-invitations.md) |
 | B015 | S15 | Add consistent pagination to collection APIs and query filters | planned | B014, F021 | [Spec](backend/B015-list-pagination.md) |
 
