@@ -18,13 +18,14 @@ import { Button, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
-import { PERMISSION_CATALOG } from '@/features/roles/permissionCatalog'
 import { httpRoleAdapter } from '@/features/roles/roleAdapter'
+import { usePermissionCatalog, useTenantPermissions } from '@/features/roles/tenantPermissions'
 import {
   TenantRoleConflictError,
   TenantRoleForbiddenError,
   TenantRoleInvariantError,
   TenantRoleValidationError,
+  type PermissionGroup,
   type PermissionKey,
   type TenantRole,
 } from '@/features/roles/roleTypes'
@@ -33,12 +34,24 @@ import type { TenantMember, TenantMembersResponse } from '@/features/tenants/ten
 import { cn } from '@/lib/utils'
 
 /**
- * S09 permission matrix mock (F013).
+ * S09 permission matrix (F013/F014), rewritten on the S12 contract (F019/B013).
  *
- * This page consumes the real B009 role endpoints: tenant Owners can create
- * custom roles, select grouped permissions and assign roles to tenant members.
- * Authorization remains server-owned; the UI renders B009's non-leaking 403
- * and 409 responses without treating hidden controls as a security boundary.
+ * The matrix renders the **server catalog** (`GET /api/permissions/catalog`)
+ * — the four tenant permissions with their Persian groups, labels and
+ * descriptions — and never a local fallback copy. The caller's capabilities
+ * come from the server-resolved current-tenant permissions
+ * (`GET /api/tenants/{id}/me/permissions`) via `useTenantPermissions`:
+ *
+ * - membership `Owner` resolves all four keys → full role management;
+ * - a member without `IAM.Roles.Manage` gets an honest **read-only** view
+ *   (roles and assignments visible, no create/edit/assign controls);
+ * - role names are editable **only during creation**: the update endpoint
+ *   accepts `permissionKeys` only, so an existing role's name is shown
+ *   disabled rather than edited and silently discarded.
+ *
+ * Authorization remains server-owned; the UI renders B013's non-leaking 403
+ * and 409 responses (last-effective-role-administrator protection) without
+ * treating hidden controls as a security boundary.
  */
 
 type RolesState =
@@ -60,12 +73,15 @@ type RoleFormValues = z.infer<typeof roleSchema>
 export function RolesPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const { session, signOut } = useAuth()
+  const { catalog: catalogState, retryCatalog } = usePermissionCatalog()
+  const permissions = useTenantPermissions(tenantId)
   const [state, setState] = useState<RolesState>({ kind: 'loading' })
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
   const [assignmentError, setAssignmentError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const requestIdRef = useRef(0)
   const sessionRef = useRef(session)
@@ -87,6 +103,8 @@ export function RolesPage() {
   })
 
   const selectedKeys = watch('permissionKeys') ?? []
+  const canManageRoles = permissions.canManageRoles
+  const catalogReady = catalogState.kind === 'loaded'
 
   useEffect(() => {
     sessionRef.current = session
@@ -101,6 +119,7 @@ export function RolesPage() {
     setState({ kind: 'loading' })
     setAssignmentError(null)
     setSuccess(null)
+    setFormError(null)
 
     Promise.all([
       httpRoleAdapter.listRoles(sessionRef.current?.accessToken ?? '', tenantId),
@@ -128,7 +147,11 @@ export function RolesPage() {
 
   useEffect(() => {
     loadRoles()
-  }, [loadRoles])
+    permissions.refresh()
+    // `permissions.refresh` is re-created with the route tenant, exactly when
+    // `loadRoles` is, so both stay in step without extra effect plumbing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadRoles, permissions.refresh])
 
   const selectedRole = useMemo(() => {
     if (state.kind !== 'loaded' || selectedRoleId === DRAFT_ROLE_ID) return null
@@ -155,6 +178,7 @@ export function RolesPage() {
     reset({ name: '', permissionKeys: [] })
     setSuccess(null)
     setAssignmentError(null)
+    setFormError(null)
     const frame = requestAnimationFrame(() => nameInputRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [reset])
@@ -180,8 +204,11 @@ export function RolesPage() {
     setIsSaving(true)
     setSuccess(null)
     setAssignmentError(null)
+    setFormError(null)
     try {
       if (selectedRole?.kind === 'custom') {
+        // The update endpoint accepts permissionKeys only; the role name is
+        // server-owned after creation and is never part of the request.
         const updated = await httpRoleAdapter.updateRole(
           sessionRef.current?.accessToken ?? '',
           tenantId,
@@ -191,12 +218,16 @@ export function RolesPage() {
         replaceRoles(state.kind === 'loaded' ? state.roles.map((role) => role.id === updated.id ? updated : role) : [updated])
         reset({ name: updated.name, permissionKeys: updated.permissionKeys })
         setSuccess(`مجوزهای نقش ${updated.name} ذخیره شد.`)
+        // Role grants changed → the caller's own resolved set may have
+        // changed (e.g. the editor holds the last Roles.Manage assignment).
+        permissions.refresh()
       } else {
         const created = await httpRoleAdapter.createRole(sessionRef.current?.accessToken ?? '', tenantId, values)
         if (state.kind === 'loaded') replaceRoles([...state.roles, created])
         setSelectedRoleId(created.id)
         reset({ name: created.name, permissionKeys: created.permissionKeys })
         setSuccess(`نقش ${created.name} ایجاد شد.`)
+        permissions.refresh()
       }
     } catch (error) {
       if (error instanceof SessionExpiredError) {
@@ -207,14 +238,18 @@ export function RolesPage() {
         for (const [field, message] of Object.entries(error.fieldErrors)) {
           setError(field as keyof RoleFormValues, { message })
         }
+      } else if (error instanceof TenantRoleInvariantError) {
+        // Last-effective-administrator protection (or a built-in role): the
+        // request is rejected as a whole — keep the draft/selection intact.
+        setFormError(error.message)
       } else if (error instanceof TenantRoleForbiddenError || error instanceof ApiUnavailableError) {
-        setError('name', { message: error.message })
+        setFormError(error.message)
       }
       nameInputRef.current?.focus()
     } finally {
       setIsSaving(false)
     }
-  }, [replaceRoles, reset, selectedRole, setError, state, tenantId])
+  }, [permissions, replaceRoles, reset, selectedRole, setError, state, tenantId])
 
   const submitRole = useCallback((event: FormEvent<HTMLFormElement>) => {
     void handleSubmit(onSubmit)(event)
@@ -225,12 +260,14 @@ export function RolesPage() {
     setIsAssigning(true)
     setAssignmentError(null)
     setSuccess(null)
+    setFormError(null)
     try {
       const response = role.memberIds.includes(memberId)
         ? await httpRoleAdapter.unassignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
         : await httpRoleAdapter.assignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
       replaceRoles(response.roles)
       setSuccess('انتساب نقش به‌روزرسانی شد.')
+      permissions.refresh()
     } catch (error) {
       if (error instanceof SessionExpiredError) {
         void signOutRef.current()
@@ -242,7 +279,7 @@ export function RolesPage() {
     } finally {
       setIsAssigning(false)
     }
-  }, [replaceRoles, tenantId])
+  }, [permissions, replaceRoles, tenantId])
 
   return (
     <DashboardShell>
@@ -257,11 +294,11 @@ export function RolesPage() {
           </div>
           {state.kind === 'loaded' && (
             <div className="flex shrink-0 items-center gap-2">
-              <SecondaryButton type="button" className="px-3" onClick={loadRoles}>
+              <SecondaryButton type="button" className="px-3" onClick={() => { loadRoles(); permissions.refresh() }}>
                 <RefreshCw aria-hidden="true" className="size-4" />
                 <span className="hidden sm:inline">به‌روزرسانی</span>
               </SecondaryButton>
-              <Button type="button" onClick={createNewDraft}>نقش جدید</Button>
+              {canManageRoles && <Button type="button" onClick={createNewDraft}>نقش جدید</Button>}
             </div>
           )}
         </div>
@@ -276,10 +313,19 @@ export function RolesPage() {
               <div className="flex items-start gap-3">
                 <ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
                 <p className="leading-6">
-                  این ماتریس برای <bdi className="font-semibold text-foreground">{state.tenant.name}</bdi> است. پنهان‌سازی ناوبری فقط تجربه کاربری است؛ B009 باید هر خواندن، نوشتن و انتساب نقش را روی سرور بررسی کند.
+                  این ماتریس برای <bdi className="font-semibold text-foreground">{state.tenant.name}</bdi> است. فهرست و برچسب مجوزها از کاتالوگ سرور خوانده می‌شود و دسترسی هر خواندن، نوشتن و انتساب نقش فقط توسط سرور (B013) بررسی می‌شود.
                 </p>
               </div>
             </div>
+
+            {!canManageRoles && (
+              <div className="flex items-start gap-3 rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground shadow-soft" role="status">
+                <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
+                <p className="leading-6">
+                  حساب فعلی مجوز «مدیریت نقش‌ها» را در این مستأجر ندارد؛ نقش‌ها و انتساب‌ها فقط برای مشاهده در دسترس است.
+                </p>
+              </div>
+            )}
 
             <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_1fr]">
               <RoleList roles={state.roles} selectedRoleId={selectedRole?.id ?? null} onSelect={setSelectedRoleId} />
@@ -293,7 +339,9 @@ export function RolesPage() {
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
                       {selectedRole?.kind === 'builtIn'
                         ? 'نقش‌های سیستمی قابل مشاهده‌اند اما مجوزهایشان در این نسخه قفل است.'
-                        : 'نام نقش در مستأجر یکتا است؛ مجوزهای انتخاب‌شده قرارداد B009 را تعیین می‌کنند.'}
+                        : selectedRole
+                          ? 'نام نقش پس از ایجاد قابل تغییر نیست؛ فقط مجوزها ویرایش می‌شوند.'
+                          : 'نام نقش در مستأجر یکتا است؛ مجوزهای انتخاب‌شده قرارداد B013 را تعیین می‌کنند.'}
                     </p>
                   </div>
                   {isDirty && selectedRole?.kind !== 'builtIn' && (
@@ -307,7 +355,8 @@ export function RolesPage() {
                     <TextInput
                       id="role-name"
                       autoComplete="off"
-                      placeholder="User Manager"
+                      placeholder={selectedRole ? undefined : 'User Manager'}
+                      disabled={Boolean(selectedRole)}
                       aria-invalid={Boolean(errors.name)}
                       aria-describedby={errors.name ? 'role-name-error' : 'role-name-hint'}
                       {...register('name')}
@@ -319,23 +368,34 @@ export function RolesPage() {
                     {errors.name ? (
                       <p className="mt-2 text-sm text-destructive" id="role-name-error">{errors.name.message}</p>
                     ) : (
-                      <p className="mt-2 text-xs text-muted-foreground" id="role-name-hint">مثلاً User Manager؛ نام در هر مستأجر مستقل است.</p>
+                      <p className="mt-2 text-xs text-muted-foreground" id="role-name-hint">
+                        {selectedRole
+                          ? 'نام نقش پس از ایجاد قابل تغییر نیست.'
+                          : 'مثلاً User Manager؛ نام در هر مستأجر مستقل است.'}
+                      </p>
                     )}
                   </div>
                 )}
 
-                <PermissionMatrix
-                  disabled={selectedRole?.kind === 'builtIn'}
-                  selectedKeys={selectedKeys}
-                  onToggle={togglePermission}
-                  onSetGroup={setGroup}
-                />
+                {catalogState.kind === 'error' ? (
+                  <CatalogUnavailable onRetry={retryCatalog} />
+                ) : catalogState.kind === 'loading' ? (
+                  <MatrixSkeleton />
+                ) : (
+                  <PermissionMatrix
+                    groups={catalogState.catalog.groups}
+                    disabled={!canManageRoles || selectedRole?.kind === 'builtIn'}
+                    selectedKeys={selectedKeys}
+                    onToggle={togglePermission}
+                    onSetGroup={setGroup}
+                  />
+                )}
                 {errors.permissionKeys && (
                   <p className="text-sm text-destructive" role="alert">{errors.permissionKeys.message}</p>
                 )}
 
                 <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-                  <Button type="submit" disabled={isSaving || selectedRole?.kind === 'builtIn'}>
+                  <Button type="submit" disabled={isSaving || !canManageRoles || !catalogReady || selectedRole?.kind === 'builtIn'}>
                     {isSaving ? (
                       <><Loader2 aria-hidden="true" className="me-2 size-4 animate-spin motion-reduce:animate-none" />در حال ذخیره</>
                     ) : selectedRole?.kind === 'custom' ? 'ذخیره مجوزها' : 'ایجاد نقش'}
@@ -345,6 +405,11 @@ export function RolesPage() {
                   )}
                   {success && <p className="flex items-center gap-2 text-sm font-medium text-success" role="status"><CircleCheck aria-hidden="true" className="size-4" />{success}</p>}
                 </div>
+                {formError && (
+                  <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+                    {formError}
+                  </p>
+                )}
               </form>
             </div>
 
@@ -352,7 +417,7 @@ export function RolesPage() {
               members={state.members}
               roles={state.roles}
               onToggle={toggleAssignment}
-              busy={isAssigning}
+              busy={isAssigning || !canManageRoles}
               error={assignmentError}
             />
           </div>
@@ -395,11 +460,17 @@ function RoleList({ roles, selectedRoleId, onSelect }: { roles: TenantRole[]; se
   )
 }
 
-function PermissionMatrix({ disabled, selectedKeys, onToggle, onSetGroup }: { disabled: boolean; selectedKeys: PermissionKey[]; onToggle: (key: PermissionKey) => void; onSetGroup: (keys: PermissionKey[], checked: boolean) => void }) {
+/**
+ * S12 (F019): the matrix groups/labels/descriptions come from the server
+ * catalog response; this component only lays them out and mirrors the
+ * checked state. The fieldset is disabled for built-in roles and for
+ * accounts without `IAM.Roles.Manage`.
+ */
+function PermissionMatrix({ groups, disabled, selectedKeys, onToggle, onSetGroup }: { groups: PermissionGroup[]; disabled: boolean; selectedKeys: PermissionKey[]; onToggle: (key: PermissionKey) => void; onSetGroup: (keys: PermissionKey[], checked: boolean) => void }) {
   return (
     <fieldset className="space-y-3" disabled={disabled}>
       <legend className="text-sm font-semibold">ماتریس مجوزها</legend>
-      {PERMISSION_CATALOG.map((group) => {
+      {groups.map((group) => {
         const keys = group.permissions.map((permission) => permission.key)
         const allChecked = keys.every((key) => selectedKeys.includes(key))
         return (
@@ -438,6 +509,44 @@ function PermissionMatrix({ disabled, selectedKeys, onToggle, onSetGroup }: { di
   )
 }
 
+/**
+ * S12 (F019): the catalog fetch failed. The matrix is the server's answer —
+ * without it there is nothing honest to render, so show a retryable error
+ * instead of a local copy. Role selection stays selectable; saving is
+ * disabled until the catalog resolves again.
+ */
+function CatalogUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4" role="alert">
+      <div className="flex items-start gap-3">
+        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
+        <div className="space-y-1.5">
+          <p className="text-sm font-semibold">فهرست مجوزها در دسترس نیست</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            بدون کاتالوگ سرور ماتریس مجوزها نمایش داده نمی‌شود؛ اتصال را بررسی کنید و دوباره تلاش کنید.
+          </p>
+          <Button type="button" className="mt-2" onClick={onRetry}>
+            <RefreshCw aria-hidden="true" className="me-2 size-4" />
+            تلاش دوباره
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MatrixSkeleton() {
+  return (
+    <fieldset className="space-y-3" disabled aria-busy="true">
+      <legend className="text-sm font-semibold">ماتریس مجوزها</legend>
+      <p className="sr-only">در حال بارگذاری فهرست مجوزها از سرور…</p>
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+      ))}
+    </fieldset>
+  )
+}
+
 function AssignmentPanel({ members, roles, onToggle, busy, error }: { members: TenantMember[]; roles: TenantRole[]; onToggle: (memberId: string, role: TenantRole) => void; busy: boolean; error: string | null }) {
   return (
     <section className="rounded-xl border border-border bg-surface p-5 shadow-soft" aria-label="انتساب نقش به اعضا">
@@ -445,7 +554,7 @@ function AssignmentPanel({ members, roles, onToggle, busy, error }: { members: T
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><UserCheck aria-hidden="true" className="size-5" /></span>
         <div>
           <h3 className="text-base font-semibold">انتساب نقش به اعضا</h3>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">هر نقش به اعضای همین مستأجر اختصاص داده می‌شود؛ آخرین مالک مؤثر قابل حذف نیست.</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">هر نقش به اعضای همین مستأجر اختصاص داده می‌شود؛ آخرین مدیر مؤثر نقش‌ها قابل حذف نیست.</p>
         </div>
       </div>
       {error && <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</p>}
@@ -503,8 +612,8 @@ function ForbiddenRoles() {
       <div className="flex items-start gap-4">
         <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive"><Lock aria-hidden="true" className="size-6" /></span>
         <div className="space-y-1.5">
-          <p className="text-sm font-semibold">مدیریت نقش‌ها مجاز نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">حساب فعلی مالک مؤثر این مستأجر نیست. مخفی‌سازی کنترل‌های UI امنیت محسوب نمی‌شود؛ B009 باید همین عملیات را سمت سرور با 403 رد کند.</p>
+          <p className="text-sm font-semibold">دسترسی به نقش‌های این مستأجر مجاز نیست</p>
+          <p className="text-sm leading-6 text-muted-foreground">حساب فعلی عضویت فعال در این مستأجر ندارد. مخفی‌سازی کنترل‌های UI امنیت محسوب نمی‌شود؛ B013 همین عملیات را سمت سرور با 403 رد می‌کند.</p>
         </div>
       </div>
     </div>
@@ -518,7 +627,7 @@ function UnavailableRoles({ onRetry }: { onRetry: () => void }) {
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
         <div className="space-y-1.5">
           <p className="text-sm font-semibold">نقش‌ها در دسترس نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">هم‌اکنون نمی‌توانیم ماتریس مجوز را بارگذاری کنیم.</p>
+          <p className="text-sm leading-6 text-muted-foreground">هم‌اکنون نمی‌توانیم نقش‌ها و مجوزها را بارگذاری کنیم.</p>
           <Button type="button" className="mt-3" onClick={onRetry}><RefreshCw aria-hidden="true" className="me-2 size-4" />تلاش دوباره</Button>
         </div>
       </div>
@@ -530,10 +639,10 @@ function RolesSkeleton() {
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_1fr]" aria-busy="true">
       <div className="rounded-xl border border-border bg-surface p-4 shadow-soft">
+        <p className="sr-only">در حال بارگذاری نقش‌ها و مجوزها…</p>
         {[0, 1, 2].map((index) => <div key={index} className="mb-3 h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}
       </div>
       <div className="rounded-xl border border-border bg-surface p-5 shadow-soft">
-        <p className="sr-only">در حال بارگذاری نقش‌ها و مجوزها…</p>
         <div className="h-6 w-48 animate-pulse rounded bg-muted motion-reduce:animate-none" />
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {[0, 1, 2, 3].map((index) => <div key={index} className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}

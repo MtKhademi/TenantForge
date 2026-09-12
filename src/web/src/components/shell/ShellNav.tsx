@@ -3,6 +3,8 @@ import type { LucideIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link, useLocation, useMatch } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { useTenantPermissions } from '@/features/roles/tenantPermissions'
+import { AUDIT_VIEW_KEY, INVITATIONS_VIEW_KEY, type PermissionKey } from '@/features/roles/roleTypes'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +31,14 @@ type ShellNavItem = {
    * named destinations.
    */
   tenantScopedSuffix?: string
+  /**
+   * S12 (F019): the server-resolved tenant permission keys this destination
+   * requires. While the resolved set is loading or any key is missing, the
+   * item stays visible but **inert** (aria-disabled, no navigation) — an
+   * honest affordance, never a security boundary: B013 denies the
+   * underlying request with 403 when the URL is reached directly.
+   */
+  requires?: PermissionKey[]
 }
 
 /**
@@ -44,8 +54,8 @@ const navItems: ShellNavItem[] = [
   { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', platform: true },
   { id: 'members', label: 'اعضای مستأجر', icon: UsersRound, href: '/t/', tenantScopedSuffix: '' },
   { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', tenantScopedSuffix: '/roles' },
-  { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations' },
-  { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit' },
+  { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations', requires: [INVITATIONS_VIEW_KEY] },
+  { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit', requires: [AUDIT_VIEW_KEY] },
   { id: 'users', label: 'کاربران پلتفرم', icon: Users, href: '/users', platform: true },
   { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true, platform: true },
   { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true, platform: true },
@@ -94,6 +104,12 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
   const rawTenantId = tenantMatch?.params.tenantId ?? ''
   const tenantId = inTenantScope && rawTenantId.length > 0 ? decodeURIComponent(rawTenantId) : ''
 
+  // S12 (F019): the server-resolved permission set for the current tenant
+  // gates the invitation and audit destinations. It only resolves inside a
+  // tenant; in platform scope it stays null and the platform items are
+  // ungated here (they are `isPlatformAdmin`-gated instead).
+  const resolved = useTenantPermissions(inTenantScope ? tenantId : undefined)
+
   // S11 (F018) + S16 (F023): platform destinations are shown only to a
   // platform administrator (`isPlatformAdmin`, never tenant permission keys)
   // and only in platform scope. Tenant-scoped items resolve against the
@@ -125,23 +141,37 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
           const placeholder =
             !scopedAvailable &&
             (Boolean(item.placeholder) || item.tenantScopedSuffix !== undefined)
+          // S12 (F019): a destination with required tenant permissions is inert
+          // while the server-resolved set is loading, failed or missing the
+          // keys. Hiding/disabling is presentation only — B013 denies the
+          // underlying read with a non-leaking 403 when the URL is reached
+          // directly.
+          const permissionGated =
+            Boolean(item.requires?.length) &&
+            inTenantScope &&
+            resolved.permissions !== null &&
+            !item.requires!.every((key) => resolved.permissions?.has(key) ?? false)
+          const permissionPending =
+            Boolean(item.requires?.length) && inTenantScope && resolved.isResolving
+          const inert = placeholder || permissionGated || permissionPending
           // Exact match only: the member item matches `/t/{id}` itself, each
           // child item its own child route, and platform items their own
           // routes. No prefix matches, so the platform tenant-list entry
           // never masquerades as the current page inside a tenant.
-          const active = !placeholder && location.pathname === resolvedHref
+          const active = !inert && location.pathname === resolvedHref
           const Icon = item.icon
           const link = (
             <Link
               key={item.id}
-              to={placeholder ? item.href : resolvedHref}
+              to={inert ? item.href : resolvedHref}
               aria-label={collapsed ? item.label : undefined}
               aria-describedby={collapsed ? `${item.id}-tooltip` : undefined}
               aria-current={active ? 'page' : undefined}
+              aria-disabled={inert || undefined}
               onClick={(event) => {
-                if (placeholder) {
-                  // Keep the named item discoverable without jumping to an
-                  // anchor that does not exist in this slice.
+                if (inert) {
+                  // Keep the named item discoverable without navigating to a
+                  // destination the current tenant permissions do not grant.
                   event.preventDefault()
                 }
               }}
@@ -150,7 +180,7 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
                 active
                   ? 'bg-muted text-foreground'
                   : 'text-sidebar-foreground/80 hover:text-foreground',
-                placeholder && 'cursor-default opacity-60',
+                inert && 'cursor-default opacity-60',
                 collapsed ? 'justify-center px-0' : 'px-3',
               )}
             >

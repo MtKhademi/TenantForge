@@ -16,6 +16,8 @@ import { DashboardShell } from '@/components/shell/DashboardShell'
 import { SecondaryButton } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 import { SessionExpiredError } from '@/features/auth/authTypes'
+import { useTenantPermissions } from '@/features/roles/tenantPermissions'
+import { AUDIT_VIEW_KEY, INVITATIONS_VIEW_KEY, type PermissionKey } from '@/features/roles/roleTypes'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { httpTenantMembersAdapter, TenantAccessDeniedError } from '@/features/tenants/tenantMembersAdapter'
 import type { TenantMember, TenantMembersResponse } from '@/features/tenants/tenantTypes'
@@ -51,6 +53,11 @@ export function TenantScopePage() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const { isPlatformAdmin, scopes, getScopeById, selectHome } = useTenantScope()
   const { session, signOut } = useAuth()
+  // S12 (F019): the in-page scope tabs follow the server-resolved tenant
+  // permissions — دعوت‌ها needs `IAM.Invitations.View`, گزارش فعالیت needs
+  // `IAM.Audit.View`. While the set is unresolved (or on failure) the tabs
+  // stay visible but inert; direct URLs are still answered by B013's 403.
+  const resolved = useTenantPermissions(tenantId)
 
   const [state, setState] = useState<MembersState>({ kind: 'loading' })
   const requestIdRef = useRef(0)
@@ -125,6 +132,23 @@ export function TenantScopePage() {
     tenantId !== undefined &&
     getScopeById(tenantId) === null
 
+  // S12 (F019): a scope tab is a real link only when the server-resolved
+  // permission set has settled and grants the key; while resolving (or after
+  // a failure, when capabilities fail closed) it stays visible but inert.
+  const tabInert = (keys: PermissionKey[]) =>
+    resolved.isResolving ||
+    resolved.permissions === null ||
+    !keys.every((key) => resolved.permissions?.has(key) ?? false)
+
+  const invitationsTabInert = tabInert([INVITATIONS_VIEW_KEY])
+  const auditTabInert = tabInert([AUDIT_VIEW_KEY])
+
+  const tabClass = (inert: boolean) =>
+    cn(
+      'inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+      inert && 'cursor-default opacity-60 hover:bg-surface',
+    )
+
   return (
     <DashboardShell>
       <section aria-label="محدوده مستأجر" className="space-y-6">
@@ -145,21 +169,29 @@ export function TenantScopePage() {
             </span>
             <Link
               to={`/t/${encodeURIComponent(tenantId)}/roles`}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={tabClass(false)}
             >
               <KeyRound aria-hidden="true" className="size-4" />
               نقش‌ها
             </Link>
             <Link
-              to={`/t/${encodeURIComponent(tenantId)}/invitations`}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              to={invitationsTabInert ? '#' : `/t/${encodeURIComponent(tenantId)}/invitations`}
+              aria-disabled={invitationsTabInert || undefined}
+              onClick={(event) => {
+                if (invitationsTabInert) event.preventDefault()
+              }}
+              className={tabClass(invitationsTabInert)}
             >
               <MailPlus aria-hidden="true" className="size-4" />
               دعوت‌ها
             </Link>
             <Link
-              to={`/t/${encodeURIComponent(tenantId)}/audit`}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              to={auditTabInert ? '#' : `/t/${encodeURIComponent(tenantId)}/audit`}
+              aria-disabled={auditTabInert || undefined}
+              onClick={(event) => {
+                if (auditTabInert) event.preventDefault()
+              }}
+              className={tabClass(auditTabInert)}
             >
               <ScrollText aria-hidden="true" className="size-4" />
               گزارش فعالیت
