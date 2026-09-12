@@ -69,7 +69,7 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 function isInvitationRole(value: unknown): value is InvitationRole {
-  return value === 'Owner' || value === 'Viewer'
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function isInvitationStatus(value: unknown): value is InvitationStatus {
@@ -134,8 +134,11 @@ function mapServerValidation(payload: unknown): Partial<Record<keyof CreateInvit
   const mapped: Partial<Record<keyof CreateInvitationRequest, string>> = {}
   for (const field of ['email', 'role'] as const) {
     const value = (errors as Record<string, unknown>)[field]
-    if (Array.isArray(value) && typeof value[0] === 'string') mapped[field] = value[0]
-    else if (typeof value === 'string') mapped[field] = value
+    if (Array.isArray(value) && typeof value[0] === 'string') {
+      mapped[field] = field === 'role' ? 'یکی از نقش‌های همین مستأجر را انتخاب کنید.' : value[0]
+    } else if (typeof value === 'string') {
+      mapped[field] = field === 'role' ? 'یکی از نقش‌های همین مستأجر را انتخاب کنید.' : value
+    }
   }
   return Object.keys(mapped).length > 0 ? mapped : { email: fallback }
 }

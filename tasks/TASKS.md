@@ -51,7 +51,7 @@ one valid Spec link.
 | F018 | S11 | Navigate platform and tenant scopes correctly | done | F017, B012 | — |
 | F023 | S16 | Keep member navigation inside the selected tenant | done | F018 | — |
 | F019 | S12 | Render permissions from the server catalog | done | F023, B013 | — |
-| F020 | S13 | Handle custom invitation roles and honest pending states | planned | F019, B014 | [Spec](front/F020-custom-role-invitations.md) |
+| F020 | S13 | Handle custom invitation roles and honest pending states | done | F019, B014 | — |
 | F021 | S14 | Polish Persian product copy and current documentation | planned | F020 | [Spec](front/F021-product-copy-and-docs.md) |
 | F022 | S15 | Connect server pagination to tables and selectors | planned | F021, B015 | [Spec](front/F022-server-pagination.md) |
 | F024 | S17 | Write a practical Persian user-guide README | planned | F022 | [Spec](front/F024-persian-user-guide.md) |

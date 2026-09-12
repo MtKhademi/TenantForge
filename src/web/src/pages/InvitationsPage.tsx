@@ -1,7 +1,6 @@
 import {
   CircleCheck,
   Clock,
-  FlaskConical,
   Loader2,
   Lock,
   MailPlus,
@@ -24,20 +23,23 @@ import {
   InvitationConflictError,
   InvitationForbiddenError,
   InvitationValidationError,
+  type BuiltInInvitationRole,
   type Invitation,
   type InvitationRole,
 } from '@/features/invitations/invitationsTypes'
+import { httpRoleAdapter } from '@/features/roles/roleAdapter'
+import type { TenantRole } from '@/features/roles/roleTypes'
 import { useTenantPermissions } from '@/features/roles/tenantPermissions'
 import { cn } from '@/lib/utils'
 
 /**
  * S10 tenant invitations — connected to the real B010 API (F016).
  *
- * A tenant Owner invites a person by email with a role, sees the pending
- * invitation and its expiry, and (development mode only) a clearly-labeled
- * stand-in for the emailed acceptance link. F015's sessionStorage mock is
- * gone; this page now calls the real invitation endpoints, but keeps every
- * state F015 established.
+ * A tenant Owner invites a person by email with a built-in or tenant custom
+ * role, sees the pending invitation and its expiry, and gets an honest local
+ * confirmation that does not imply email delivery or acceptance. F015's
+ * sessionStorage mock is gone; this page now calls the real invitation
+ * endpoints, but keeps every state F015 established.
  *
  * States:
  * - loading: initial/tenant-change request in flight (skeleton);
@@ -51,10 +53,15 @@ import { cn } from '@/lib/utils'
  * `Invitations.Create`) sees the pending list plus an honest «فقط مشاهده»
  * notice — no dead form; B013 still denies a direct `POST` with 403.
  *
- * Form states: idle, field validation (email/role), submitting, success (with
- * dev-only acceptance link), and 409 duplicate conflict. Authorization is
- * server-owned; the audit event's actor is resolved by B010 from the bearer
- * token, not supplied by this page.
+ * F020 (S13): `role` is a validated non-empty role-name string. The form offers
+ * Owner/Viewer plus custom role names from this tenant's roles API only when the
+ * caller can create invitations; historical unfamiliar role names remain
+ * displayable in the list.
+ *
+ * Form states: idle, role-list loading/failure, field validation (email/role),
+ * submitting, success without an acceptance link, and 409 duplicate conflict.
+ * Authorization is server-owned; the audit event's actor is resolved by B010
+ * from the bearer token, not supplied by this page.
  */
 
 type InvitationsState =
@@ -63,15 +70,45 @@ type InvitationsState =
   | { kind: 'forbidden' }
   | { kind: 'unavailable' }
 
-/** The two built-in roles that exist by the end of S09 (F013's seeded set). */
-const INVITE_ROLES: { value: InvitationRole; label: string }[] = [
-  { value: 'Owner', label: 'مالک' },
-  { value: 'Viewer', label: 'مشاهده‌گر' },
+type RoleChoicesState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'loaded'; choices: InvitationRoleChoice[] }
+  | { kind: 'error' }
+
+type InvitationRoleChoice = {
+  value: InvitationRole
+  label: string
+  kind: 'builtIn' | 'custom'
+}
+
+/** The two built-in invitation roles preserved by the S13 backend contract. */
+const BUILT_IN_INVITE_ROLES: InvitationRoleChoice[] = [
+  { value: 'Owner', label: 'مالک', kind: 'builtIn' },
+  { value: 'Viewer', label: 'مشاهده‌گر', kind: 'builtIn' },
 ]
 
-const ROLE_LABELS: Record<InvitationRole, string> = {
+const BUILT_IN_ROLE_LABELS: Record<BuiltInInvitationRole, string> = {
   Owner: 'مالک',
   Viewer: 'مشاهده‌گر',
+}
+
+function roleDisplayName(role: InvitationRole) {
+  if (role === 'Owner' || role === 'Viewer') return BUILT_IN_ROLE_LABELS[role]
+  return role
+}
+
+function buildRoleChoices(roles: TenantRole[]): InvitationRoleChoice[] {
+  const seen = new Set(BUILT_IN_INVITE_ROLES.map((role) => role.value))
+  const customChoices = roles
+    .filter((role) => role.kind === 'custom')
+    .flatMap((role) => {
+      const name = role.name.trim()
+      if (!name || seen.has(name)) return []
+      seen.add(name)
+      return [{ value: name, label: name, kind: 'custom' as const }]
+    })
+  return [...BUILT_IN_INVITE_ROLES, ...customChoices]
 }
 
 const inviteSchema = z.object({
@@ -85,35 +122,6 @@ const inviteSchema = z.object({
 
 type InviteFormValues = z.infer<typeof inviteSchema>
 
-/**
- * A development-only stand-in for the emailed acceptance link. The real
- * one-time token is generated and stored server-side (B010) and is deliberately
- * absent from the contract; this labeled, non-HTTP sample exists only so the
- * milestone's "we would show a link" behavior is visible, and it is gated so it
- * never renders in a production build.
- */
-function DevelopmentAcceptanceLink({ invitationId }: { invitationId: string }) {
-  if (!import.meta.env.DEV) return null
-  return (
-    <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 p-3">
-      <p className="flex items-center gap-2 text-xs font-semibold text-warning">
-        <FlaskConical aria-hidden="true" className="size-4" />
-        حالت توسعه — ارسال ایمیل واقعی در این مایل‌ستون انجام نمی‌شود
-      </p>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-        در نسخهٔ نهایی، لینک پذیرش یک‌بارمصرف از طریق ایمیل ارسال می‌شود. این نمونه فقط رفتار نمایش
-        لینک را نشان می‌دهد:
-      </p>
-      <code
-        dir="ltr"
-        className="mt-2 block truncate rounded bg-background/60 px-2 py-1 text-[11px] text-foreground"
-      >
-        acceptance://invite/{invitationId}
-      </code>
-    </div>
-  )
-}
-
 export function InvitationsPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
   const { session, signOut } = useAuth()
@@ -124,11 +132,14 @@ export function InvitationsPage() {
   const permissions = useTenantPermissions(tenantId)
   const canCreateInvitations = permissions.canCreateInvitations
   const [state, setState] = useState<InvitationsState>({ kind: 'loading' })
+  const [roleChoicesState, setRoleChoicesState] = useState<RoleChoicesState>({ kind: 'idle' })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [created, setCreated] = useState<Invitation | null>(null)
   const [conflictError, setConflictError] = useState<string | null>(null)
 
   const requestIdRef = useRef(0)
+  const roleChoicesRequestIdRef = useRef(0)
+  const submitRequestIdRef = useRef(0)
   const sessionRef = useRef(session)
   const signOutRef = useRef(signOut)
   const emailInputRef = useRef<HTMLInputElement | null>(null)
@@ -151,6 +162,14 @@ export function InvitationsPage() {
   useEffect(() => {
     signOutRef.current = signOut
   }, [signOut])
+
+  useEffect(() => {
+    submitRequestIdRef.current += 1
+    reset({ email: '', role: '' })
+    setIsSubmitting(false)
+    setConflictError(null)
+    setCreated(null)
+  }, [reset, tenantId])
 
   const loadInvitations = useCallback(() => {
     if (!tenantId) return
@@ -183,9 +202,38 @@ export function InvitationsPage() {
     loadInvitations()
   }, [loadInvitations])
 
+  const loadRoleChoices = useCallback(() => {
+    if (!tenantId || !permissions.canCreateInvitations) {
+      roleChoicesRequestIdRef.current += 1
+      setRoleChoicesState({ kind: 'idle' })
+      return
+    }
+    const requestId = ++roleChoicesRequestIdRef.current
+    setRoleChoicesState({ kind: 'loading' })
+    httpRoleAdapter
+      .listRoles(sessionRef.current?.accessToken ?? '', tenantId)
+      .then((response) => {
+        if (requestId !== roleChoicesRequestIdRef.current) return
+        setRoleChoicesState({ kind: 'loaded', choices: buildRoleChoices(response.roles) })
+      })
+      .catch((error) => {
+        if (requestId !== roleChoicesRequestIdRef.current) return
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+          return
+        }
+        setRoleChoicesState({ kind: 'error' })
+      })
+  }, [permissions.canCreateInvitations, tenantId])
+
+  useEffect(() => {
+    loadRoleChoices()
+  }, [loadRoleChoices])
+
   const onSubmit = useCallback(
     async (values: InviteFormValues) => {
-      if (!tenantId) return
+      if (!tenantId || roleChoicesState.kind !== 'loaded') return
+      const requestId = ++submitRequestIdRef.current
       setIsSubmitting(true)
       setConflictError(null)
       setCreated(null)
@@ -193,8 +241,9 @@ export function InvitationsPage() {
         const invitation = await httpInvitationAdapter.createInvitation(
           sessionRef.current?.accessToken ?? '',
           tenantId,
-          { email: values.email, role: values.role as InvitationRole },
+          { email: values.email, role: values.role },
         )
+        if (requestId !== submitRequestIdRef.current) return
         setState((current) =>
           current.kind === 'loaded'
             ? { kind: 'loaded', invitations: [invitation, ...current.invitations] }
@@ -203,6 +252,7 @@ export function InvitationsPage() {
         reset({ email: '', role: '' })
         setCreated(invitation)
       } catch (error) {
+        if (requestId !== submitRequestIdRef.current) return
         if (error instanceof SessionExpiredError) {
           void signOutRef.current()
         } else if (error instanceof InvitationConflictError) {
@@ -220,15 +270,20 @@ export function InvitationsPage() {
           setConflictError(error.message)
         }
       } finally {
-        setIsSubmitting(false)
+        if (requestId === submitRequestIdRef.current) setIsSubmitting(false)
       }
     },
-    [reset, setError, tenantId],
+    [reset, roleChoicesState.kind, setError, tenantId],
   )
 
   const submitInvite = useCallback((event: FormEvent<HTMLFormElement>) => {
     void handleSubmit(onSubmit)(event)
   }, [handleSubmit, onSubmit])
+
+  const roleChoicesLoaded = roleChoicesState.kind === 'loaded'
+  const roleChoices = roleChoicesLoaded ? roleChoicesState.choices : []
+  const roleChoicesUnavailable = roleChoicesState.kind === 'error'
+  const canSubmit = roleChoicesLoaded && !isSubmitting
 
   return (
     <DashboardShell>
@@ -264,12 +319,12 @@ export function InvitationsPage() {
             ) : !canCreateInvitations ? (
               <CreateRestrictedNotice />
             ) : (
-            <form
-              className="min-w-0 space-y-5 rounded-xl border border-border bg-surface p-5 shadow-soft"
-              onSubmit={submitInvite}
-              noValidate
-              aria-label="فرم دعوت"
-            >
+              <form
+                className="min-w-0 space-y-5 rounded-xl border border-border bg-surface p-5 shadow-soft"
+                onSubmit={submitInvite}
+                noValidate
+                aria-label="فرم دعوت"
+              >
               <div>
                 <h3 className="text-base font-semibold">دعوت عضو جدید</h3>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -307,8 +362,15 @@ export function InvitationsPage() {
                 <label className="mb-2 block text-sm font-semibold" htmlFor="invite-role">نقش</label>
                 <select
                   id="invite-role"
+                  disabled={!roleChoicesLoaded || isSubmitting}
                   aria-invalid={Boolean(errors.role)}
-                  aria-describedby={errors.role ? 'invite-role-error' : 'invite-role-hint'}
+                  aria-describedby={
+                    errors.role
+                      ? 'invite-role-error'
+                      : roleChoicesUnavailable
+                        ? 'invite-role-load-error'
+                        : 'invite-role-hint'
+                  }
                   className={cn(
                     'min-h-11 w-full rounded-md border border-input bg-surface px-3 py-2 text-base text-foreground shadow-none transition-colors focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-60 md:text-sm',
                     errors.role && 'border-destructive',
@@ -319,22 +381,36 @@ export function InvitationsPage() {
                     roleSelectRef.current = node
                   }}
                 >
-                  <option value="">انتخاب نقش…</option>
-                  {INVITE_ROLES.map((role) => (
-                    <option key={role.value} value={role.value}>{role.label}</option>
+                  <option value="">
+                    {roleChoicesState.kind === 'loading' ? 'در حال بارگذاری نقش‌ها…' : 'انتخاب نقش…'}
+                  </option>
+                  {roleChoices.map((role) => (
+                    <option key={`${role.kind}-${role.value}`} value={role.value}>
+                      {role.kind === 'custom' ? role.label : `${role.label} (پیش‌فرض)`}
+                    </option>
                   ))}
                 </select>
                 {errors.role ? (
                   <p className="mt-2 text-sm text-destructive" id="invite-role-error">{errors.role.message}</p>
+                ) : roleChoicesUnavailable ? (
+                  <div className="mt-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3" id="invite-role-load-error" role="alert">
+                    <p className="text-sm text-destructive">نقش‌های این مستأجر بارگذاری نشد؛ ایجاد دعوت تا بارگذاری موفق غیرفعال است.</p>
+                    <SecondaryButton type="button" className="mt-3 px-3" onClick={loadRoleChoices}>
+                      <RefreshCw aria-hidden="true" className="size-4" />
+                      تلاش دوباره
+                    </SecondaryButton>
+                  </div>
                 ) : (
                   <p className="mt-2 text-xs text-muted-foreground" id="invite-role-hint">
-                    نقشی که عضو پس از پذیرش دعوت دریافت می‌کند.
+                    {roleChoicesState.kind === 'loading'
+                      ? 'برای جلوگیری از نقش‌های قدیمی یا متعلق به مستأجر دیگر، ابتدا فهرست نقش‌های همین مستأجر بارگذاری می‌شود.'
+                      : 'نقش داخلی یا سفارشی همین مستأجر که عضو پس از پذیرش دعوت دریافت می‌کند.'}
                   </p>
                 )}
               </div>
 
               <div className="border-t border-border pt-4">
-                <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+                <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
                   {isSubmitting ? (
                     <><Loader2 aria-hidden="true" className="me-2 size-4 animate-spin motion-reduce:animate-none" />در حال ایجاد دعوت</>
                   ) : (
@@ -348,7 +424,7 @@ export function InvitationsPage() {
                   {conflictError}
                 </p>
               )}
-            </form>
+              </form>
             )}
 
             <PendingInvitations invitations={state.invitations} created={created} />
@@ -373,9 +449,11 @@ function PendingInvitations({ invitations, created }: { invitations: Invitation[
         <div className="mt-4 rounded-lg border border-success/40 bg-success/10 p-3" role="status">
           <p className="flex items-center gap-2 text-sm font-medium text-success">
             <CircleCheck aria-hidden="true" className="size-4" />
-            دعوت برای <bdi dir="ltr">{created.email}</bdi> با نقش <bdi>{ROLE_LABELS[created.role]}</bdi> ایجاد شد.
+            دعوت برای <bdi dir="ltr">{created.email}</bdi> با نقش <bdi>{roleDisplayName(created.role)}</bdi> ایجاد شد.
           </p>
-          <DevelopmentAcceptanceLink invitationId={created.id} />
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            این وضعیت فقط ایجاد دعوت را تأیید می‌کند؛ ارسال ایمیل و پذیرش دعوت در این نسخه ارائه نشده است.
+          </p>
         </div>
       )}
 
@@ -469,15 +547,22 @@ function CreateRestrictedNotice() {
 
 function RoleBadge({ role }: { role: InvitationRole }) {
   const isOwner = role === 'Owner'
+  const isBuiltIn = role === 'Owner' || role === 'Viewer'
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold',
-        isOwner ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+        isOwner ? 'bg-primary/10 text-primary' : isBuiltIn ? 'bg-muted text-muted-foreground' : 'bg-success/10 text-success',
       )}
     >
-      <span aria-hidden="true" className={cn('size-1.5 rounded-full', isOwner ? 'bg-primary' : 'bg-muted-foreground')} />
-      {isOwner ? 'مالک' : 'مشاهده‌گر'}
+      <span
+        aria-hidden="true"
+        className={cn(
+          'size-1.5 rounded-full',
+          isOwner ? 'bg-primary' : isBuiltIn ? 'bg-muted-foreground' : 'bg-success',
+        )}
+      />
+      <bdi>{roleDisplayName(role)}</bdi>
     </span>
   )
 }
