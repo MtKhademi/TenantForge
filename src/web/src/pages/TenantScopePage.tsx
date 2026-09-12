@@ -141,7 +141,7 @@ export function TenantScopePage() {
           <nav className="flex flex-wrap gap-2" aria-label="ناوبری محدوده مستأجر">
             <span className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground">
               <Users aria-hidden="true" className="size-4" />
-              اعضا
+              اعضای مستأجر
             </span>
             <Link
               to={`/t/${encodeURIComponent(tenantId)}/roles`}

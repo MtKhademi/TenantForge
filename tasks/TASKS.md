@@ -49,7 +49,7 @@ one valid Spec link.
 | F016 | S10 | Connect audit and invitations | done | F015, B010 | — |
 | F017 | S08 | Verify non-admin tenant isolation in browser | done | F012, B011 | — |
 | F018 | S11 | Navigate platform and tenant scopes correctly | done | F017, B012 | — |
-| F023 | S16 | Keep member navigation inside the selected tenant | planned | F018 | [Spec](front/F023-tenant-member-navigation.md) |
+| F023 | S16 | Keep member navigation inside the selected tenant | done | F018 | — |
 | F019 | S12 | Render permissions from the server catalog | planned | F023, B013 | [Spec](front/F019-server-permission-matrix.md) |
 | F020 | S13 | Handle custom invitation roles and honest pending states | planned | F019, B014 | [Spec](front/F020-custom-role-invitations.md) |
 | F021 | S14 | Polish Persian product copy and current documentation | planned | F020 | [Spec](front/F021-product-copy-and-docs.md) |

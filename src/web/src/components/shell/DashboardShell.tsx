@@ -50,6 +50,21 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   })()
   const inTenantScope = location.pathname.startsWith('/t/') && location.pathname.length > '/t/'.length
 
+  // S16 (F023): the header identifies the current scope, consistent with the
+  // route-matched navigation. In tenant scope the tenant name (or a neutral
+  // fallback while it resolves) replaces the page name; platform
+  // destinations carry their own names so the header no longer reads
+  // «داشبورد» on the tenants list or the platform user directory.
+  const pageTitle = inTenantScope
+    ? activeTenant
+      ? activeTenant.name
+      : 'مستأجر'
+    : location.pathname === '/platform/tenants'
+      ? 'مستأجران'
+      : location.pathname === '/users'
+        ? 'کاربران پلتفرم'
+        : 'داشبورد'
+
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null)
 
@@ -79,6 +94,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       menuButtonRef.current?.focus()
     }
   }, [drawerOpen])
+
+  // S16 (F023): a destination tapped in the mobile drawer closes it, so the
+  // user lands on the page instead of behind an open dialog. It closes on any
+  // route change (tap, Back/Forward, programmatic nav). The functional updater
+  // bails out when already closed, so re-opening needs no extra state.
+  useEffect(() => {
+    setDrawerOpen((open) => (open ? false : open))
+  }, [location.pathname])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -137,7 +160,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     </span>
                   )}
                 </p>
-                <h1 className="text-lg font-semibold tracking-tight">داشبورد</h1>
+                <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
+                  {inTenantScope ? <bdi>{pageTitle}</bdi> : pageTitle}
+                </h1>
               </div>
             </div>
             <div className="flex items-center gap-2">
