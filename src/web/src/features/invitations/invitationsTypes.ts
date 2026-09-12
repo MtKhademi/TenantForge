@@ -14,13 +14,14 @@
  */
 
 /**
- * The role an invitation grants. F015's mock offers the two built-in roles
- * that exist by the end of S09 (matching F013's seeded Owner/Viewer). B010
- * owns the authoritative set and may resolve a tenant's custom roles without
- * a shape change; `role` stays a name string so the contract does not couple
- * to a role object.
+ * The role an invitation grants. F020/S13 treats this as a validated non-empty
+ * role-name string: built-in `Owner`/`Viewer` or an exact custom role name from
+ * the selected tenant. The request deliberately stays name-based (not `roleId`)
+ * so historical custom names remain displayable without a shape change.
  */
-export type InvitationRole = 'Owner' | 'Viewer'
+export type InvitationRole = string
+
+export type BuiltInInvitationRole = 'Owner' | 'Viewer'
 
 /** Invitation lifecycle. F015 only ever creates `Pending`. */
 export type InvitationStatus = 'Pending'
