@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
@@ -39,6 +40,14 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
             subject: accountId.ToString(),
             email: $"{accountId:N}@tenantforge.local",
             displayName: "Test Account"));
+    }
+
+    private static async Task<HttpStatusCode> SendWithOverlapAsync(HttpClient client, Guid tenantId, object request, Barrier barrier)
+    {
+        barrier.SignalAndWait(10_000);
+        var response = await client.PostAsJsonAsync($"/api/tenants/{tenantId}/invitations", request);
+        barrier.SignalAndWait(10_000);
+        return response.StatusCode;
     }
 
     [Fact]
@@ -87,6 +96,113 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         Assert.Equal(HttpStatusCode.Created, (await firstClient.PostAsJsonAsync($"/api/tenants/{first.TenantId}/invitations", request)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await firstClient.PostAsJsonAsync($"/api/tenants/{first.TenantId}/invitations", request)).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await secondClient.PostAsJsonAsync($"/api/tenants/{second.TenantId}/invitations", request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task TrimAndCaseNormalization_TreatSameInviteeAsOneActiveInvitation()
+    {
+        var tenant = await CreateTenantAsync();
+        using var client = CreateClient();
+        Authorize(client, tenant.OwnerAccountId);
+
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "  Case@Test.COM ", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "case@test.com ", role = "Viewer" })).StatusCode);
+
+        await using var context = db.CreateContext();
+        Assert.Single(await context.TenantInvitations.Where(i => i.TenantId == tenant.TenantId && i.NormalizedEmail == "case@test.com").ToListAsync());
+    }
+
+    [Fact]
+    public async Task ExpiredPreviousInvitation_AllowsANewActiveInvitation()
+    {
+        var tenant = await CreateTenantAsync();
+        using var client = CreateClient();
+        Authorize(client, tenant.OwnerAccountId);
+
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "expired@company.com", role = "Viewer" })).StatusCode);
+
+        await using (var context = db.CreateContext())
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "UPDATE iam_tenant_invitations SET expires_at_utc = {0} WHERE tenant_id = {1} AND normalized_email = {2}",
+                DateTimeOffset.UtcNow.AddDays(-1),
+                tenant.TenantId,
+                "expired@company.com");
+        }
+
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "expired@company.com", role = "Viewer" })).StatusCode);
+        await using (var context = db.CreateContext())
+        {
+            Assert.Equal(1, await context.TenantInvitations.CountAsync(i => i.TenantId == tenant.TenantId && i.NormalizedEmail == "expired@company.com" && i.Status == "Pending" && i.ExpiresAtUtc > DateTimeOffset.UtcNow));
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentDuplicateCreates_ProduceOneCreatedOneConflictOneRowAndOneAudit()
+    {
+        var tenant = await CreateTenantAsync();
+        using var firstClient = CreateClient();
+        using var secondClient = CreateClient();
+        Authorize(firstClient, tenant.OwnerAccountId);
+        Authorize(secondClient, tenant.OwnerAccountId);
+        var barrier = new Barrier(2);
+        var request = new { email = "race@company.com", role = "Viewer" };
+
+        var results = await Task.WhenAll(
+            SendWithOverlapAsync(firstClient, tenant.TenantId, request, barrier),
+            SendWithOverlapAsync(secondClient, tenant.TenantId, request, barrier));
+
+        Assert.Contains(HttpStatusCode.Created, results);
+        Assert.Contains(HttpStatusCode.Conflict, results);
+
+        await using var context = db.CreateContext();
+        Assert.Equal(1, await context.TenantInvitations.CountAsync(i => i.TenantId == tenant.TenantId && i.NormalizedEmail == "race@company.com" && i.Status == "Pending" && i.ExpiresAtUtc > DateTimeOffset.UtcNow));
+        Assert.Single(await context.AuditEvents.Where(e => e.TenantId == tenant.TenantId && e.Action == "Invitation.Created" && e.Target == "race@company.com").ToListAsync());
+    }
+
+    [Fact]
+    public async Task CustomRoleInTargetTenant_IsAcceptedAndReturnedForF020()
+    {
+        var tenant = await CreateTenantAsync();
+        using var client = CreateClient();
+        Authorize(client, tenant.OwnerAccountId);
+
+        var createRole = await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/roles", new { name = "Finance Admin", permissionKeys = new[] { "IAM.Invitations.View" } });
+        Assert.Equal(HttpStatusCode.Created, createRole.StatusCode);
+
+        var create = await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "custom-role@company.com", role = "Finance Admin" });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        using var document = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
+        Assert.Equal("Finance Admin", document.RootElement.GetProperty("role").GetString());
+        Assert.DoesNotContain("token", await create.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var list = await client.GetAsync($"/api/tenants/{tenant.TenantId}/invitations");
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        var listBody = await list.Content.ReadAsStringAsync();
+        using var listDocument = JsonDocument.Parse(listBody);
+        Assert.Contains(listDocument.RootElement.GetProperty("invitations").EnumerateArray(), invitation => invitation.GetProperty("email").GetString() == "custom-role@company.com" && invitation.GetProperty("role").GetString() == "Finance Admin");
+        Assert.DoesNotContain("token", listBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UnknownOrForeignCustomRole_Returns400AndCreatesNothing()
+    {
+        var tenant = await CreateTenantAsync();
+        var foreignTenant = await CreateTenantAsync();
+        using var client = CreateClient();
+        using var foreignClient = CreateClient();
+        Authorize(client, tenant.OwnerAccountId);
+        Authorize(foreignClient, foreignTenant.OwnerAccountId);
+
+        var foreignRole = await foreignClient.PostAsJsonAsync($"/api/tenants/{foreignTenant.TenantId}/roles", new { name = "Foreign Finance Admin", permissionKeys = new[] { "IAM.Invitations.View" } });
+        Assert.Equal(HttpStatusCode.Created, foreignRole.StatusCode);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "unknown-role@company.com", role = "Unknown" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/tenants/{tenant.TenantId}/invitations", new { email = "foreign-role@company.com", role = "Foreign Finance Admin" })).StatusCode);
+
+        await using var context = db.CreateContext();
+        Assert.Equal(0, await context.TenantInvitations.CountAsync(i => i.TenantId == tenant.TenantId));
+        Assert.Equal(0, await context.AuditEvents.CountAsync(e => e.TenantId == tenant.TenantId && e.Action == "Invitation.Created"));
     }
 
     [Fact]

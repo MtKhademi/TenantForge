@@ -46,9 +46,14 @@ internal static class InvitationsFeature
 
             var normalizedEmail = TenantInvitation.NormalizeEmail(request.Email!);
             var role = request.Role!.Trim();
+
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({auth.TenantId.ToString() + ":" + normalizedEmail}, 0))");
+
             var roleExists = InvitationRoles.Contains(role) || await db.TenantRoles.AnyAsync(r => r.TenantId == auth.TenantId && r.Name == role);
             if (!roleExists)
             {
+                await transaction.RollbackAsync();
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["role"] = ["Select an existing invitation role."] });
             }
 
@@ -58,13 +63,18 @@ internal static class InvitationsFeature
                 && invitation.NormalizedEmail == normalizedEmail
                 && invitation.Status == "Pending"
                 && invitation.ExpiresAtUtc > now);
-            if (duplicate) return Results.Conflict();
+            if (duplicate)
+            {
+                await transaction.RollbackAsync();
+                return Results.Conflict();
+            }
 
             var rawToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray()) + Convert.ToBase64String(Guid.NewGuid().ToByteArray());
             var invitation = TenantInvitation.Create(auth.TenantId, normalizedEmail, role, rawToken, now);
             db.TenantInvitations.Add(invitation);
             db.AuditEvents.Add(AuditEvent.Create(auth.TenantId, auth.AccountId, auth.Actor, auth.ActorEmail, "Invitation.Created", normalizedEmail, $"{normalizedEmail} با نقش {role} دعوت شد.", now));
             await db.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             var response = new InvitationResponse(invitation.Id, invitation.Email, invitation.Role, invitation.Status, invitation.ExpiresAtUtc.UtcDateTime.ToString("O"), invitation.CreatedAtUtc.UtcDateTime.ToString("O"));
             return Results.Created($"/api/tenants/{auth.TenantId}/invitations/{invitation.Id}", response);
