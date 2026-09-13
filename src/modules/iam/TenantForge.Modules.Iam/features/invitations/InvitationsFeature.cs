@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Features.Roles;
 using TenantForge.Modules.Iam.Infrastructure;
 
@@ -12,28 +13,30 @@ namespace TenantForge.Modules.Iam.Features.Invitations;
 
 internal static class InvitationsFeature
 {
-    private const int FirstPageSize = 50;
     private static readonly HashSet<string> InvitationRoles = ["Owner", "Viewer"];
 
     public static IEndpointRouteBuilder MapInvitationsFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/tenants/{tenantId}/invitations", async (string tenantId, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/tenants/{tenantId}/invitations", async (string tenantId, HttpRequest request, ClaimsPrincipal principal, IamDbContext db) =>
         {
             var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.InvitationsViewPermission);
             if (auth.Result is not null) return auth.Result;
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
 
             var now = DateTimeOffset.UtcNow;
-            var invitationRows = await db.TenantInvitations.AsNoTracking()
+            var query = db.TenantInvitations.AsNoTracking()
                 .Where(invitation => invitation.TenantId == auth.TenantId && invitation.Status == "Pending" && invitation.ExpiresAtUtc > now)
                 .OrderByDescending(invitation => invitation.CreatedAtUtc)
-                .ThenBy(invitation => invitation.Id)
-                .Take(FirstPageSize)
-                .ToListAsync();
+                .ThenBy(invitation => invitation.Id);
+            var (invitationRows, pagination) = await PaginationSupport.PageAsync(query, page);
             var invitations = invitationRows
                 .Select(invitation => new InvitationResponse(invitation.Id, invitation.Email, invitation.Role, invitation.Status, invitation.ExpiresAtUtc.UtcDateTime.ToString("O"), invitation.CreatedAtUtc.UtcDateTime.ToString("O")))
                 .ToList();
 
-            return Results.Ok(new InvitationListResponse(invitations));
+            return Results.Ok(new InvitationListResponse(invitations, pagination));
         }).RequireAuthorization();
 
         endpoints.MapPost("/api/tenants/{tenantId}/invitations", async (string tenantId, CreateInvitationRequest request, ClaimsPrincipal principal, IamDbContext db) =>
@@ -102,5 +105,5 @@ internal static class InvitationsFeature
 }
 
 internal sealed record CreateInvitationRequest(string? Email, string? Role);
-internal sealed record InvitationListResponse(IReadOnlyList<InvitationResponse> Invitations);
+internal sealed record InvitationListResponse(IReadOnlyList<InvitationResponse> Invitations, PaginationMetadata Pagination);
 internal sealed record InvitationResponse(Guid Id, string Email, string Role, string Status, string ExpiresAtUtc, string CreatedAtUtc);
