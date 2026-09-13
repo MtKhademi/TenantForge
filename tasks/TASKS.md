@@ -54,7 +54,7 @@ one valid Spec link.
 | F020 | S13 | Handle custom invitation roles and honest pending states | done | F019, B014 | — |
 | F021 | S14 | Polish Persian product copy and current documentation | done | F020 | — |
 | F022 | S15 | Connect server pagination to tables and selectors | done | F021, B015 | — |
-| F024 | S17 | Write a practical Persian user-guide README | planned | F022 | [Spec](front/F024-persian-user-guide.md) |
+| F024 | S17 | Write a practical Persian user-guide README | done | F022 | — |
 
 ## Backend queue
 
