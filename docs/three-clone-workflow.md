@@ -63,8 +63,8 @@ opencode
 Each task command synchronizes only its current clone, creates its own branch,
 stops for plan approval and completes the work in that same primary agent
 conversation. It creates a visible todo list after approval and updates it after
-every implementation, validation, self-review and delivery step. No subagent is
-used.
+every implementation, validation, browser evidence, self-review and delivery
+step. No subagent is used.
 
 ## Parallel work
 
@@ -110,7 +110,8 @@ stashes, resets, cleans, deletes the old branch or touches either sibling clone.
 
 The `ui-engineer` and `backend-mentor` primary agents auto-allow normal work in
 their current clone, including edits, dependencies, build/test commands, browser
-verification, Docker Compose, commits, pushes and pull-request creation. This
+verification, Docker Compose, commits, pushes and pull-request creation. Frontend
+test commands still run only when the active task policy permits them. This
 removes repeated OpenCode tool-permission prompts.
 
 Guardrails remain explicit `deny` rules for sibling/external directories,

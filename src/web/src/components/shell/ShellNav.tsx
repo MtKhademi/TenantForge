@@ -213,7 +213,7 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
 
       {!collapsed && (
         <div className="mt-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
-          نشست API توسعه فقط برای بررسی رفتار تازه‌سازی در همین زبانه مرورگر ذخیره می‌شود.
+          نشست شما فقط در همین زبانه نگهداری می‌شود و با خروج یا بستن مرورگر پایان می‌یابد.
         </div>
       )}
     </nav>

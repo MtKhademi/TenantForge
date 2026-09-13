@@ -313,7 +313,7 @@ export function RolesPage() {
               <div className="flex items-start gap-3">
                 <ShieldCheck aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
                 <p className="leading-6">
-                  این ماتریس برای <bdi className="font-semibold text-foreground">{state.tenant.name}</bdi> است. فهرست و برچسب مجوزها از کاتالوگ سرور خوانده می‌شود و دسترسی هر خواندن، نوشتن و انتساب نقش فقط توسط سرور (B013) بررسی می‌شود.
+                  این ماتریس برای <bdi className="font-semibold text-foreground">{state.tenant.name}</bdi> است. فهرست و برچسب مجوزها از کاتالوگ سرور خوانده می‌شود و سرور دسترسی هر خواندن، نوشتن و انتساب نقش را مستقل از نمایش رابط کاربری بررسی می‌کند.
                 </p>
               </div>
             </div>
@@ -341,7 +341,7 @@ export function RolesPage() {
                         ? 'نقش‌های سیستمی قابل مشاهده‌اند اما مجوزهایشان در این نسخه قفل است.'
                         : selectedRole
                           ? 'نام نقش پس از ایجاد قابل تغییر نیست؛ فقط مجوزها ویرایش می‌شوند.'
-                          : 'نام نقش در مستأجر یکتا است؛ مجوزهای انتخاب‌شده قرارداد B013 را تعیین می‌کنند.'}
+                           : 'نام نقش در هر مستأجر یکتا است؛ مجوزهای انتخاب‌شده محدودهٔ دسترسی این نقش را تعیین می‌کنند.'}
                     </p>
                   </div>
                   {isDirty && selectedRole?.kind !== 'builtIn' && (
@@ -355,7 +355,7 @@ export function RolesPage() {
                     <TextInput
                       id="role-name"
                       autoComplete="off"
-                      placeholder={selectedRole ? undefined : 'User Manager'}
+                      placeholder={selectedRole ? undefined : 'مدیر کاربران'}
                       disabled={Boolean(selectedRole)}
                       aria-invalid={Boolean(errors.name)}
                       aria-describedby={errors.name ? 'role-name-error' : 'role-name-hint'}
@@ -371,7 +371,7 @@ export function RolesPage() {
                       <p className="mt-2 text-xs text-muted-foreground" id="role-name-hint">
                         {selectedRole
                           ? 'نام نقش پس از ایجاد قابل تغییر نیست.'
-                          : 'مثلاً User Manager؛ نام در هر مستأجر مستقل است.'}
+                           : 'مثلاً «مدیر کاربران»؛ نام در هر مستأجر مستقل است.'}
                       </p>
                     )}
                   </div>
@@ -613,7 +613,7 @@ function ForbiddenRoles() {
         <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive"><Lock aria-hidden="true" className="size-6" /></span>
         <div className="space-y-1.5">
           <p className="text-sm font-semibold">دسترسی به نقش‌های این مستأجر مجاز نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">حساب فعلی عضویت فعال در این مستأجر ندارد. مخفی‌سازی کنترل‌های UI امنیت محسوب نمی‌شود؛ B013 همین عملیات را سمت سرور با 403 رد می‌کند.</p>
+          <p className="text-sm leading-6 text-muted-foreground">حساب فعلی عضویت فعال یا مجوز لازم برای مشاهدهٔ نقش‌های این مستأجر را ندارد. سرور همین درخواست را بدون افشای داده رد کرده است.</p>
         </div>
       </div>
     </div>

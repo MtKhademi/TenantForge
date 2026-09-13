@@ -237,7 +237,7 @@ function MembersLoaded({ data }: { data: TenantMembersResponse }) {
               {tenant.slug}
             </code>
             <span className="mx-2" aria-hidden="true">·</span>
-            {tenant.status === 'Active' ? 'فعال' : 'معلول'}
+            {tenant.status === 'Active' ? 'فعال' : 'غیرفعال'}
           </p>
         </div>
       </div>

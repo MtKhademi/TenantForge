@@ -460,7 +460,7 @@ function TenantStatusBadge({ status }: { status: TenantSummary['status'] }) {
         aria-hidden="true"
         className={cn('size-1.5 rounded-full', active ? 'bg-success' : 'bg-muted-foreground')}
       />
-      {active ? 'فعال' : 'معلول'}
+      {active ? 'فعال' : 'غیرفعال'}
     </span>
   )
 }

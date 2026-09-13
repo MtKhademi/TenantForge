@@ -1,88 +1,104 @@
 # TenantForge
 
-TenantForge is an open-source, production-minded starter kit for building multi-tenant SaaS products with .NET and React.
+TenantForge is an open-source, production-minded starter kit for building multi-tenant SaaS products with .NET, PostgreSQL and React.
 
-The project is built in very small, visible vertical slices. Every backend capability must have an immediate UI consumer, a short browser demo, and a learning note that explains the request flow and design decisions.
+The project grows through small, visible vertical slices. Each delivered capability has a browser-visible consumer, an explicit API contract, and learning notes for backend slices.
 
-## Why TenantForge exists
+## What works today
 
-Most starter kits arrive as a large finished codebase. They are quick to clone but difficult to understand, modify, or trust.
+The current milestone includes:
 
-TenantForge takes the opposite approach:
+- development sign-in for the seeded platform administrator;
+- authenticated session recovery in the browser tab;
+- a platform dashboard backed by the API health/summary contract;
+- platform user listing and creation;
+- tenant creation with an initial owner;
+- tenant switching through a Persian RTL shell with a right sidebar and mobile drawer;
+- tenant member visibility with server-enforced isolation;
+- tenant roles and permission matrix rendered from the server catalog;
+- permission-aware navigation for invitations and audit logs;
+- invitation creation with built-in or tenant custom role names;
+- active pending invitation list with expiry times;
+- tenant audit log for invitation and role changes.
 
-- build from an empty repository;
-- keep `main` runnable and demonstrable;
-- introduce one backend concept at a time;
-- show every capability in the browser as soon as it exists;
-- document why the code was written, not only what it does;
-- grow from a development-only admin login into a real multi-tenant IAM system.
+Live task status, dependencies and executable Specs are tracked only in [tasks/TASKS.md](tasks/TASKS.md).
 
-The repository is useful both as a reusable SaaS foundation and as a guided, real-world .NET learning project.
+## Current limitations
 
-## Target product
+These are intentionally deferred to later slices:
 
-The first public milestone will support this complete journey:
+- invitation acceptance and account registration from an invitation;
+- email delivery, resend and revoke actions;
+- refresh-token rotation and long-lived session management;
+- collection pagination in the UI;
+- a broad Persian user guide.
 
-```text
-Run the project
-→ Sign in as the platform administrator
-→ View the dashboard
-→ Create and manage users
-→ Create tenants
-→ Switch between tenants
-→ Assign roles and permissions
-→ See permission-aware navigation and 403 states
-→ Inspect sensitive changes in the audit log
-```
+The invitation UI therefore shows pending invitation records only. It must not be read as proof that an email was sent or that acceptance is implemented.
 
-## Target stack
+## Stack
 
 ### Backend
 
-- .NET 10 and ASP.NET Core
-- Modular monolith with vertical slices
-- Minimal APIs and OpenAPI
+- .NET 10 and ASP.NET Core Minimal APIs
+- Modular monolith with vertical slices in the IAM module
 - EF Core with PostgreSQL
-- FluentValidation
+- PostgreSQL 16 through Docker Compose for local infrastructure
 - xUnit integration tests with Testcontainers
-- Docker Compose for local infrastructure
+- `/health` for local API health checks
 
 ### Frontend
 
-- React and TypeScript
+- React 19 and TypeScript
 - Vite
-- Tailwind CSS and shadcn/ui
+- Tailwind CSS with project design tokens
 - React Router
-- TanStack Query
 - React Hook Form and Zod
-- Vitest and Playwright
+- lucide-react icons
+- Vitest and Playwright are installed, but frontend test ownership is decided by task policy
 
-Versions are introduced and locked by the task that first needs them. The bootstrap repository intentionally contains no application code yet.
-
-## Running the project
+## Running locally
 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js](https://nodejs.org/) 20+ and npm
-- [Docker](https://www.docker.com/) (for local PostgreSQL via Docker Compose)
+- [Docker](https://www.docker.com/) for PostgreSQL
+
+On the reference WSL setup there is no Linux `dotnet` binary; use `dotnet.exe` from the Windows SDK. See [docs/architecture.md](docs/architecture.md#local-development-environment-wsl--windows-net-sdk) for details.
 
 ### 1. Start PostgreSQL
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
-### 2. Run the backend API
+The Compose file runs PostgreSQL 16 with database/user/password `tenantforge` and publishes port `5432`.
+
+### 2. Run the API
+
+Linux/macOS shell with `dotnet` available:
 
 ```bash
-dotnet run --project src/api/TenantForge.Api
+dotnet run --project src/api/TenantForge.Api/TenantForge.Api.csproj --urls http://0.0.0.0:5000
 ```
 
-The API applies pending EF Core migrations and seeds the development platform
-administrator automatically on startup, then listens on `http://localhost:5000`.
+Reference WSL setup:
 
-### 3. Run the frontend
+```bash
+ASPNETCORE_ENVIRONMENT=Development dotnet.exe run --project src/api/TenantForge.Api/TenantForge.Api.csproj --urls http://0.0.0.0:5000
+```
+
+On startup the API applies EF Core migrations and seeds the development platform administrator when absent.
+
+Check health:
+
+```bash
+curl http://localhost:5000/health
+```
+
+If the API runs as a Windows process from WSL, `localhost` may not reach it from Linux tools; use the WSL gateway IP as described in `docs/architecture.md`.
+
+### 3. Run the web app
 
 In a second terminal:
 
@@ -92,181 +108,79 @@ npm install
 npm run dev
 ```
 
-The frontend listens on `http://localhost:5173` and proxies `/api` requests to
-the backend, so no CORS setup is needed in development.
+Open:
 
-### 4. Open the app
+```text
+http://localhost:5173/login
+```
 
-Open `http://localhost:5173/login` and sign in with the seeded development
-administrator:
+The Vite dev server proxies `/api` to the API host, so browser requests stay same-origin during local development.
+
+### Development sign-in
+
+The development seed creates this platform administrator in `Development`:
 
 ```text
 Email: admin@tenantforge.local
 Password: local-development-password
 ```
 
-### Running tests
+The production login screen does not display these credentials. They remain documented here for local setup only.
+
+## Useful commands
 
 ```bash
-# Backend
+# Frontend
+cd src/web
+npm run lint
+npm run build
+
+# Backend, with dotnet available
+dotnet build src/api/TenantForge.Api/TenantForge.Api.csproj
 dotnet test
 
-# Frontend unit tests
-cd src/web && npm run test
-
-# Frontend end-to-end tests
-cd src/web && npm run test:e2e
+# Backend, reference WSL setup
+dotnet.exe build src/api/TenantForge.Api/TenantForge.Api.csproj
+dotnet.exe test
 ```
 
-### Stopping
-
-```bash
-docker compose down
-```
-
-Add `-v` to also remove the PostgreSQL data volume for a clean database on next start.
+Frontend tests are not part of every UI task by default; follow the active task owner policy in `AGENTS.md` and `tasks/TASKS.md`.
 
 ## Delivery principles
 
 1. **Visible first** — every slice changes something a person can see or exercise in the browser.
-2. **One active task per clone** — front and backend may overlap only where the
-   explicit dependency graph allows it.
-3. **No speculative backend** — an endpoint needs a named current or immediately
-   dependent front consumer in the task ledger.
+2. **One active task per clone** — front and backend may overlap only where the dependency graph allows it.
+3. **No speculative backend** — an endpoint needs a named current or immediately dependent front consumer.
 4. **Small contracts** — a slice normally adds no more than one or two endpoints.
-5. **Teach through the code** — backend slices include a concise learning note under `docs/learning/`.
-6. **Secure by environment** — temporary shortcuts such as the hardcoded admin are development-only and must fail closed in production.
+5. **Teach through the code** — backend slices include concise learning notes under `docs/learning/`.
+6. **Secure by environment** — development shortcuts must fail closed outside development.
 7. **Demoable main** — a broken or half-integrated slice is never merged into `main`.
-
-## Roadmap
-
-| Slice | Visible outcome | Backend evolution |
-|---|---|---|
-| S00 | Professional login and dashboard shell using mock data | None |
-| S01 | Full admin can sign in and open the dashboard | Development-only hardcoded admin and signed token |
-| S02 | Protected route, current admin and logout | `GET /auth/me` and authentication guard |
-| S03 | Dashboard displays real summary data | Dashboard summary query |
-| S04 | Login still works while persistence is introduced | Account model, EF Core and migration |
-| S05 | Admin survives database recreation and application restarts | Idempotent platform-admin seed and database authentication |
-| S06 | Users can be listed and created from the UI | User query, command and validation |
-| S07 | Default tenant appears in a tenant switcher | Tenant and membership model |
-| S08 | Admin switches between two isolated tenants | Tenant context and isolation enforcement |
-| S09 | Roles and permissions are editable in a matrix | Tenant RBAC and authorization policies |
-| S10 | Navigation reacts to permissions; audit and invitations are visible | Permission-aware API, audit log and invitation flow |
-
-See [tasks/TASKS.md](tasks/TASKS.md) for the live task queues, statuses, dependencies and active specification links.
 
 ## OpenCode workflow
 
-TenantForge includes two primary implementation agents:
-
-- `ui-engineer` owns the frontend, browser states, responsiveness and visual verification.
-- `backend-mentor` implements only the backend required by the active slice, tests it, and explains it.
-
-OpenCode loads their definitions from `.opencode/agents/`. Project-specific skills live in `.opencode/skills/`.
-
-Use three independent clones of the same repository:
+TenantForge uses three ordinary clones, not Git worktrees:
 
 ```text
 TenantForge-workspace/
-├── main/       # status, coordination and merged truth
+├── main/       # coordination and merged truth
 ├── front/      # UI task branches
 └── backend/    # backend task branches
 ```
 
-These are normal Git clones, not worktrees. Full setup and daily usage are in
-[the three-clone workflow](docs/three-clone-workflow.md).
-
-Open OpenCode separately in each folder. From `main/`, inspect the two queues:
-
-```text
-/task
-```
-
-From `front/`, execute only frontend work:
-
-```text
-/front-task
-/front-task F001
-```
-
-From `backend/`, execute only backend work:
-
-```text
-/backend-task
-/backend-task B001
-```
-
-Each command reads `tasks/TASKS.md`, selects the first runnable task in its queue,
-checks cross-queue dependencies and loads the linked full specification. Work runs
-directly in the owning primary agent—there is no coordinator or subagent. After
-plan approval, that same conversation creates a visible todo list and updates the
-ledger through implementation, verification, review and delivery. Once a task is
-finally approved, its ledger row becomes `done` and its completed local spec file
-is removed in the same commit.
-
-If a session is interrupted on an existing task branch, run the same command
-again in that clone, for example `/front-task F004` or `/backend-task B001`. It
-detects the matching branch and preserves the current diff.
-
-Normal task actions run without OpenCode permission popups. Both primary agents
-allow edits, package commands, builds, tests, browser tooling, Docker Compose,
-ordinary Git commits/pushes and PR creation. Destructive operations remain
-blocked: external-directory access, subagents, reset, clean, stash, rebase,
-restore, force-push, recursive removal and destructive Docker/database cleanup.
-The explicit plan and final-delivery approvals remain part of the teaching
-workflow.
-
-Focused read-only commands also remain available:
-
-- `/start-slice tasks/front/F004-refactor-persian-rtl-interface.md` inspects one active task;
-- `/review-slice tasks/backend/B001-development-login-api.md` reviews one diff;
-- `@ui-engineer` and `@backend-mentor` are also selectable as primary agents.
-
-Install the optional upstream UI skills locally in this repository:
-
-```bash
-npx skills add anthropics/skills \
-  --skill frontend-design \
-  --skill webapp-testing \
-  -a opencode --copy
-
-npx skills add shadcn/ui \
-  --skill shadcn \
-  -a opencode --copy
-
-npx skills add vercel-labs/agent-skills \
-  --skill vercel-react-best-practices \
-  -a opencode --copy
-```
-
-Review third-party skill contents and licenses before committing copied files. TenantForge's own skills are already included.
+Run `/task` from `main`, `/front-task` from `front`, and `/backend-task` from `backend`. Full setup and recovery details are in [docs/three-clone-workflow.md](docs/three-clone-workflow.md).
 
 ## Repository structure
 
 ```text
 .
-├── .opencode/
-│   ├── agents/          # Primary UI engineer and backend mentor
-│   ├── commands/        # /task, /front-task and /backend-task
-│   └── skills/          # TenantForge-specific workflows
-├── docs/                # Product, architecture and UI direction
-├── tasks/
-│   ├── TASKS.md         # Status, dependencies and active spec links
-│   ├── front/           # Executable F tasks
-│   ├── backend/         # Executable B tasks
-│   └── slices/          # Complete product/API specifications
-├── AGENTS.md            # Shared rules for every coding agent
-├── CONTRIBUTING.md
-└── opencode.jsonc       # Safe project-level OpenCode configuration
+├── .opencode/              # OpenCode agents, commands and skills
+├── docs/                   # Architecture, design direction and learning notes
+├── src/
+│   ├── api/                # ASP.NET Core API host
+│   ├── modules/            # Modular monolith modules
+│   └── web/                # React frontend
+├── tasks/                  # Ledger, executable Specs and historical source slices
+└── tests/                  # Backend integration tests
 ```
 
-Application directories are created by the first tasks rather than hidden in a prebuilt template.
-
-## Current status
-
-**F001 and B001 are complete.** F002 and B002 are the next runnable integration tasks; the Persian RTL refactors follow F003 in `tasks/TASKS.md`.
-
-## License
-
-TenantForge is released under the [MIT License](LICENSE).
+Historical slice files and learning notes are preserved as the project record after executable task Specs are delivered.

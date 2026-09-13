@@ -86,12 +86,12 @@ export function LoginPage() {
               <p className="text-sm text-muted-foreground">مدیریت هویت چندمستاجری، شفاف و قابل فهم</p>
             </div>
           </div>
-          <p className="mb-4 text-sm font-semibold tracking-[0.08em] text-primary">برش S01 — ورود توسعه</p>
+          <p className="mb-4 text-sm font-semibold tracking-[0.08em] text-primary">TenantForge</p>
           <h1 className="max-w-xl text-4xl font-semibold tracking-[-0.02em] text-foreground md:text-6xl">
-            سطح مدیریت آرام از همان نخستین ورود.
+            مدیریت هویت چندمستاجری، روشن و قابل اتکا.
           </h1>
           <p className="mt-6 max-w-xl text-base leading-8 text-muted-foreground md:text-lg">
-            با حساب مدیر توسعه وارد شوید. درخواست شما مستقیم به API TenantForge می‌رود و توکن نشست امضاشده را دریافت می‌کند.
+            وارد شوید تا کاربران، مستأجران، نقش‌ها، دعوت‌ها و گزارش فعالیت را در محدودهٔ مجاز خود مدیریت کنید.
           </p>
         </div>
       </section>
@@ -101,7 +101,7 @@ export function LoginPage() {
           <div className="mb-8 flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight">ورود</h2>
-              <p className="mt-2 text-sm text-muted-foreground">از حساب مدیر توسعه مستندشده استفاده کنید.</p>
+              <p className="mt-2 text-sm text-muted-foreground">با حساب TenantForge خود وارد شوید.</p>
             </div>
             <SecondaryButton
               type="button"
@@ -170,12 +170,14 @@ export function LoginPage() {
             </div>
           </form>
 
-          <div className="mt-5 rounded-lg border border-border bg-surface-elevated p-4 text-sm text-muted-foreground">
-            <p className="font-semibold text-foreground">مدیر توسعه مستندشده</p>
-            <p className="mt-2"><span className="font-medium text-foreground">ایمیل:</span> <bdi>{developmentAdministratorCredentials.email}</bdi></p>
-            <p><span className="font-medium text-foreground">رمز عبور:</span> <bdi>{developmentAdministratorCredentials.password}</bdi></p>
-            <p className="mt-2">نشست و توکن امضاشده آن در همین زبانه مرورگر (sessionStorage) می‌ماند تا رفتار بازیابی پوسته با تازه‌سازی صفحه قابل بررسی باشد.</p>
-          </div>
+          {import.meta.env.DEV && (
+            <div className="mt-5 rounded-lg border border-border bg-surface-elevated p-4 text-sm text-muted-foreground">
+              <p className="font-semibold text-foreground">حساب توسعه مستندشده</p>
+              <p className="mt-2"><span className="font-medium text-foreground">ایمیل:</span> <bdi>{developmentAdministratorCredentials.email}</bdi></p>
+              <p><span className="font-medium text-foreground">رمز عبور:</span> <bdi>{developmentAdministratorCredentials.password}</bdi></p>
+              <p className="mt-2">این راهنما فقط در محیط توسعه نمایش داده می‌شود. نشست همین زبانه تا خروج یا بستن مرورگر نگهداری می‌شود.</p>
+            </div>
+          )}
         </div>
       </section>
     </main>
