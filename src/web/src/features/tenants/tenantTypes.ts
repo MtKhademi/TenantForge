@@ -1,9 +1,12 @@
+import type { PaginationMeta } from '@/features/pagination/paginationTypes'
+
 /**
  * S07 tenant membership — the fixed request/response contract (F010).
  *
  * F010 mocks these exact fields; F011 connects the real B007 endpoints. The
  * shape here is the smallest contract B007 must implement, so it is the
- * source of truth both sides keep in sync.
+ * source of truth both sides keep in sync. S15 (F022/B015) adds server
+ * pagination: collection arrays are one page and `pagination` exposes totals.
  */
 
 /**
@@ -32,6 +35,7 @@ export type TenantSummary = {
 /** `GET /api/platform/tenants` — first-page collection. */
 export type TenantListResponse = {
   tenants: TenantSummary[]
+  pagination: PaginationMeta
 }
 
 /** `POST /api/platform/tenants` request body. */
@@ -85,6 +89,7 @@ export type MyTenant = {
 /** `GET /api/auth/me/tenants` — the caller's active memberships (may be `[]`). */
 export type MyTenantListResponse = {
   tenants: MyTenant[]
+  pagination: PaginationMeta
 }
 
 /**
@@ -131,4 +136,5 @@ export type TenantMember = {
 export type TenantMembersResponse = {
   tenant: TenantContext
   members: TenantMember[]
+  pagination: PaginationMeta
 }

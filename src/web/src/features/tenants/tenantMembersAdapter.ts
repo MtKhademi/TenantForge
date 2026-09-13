@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta, type PaginationQuery } from '@/features/pagination/paginationTypes'
 import {
   type TenantContext,
   type TenantMember,
@@ -21,7 +22,7 @@ import {
  * access by calling the endpoint.
  */
 export type TenantMembersAdapter = {
-  getTenantMembers(accessToken: string, tenantId: string): Promise<TenantMembersResponse>
+  getTenantMembers(accessToken: string, tenantId: string, page: PaginationQuery): Promise<TenantMembersResponse>
 }
 
 const REQUEST_TIMEOUT_MS = 8_000
@@ -127,7 +128,15 @@ function parseMembersResponse(payload: unknown): TenantMembersResponse {
   if (!Array.isArray(body.members)) {
     throw new ApiUnavailableError()
   }
-  return { tenant: parseTenantContext(body.tenant), members: body.members.map(parseMember) }
+  try {
+    return {
+      tenant: parseTenantContext(body.tenant),
+      members: body.members.map(parseMember),
+      pagination: parsePaginationMeta(body.pagination),
+    }
+  } catch {
+    throw new ApiUnavailableError()
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -150,8 +159,10 @@ async function request(path: string, init: RequestInit): Promise<Response> {
 }
 
 export const httpTenantMembersAdapter: TenantMembersAdapter = {
-  async getTenantMembers(accessToken, tenantId) {
-    const path = `/api/tenants/${encodeURIComponent(tenantId)}/members`
+  async getTenantMembers(accessToken, tenantId, page) {
+    const params = new URLSearchParams()
+    appendPaginationParams(params, page)
+    const path = `/api/tenants/${encodeURIComponent(tenantId)}/members?${params.toString()}`
     const response = await request(path, {
       method: 'GET',
       headers: { Authorization: `Bearer ${accessToken}` },

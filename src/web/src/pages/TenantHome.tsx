@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils'
  * rendered here.
  */
 export function TenantHome() {
-  const { scopes, isBusy, failure, refresh, selectTenant } = useTenantScope()
+  const { scopes, scopePagination, isBusy, failure, refresh, loadMoreScopes, selectTenant } = useTenantScope()
   const navigate = useNavigate()
   // Auto-enter only once per loaded list; a refetch must not re-trigger it.
   const autoEnteredRef = useRef(false)
@@ -95,11 +95,19 @@ export function TenantHome() {
         )}
 
         {isChooser && (
-          <ul className="space-y-3">
-            {scopes!.map((tenant) => (
-              <ScopeRow key={tenant.id} tenant={tenant} onEnter={() => selectTenant(tenant.id)} />
-            ))}
-          </ul>
+          <div className="space-y-3">
+            <ul className="space-y-3">
+              {scopes!.map((tenant) => (
+                <ScopeRow key={tenant.id} tenant={tenant} onEnter={() => selectTenant(tenant.id)} />
+              ))}
+            </ul>
+            {scopePagination?.hasNextPage && (
+              <SecondaryButton type="button" disabled={isBusy} onClick={() => loadMoreScopes()}>
+                <RefreshCw aria-hidden="true" className={cn('me-2 size-4', isBusy && 'animate-spin motion-reduce:animate-none')} />
+                بارگذاری مستأجران بیشتر
+              </SecondaryButton>
+            )}
+          </div>
         )}
       </section>
     </DashboardShell>

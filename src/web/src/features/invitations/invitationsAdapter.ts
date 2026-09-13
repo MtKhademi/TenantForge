@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta, type PaginationQuery } from '@/features/pagination/paginationTypes'
 import {
   InvitationConflictError,
   InvitationForbiddenError,
@@ -26,7 +27,7 @@ import {
  * emails.
  */
 export type InvitationAdapter = {
-  listInvitations(accessToken: string, tenantId: string): Promise<InvitationListResponse>
+  listInvitations(accessToken: string, tenantId: string, page: PaginationQuery): Promise<InvitationListResponse>
   createInvitation(accessToken: string, tenantId: string, request: CreateInvitationRequest): Promise<Invitation>
 }
 
@@ -122,7 +123,11 @@ function parseInvitationList(payload: unknown): InvitationListResponse {
   if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
   const body = payload as Record<string, unknown>
   if (!Array.isArray(body.invitations)) throw new ApiUnavailableError()
-  return { invitations: body.invitations.map(parseInvitation) }
+  try {
+    return { invitations: body.invitations.map(parseInvitation), pagination: parsePaginationMeta(body.pagination) }
+  } catch {
+    throw new ApiUnavailableError()
+  }
 }
 
 function mapServerValidation(payload: unknown): Partial<Record<keyof CreateInvitationRequest, string>> {
@@ -144,8 +149,10 @@ function mapServerValidation(payload: unknown): Partial<Record<keyof CreateInvit
 }
 
 export const httpInvitationAdapter: InvitationAdapter = {
-  async listInvitations(accessToken, tenantId) {
-    const response = await request(invitationsPath(tenantId), {
+  async listInvitations(accessToken, tenantId, page) {
+    const params = new URLSearchParams()
+    appendPaginationParams(params, page)
+    const response = await request(`${invitationsPath(tenantId)}?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(accessToken),
     })

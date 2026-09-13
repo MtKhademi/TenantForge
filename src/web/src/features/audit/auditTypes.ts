@@ -1,3 +1,5 @@
+import type { PaginationMeta } from '@/features/pagination/paginationTypes'
+
 /**
  * S10 audit log — the fixed request/response contract (F015).
  *
@@ -53,6 +55,7 @@ export type AuditEvent = {
  */
 export type AuditListResponse = {
   events: AuditEvent[]
+  pagination: PaginationMeta
 }
 
 /**
@@ -64,6 +67,8 @@ export type AuditQuery = {
   action?: AuditAction
   /** Restrict to events recorded at or after this UTC ISO timestamp. */
   fromUtc?: string
+  pageNumber: number
+  pageSize: number
 }
 
 /**

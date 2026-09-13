@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta, type PaginationQuery } from '@/features/pagination/paginationTypes'
 import { isPermissionKey } from './permissionCatalog'
 import {
   TenantRoleConflictError,
@@ -33,7 +34,7 @@ import {
  */
 export type RoleAdapter = {
   fetchPermissionCatalog(accessToken: string): Promise<PermissionCatalogResponse>
-  listRoles(accessToken: string, tenantId: string): Promise<TenantRoleListResponse>
+  listRoles(accessToken: string, tenantId: string, page: PaginationQuery): Promise<TenantRoleListResponse>
   createRole(accessToken: string, tenantId: string, request: CreateTenantRoleRequest): Promise<TenantRole>
   updateRole(accessToken: string, tenantId: string, roleId: string, request: UpdateTenantRoleRequest): Promise<TenantRole>
   assignRole(accessToken: string, tenantId: string, memberId: string, roleId: string): Promise<TenantRoleListResponse>
@@ -130,7 +131,28 @@ function parseRoleList(payload: unknown): TenantRoleListResponse {
   if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
   const body = payload as Record<string, unknown>
   if (!Array.isArray(body.roles)) throw new ApiUnavailableError()
-  return { roles: body.roles.map(parseRole) }
+  try {
+    return { roles: body.roles.map(parseRole), pagination: parsePaginationMeta(body.pagination) }
+  } catch {
+    throw new ApiUnavailableError()
+  }
+}
+
+function parseAssignmentRoleList(payload: unknown): TenantRoleListResponse {
+  if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
+  const body = payload as Record<string, unknown>
+  if (!Array.isArray(body.roles)) throw new ApiUnavailableError()
+  return {
+    roles: body.roles.map(parseRole),
+    pagination: {
+      pageNumber: 1,
+      pageSize: body.roles.length,
+      totalCount: body.roles.length,
+      totalPages: body.roles.length === 0 ? 0 : 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    },
+  }
 }
 
 function parseCurrentPermissions(payload: unknown): { permissions: PermissionKey[] } {
@@ -242,8 +264,10 @@ export const httpRoleAdapter: RoleAdapter = {
     return parseCatalog(await readJson(response))
   },
 
-  async listRoles(accessToken, tenantId) {
-    const response = await request(rolePath(tenantId), {
+  async listRoles(accessToken, tenantId, page) {
+    const params = new URLSearchParams()
+    appendPaginationParams(params, page)
+    const response = await request(`${rolePath(tenantId)}?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(accessToken),
     })
@@ -289,7 +313,7 @@ export const httpRoleAdapter: RoleAdapter = {
       headers: authHeaders(accessToken),
     })
     await mapRoleResponse(response)
-    return parseRoleList(await readJson(response))
+    return parseAssignmentRoleList(await readJson(response))
   },
 
   async unassignRole(accessToken, tenantId, memberId, roleId) {
@@ -298,7 +322,7 @@ export const httpRoleAdapter: RoleAdapter = {
       headers: authHeaders(accessToken),
     })
     await mapRoleResponse(response)
-    return parseRoleList(await readJson(response))
+    return parseAssignmentRoleList(await readJson(response))
   },
 
   async getCurrentTenantPermissions(accessToken, tenantId) {

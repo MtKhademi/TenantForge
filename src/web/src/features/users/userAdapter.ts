@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta, type PaginationQuery } from '@/features/pagination/paginationTypes'
 import {
   UserConflictError,
   type CreateUserRequest,
@@ -11,14 +12,14 @@ import {
 } from './userTypes'
 
 /**
- * S06 user management — real API data source (F009).
+ * S06 user management — real API data source (F009), paginated in S15 (F022).
  *
  * The F008 mock is gone. This adapter calls the B006 endpoints with the
  * current session bearer token and validates response bodies strictly so the
  * page never renders half-parsed data or secret material.
  */
 export type UserAdapter = {
-  listUsers(accessToken: string): Promise<UserListResponse>
+  listUsers(accessToken: string, page: PaginationQuery): Promise<UserListResponse>
   createUser(accessToken: string, request: CreateUserRequest): Promise<PlatformUser>
 }
 
@@ -108,7 +109,11 @@ function parseListResponse(payload: unknown): UserListResponse {
   if (!Array.isArray(body.users)) {
     throw new ApiUnavailableError()
   }
-  return { users: body.users.map(parseUser) }
+  try {
+    return { users: body.users.map(parseUser), pagination: parsePaginationMeta(body.pagination) }
+  } catch {
+    throw new ApiUnavailableError()
+  }
 }
 
 function mapServerValidation(payload: unknown): Partial<Record<keyof CreateUserRequest, string>> {
@@ -150,8 +155,10 @@ function authHeaders(accessToken: string) {
 }
 
 export const httpUserAdapter: UserAdapter = {
-  async listUsers(accessToken) {
-    const response = await request(USERS_PATH, {
+  async listUsers(accessToken, page) {
+    const params = new URLSearchParams()
+    appendPaginationParams(params, page)
+    const response = await request(`${USERS_PATH}?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(accessToken),
     })

@@ -10,9 +10,10 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
 import { httpAuditAdapter } from '@/features/audit/auditAdapter'
@@ -21,6 +22,8 @@ import {
   type AuditAction,
   type AuditEvent,
 } from '@/features/audit/auditTypes'
+import { recoveryPageNumber, type PaginationMeta } from '@/features/pagination/paginationTypes'
+import { useUrlPageState } from '@/features/pagination/useUrlPageState'
 import { cn } from '@/lib/utils'
 
 /**
@@ -46,7 +49,7 @@ import { cn } from '@/lib/utils'
 
 type AuditState =
   | { kind: 'loading' }
-  | { kind: 'loaded'; events: AuditEvent[] }
+  | { kind: 'loaded'; events: AuditEvent[]; pagination: PaginationMeta }
   | { kind: 'forbidden' }
   | { kind: 'unavailable' }
 
@@ -68,11 +71,20 @@ const ACTION_OPTIONS: { value: AuditAction; label: string }[] = (
   Object.keys(ACTION_META) as AuditAction[]
 ).map((value) => ({ value, label: ACTION_META[value].label }))
 
+function isAuditAction(value: unknown): value is AuditAction {
+  return typeof value === 'string' && value in ACTION_META
+}
+
 export function AuditLogPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
+  const { pageNumber, pageSize, setPageNumber, setPageSize } = useUrlPageState()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { session, signOut } = useAuth()
   const [state, setState] = useState<AuditState>({ kind: 'loading' })
-  const [filters, setFilters] = useState<AuditFilters>({ action: '', fromUtc: '' })
+  const filters: AuditFilters = {
+    action: isAuditAction(searchParams.get('action')) ? (searchParams.get('action') as AuditAction) : '',
+    fromUtc: searchParams.get('fromUtc') ?? '',
+  }
 
   const requestIdRef = useRef(0)
   const sessionRef = useRef(session)
@@ -85,6 +97,24 @@ export function AuditLogPage() {
     signOutRef.current = signOut
   }, [signOut])
 
+  const setFilters = useCallback(
+    (nextFilters: AuditFilters) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          if (nextFilters.action) next.set('action', nextFilters.action)
+          else next.delete('action')
+          if (nextFilters.fromUtc) next.set('fromUtc', nextFilters.fromUtc)
+          else next.delete('fromUtc')
+          next.set('page', '1')
+          return next
+        },
+        { replace: false },
+      )
+    },
+    [setSearchParams],
+  )
+
   const loadEvents = useCallback(() => {
     if (!tenantId) return
     const requestId = ++requestIdRef.current
@@ -93,12 +123,16 @@ export function AuditLogPage() {
     const query = {
       action: filters.action || undefined,
       fromUtc: fromUtc || undefined,
+      pageNumber,
+      pageSize,
     }
     httpAuditAdapter
       .listAuditEvents(sessionRef.current?.accessToken ?? '', tenantId, query)
       .then((response) => {
         if (requestId !== requestIdRef.current) return
-        setState({ kind: 'loaded', events: response.events })
+        setState({ kind: 'loaded', events: response.events, pagination: response.pagination })
+        const recovery = recoveryPageNumber(response.pagination)
+        if (recovery !== null && recovery !== pageNumber) setPageNumber(recovery)
       })
       .catch((error) => {
         if (requestId !== requestIdRef.current) return
@@ -112,8 +146,9 @@ export function AuditLogPage() {
         }
         setState({ kind: 'unavailable' })
       })
-  }, [tenantId, filters.action, filters.fromUtc])
+  }, [tenantId, filters.action, filters.fromUtc, pageNumber, pageSize, setPageNumber])
 
+  // oxlint-disable-next-line react-hooks/exhaustive-deps, react/set-state-in-effect -- The callback owns the loading/error state for the server-backed page request.
   useEffect(() => {
     loadEvents()
   }, [loadEvents])
@@ -155,8 +190,11 @@ export function AuditLogPage() {
             />
             <AuditTable
               events={state.events}
+              pagination={state.pagination}
               hasActiveFilter={hasActiveFilter}
               onClearFilters={() => setFilters({ action: '', fromUtc: '' })}
+              onPageChange={setPageNumber}
+              onPageSizeChange={setPageSize}
             />
           </div>
         )}
@@ -228,12 +266,18 @@ function AuditFilters({
 
 function AuditTable({
   events,
+  pagination,
   hasActiveFilter,
   onClearFilters,
+  onPageChange,
+  onPageSizeChange,
 }: {
   events: AuditEvent[]
+  pagination: PaginationMeta
   hasActiveFilter: boolean
   onClearFilters: () => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: 10 | 20 | 50 | 100) => void
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
@@ -281,6 +325,12 @@ function AuditTable({
           </table>
         </div>
       )}
+      <PaginationControls
+        meta={pagination}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        label="گزارش فعالیت"
+      />
     </div>
   )
 }

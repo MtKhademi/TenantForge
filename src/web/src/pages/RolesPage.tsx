@@ -15,9 +15,12 @@ import { useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { TextInput } from '@/components/ui/TextInput'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
+import { recoveryPageNumber, type PaginationMeta } from '@/features/pagination/paginationTypes'
+import { useUrlPageState } from '@/features/pagination/useUrlPageState'
 import { httpRoleAdapter } from '@/features/roles/roleAdapter'
 import { usePermissionCatalog, useTenantPermissions } from '@/features/roles/tenantPermissions'
 import {
@@ -56,7 +59,14 @@ import { cn } from '@/lib/utils'
 
 type RolesState =
   | { kind: 'loading' }
-  | { kind: 'loaded'; roles: TenantRole[]; members: TenantMember[]; tenant: TenantMembersResponse['tenant'] }
+  | {
+      kind: 'loaded'
+      roles: TenantRole[]
+      rolePagination: PaginationMeta
+      members: TenantMember[]
+      memberPagination: PaginationMeta
+      tenant: TenantMembersResponse['tenant']
+    }
   | { kind: 'forbidden' }
   | { kind: 'unavailable' }
 
@@ -72,6 +82,8 @@ type RoleFormValues = z.infer<typeof roleSchema>
 
 export function RolesPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
+  const rolePage = useUrlPageState()
+  const memberPage = useUrlPageState('member')
   const { session, signOut } = useAuth()
   const { catalog: catalogState, retryCatalog } = usePermissionCatalog()
   const permissions = useTenantPermissions(tenantId)
@@ -122,13 +134,30 @@ export function RolesPage() {
     setFormError(null)
 
     Promise.all([
-      httpRoleAdapter.listRoles(sessionRef.current?.accessToken ?? '', tenantId),
-      httpTenantMembersAdapter.getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId),
+      httpRoleAdapter.listRoles(sessionRef.current?.accessToken ?? '', tenantId, {
+        pageNumber: rolePage.pageNumber,
+        pageSize: rolePage.pageSize,
+      }),
+      httpTenantMembersAdapter.getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId, {
+        pageNumber: memberPage.pageNumber,
+        pageSize: memberPage.pageSize,
+      }),
     ])
       .then(([roleResponse, memberResponse]) => {
         if (requestId !== requestIdRef.current) return
         const roles = roleResponse.roles
-        setState({ kind: 'loaded', roles, members: memberResponse.members, tenant: memberResponse.tenant })
+        setState({
+          kind: 'loaded',
+          roles,
+          rolePagination: roleResponse.pagination,
+          members: memberResponse.members,
+          memberPagination: memberResponse.pagination,
+          tenant: memberResponse.tenant,
+        })
+        const roleRecovery = recoveryPageNumber(roleResponse.pagination)
+        const memberRecovery = recoveryPageNumber(memberResponse.pagination)
+        if (roleRecovery !== null && roleRecovery !== rolePage.pageNumber) rolePage.setPageNumber(roleRecovery)
+        if (memberRecovery !== null && memberRecovery !== memberPage.pageNumber) memberPage.setPageNumber(memberRecovery)
         setSelectedRoleId((current) => current ?? roles.find((role) => role.kind === 'custom')?.id ?? roles[0]?.id ?? null)
       })
       .catch((error) => {
@@ -143,7 +172,7 @@ export function RolesPage() {
         }
         setState({ kind: 'unavailable' })
       })
-  }, [tenantId])
+  }, [tenantId, rolePage, memberPage])
 
   useEffect(() => {
     loadRoles()
@@ -223,10 +252,10 @@ export function RolesPage() {
         permissions.refresh()
       } else {
         const created = await httpRoleAdapter.createRole(sessionRef.current?.accessToken ?? '', tenantId, values)
-        if (state.kind === 'loaded') replaceRoles([...state.roles, created])
         setSelectedRoleId(created.id)
         reset({ name: created.name, permissionKeys: created.permissionKeys })
-        setSuccess(`نقش ${created.name} ایجاد شد.`)
+        setSuccess(`نقش ${created.name} ایجاد شد؛ اگر با صفحهٔ فعلی هم‌خوان باشد پس از به‌روزرسانی نمایش داده می‌شود.`)
+        void loadRoles()
         permissions.refresh()
       }
     } catch (error) {
@@ -249,7 +278,7 @@ export function RolesPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [permissions, replaceRoles, reset, selectedRole, setError, state, tenantId])
+  }, [loadRoles, permissions, replaceRoles, reset, selectedRole, setError, state, tenantId])
 
   const submitRole = useCallback((event: FormEvent<HTMLFormElement>) => {
     void handleSubmit(onSubmit)(event)
@@ -262,10 +291,12 @@ export function RolesPage() {
     setSuccess(null)
     setFormError(null)
     try {
-      const response = role.memberIds.includes(memberId)
-        ? await httpRoleAdapter.unassignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
-        : await httpRoleAdapter.assignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
-      replaceRoles(response.roles)
+      if (role.memberIds.includes(memberId)) {
+        await httpRoleAdapter.unassignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
+      } else {
+        await httpRoleAdapter.assignRole(sessionRef.current?.accessToken ?? '', tenantId, memberId, role.id)
+      }
+      void loadRoles()
       setSuccess('انتساب نقش به‌روزرسانی شد.')
       permissions.refresh()
     } catch (error) {
@@ -279,7 +310,7 @@ export function RolesPage() {
     } finally {
       setIsAssigning(false)
     }
-  }, [permissions, replaceRoles, tenantId])
+  }, [loadRoles, permissions, tenantId])
 
   return (
     <DashboardShell>
@@ -328,7 +359,14 @@ export function RolesPage() {
             )}
 
             <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_1fr]">
-              <RoleList roles={state.roles} selectedRoleId={selectedRole?.id ?? null} onSelect={setSelectedRoleId} />
+              <RoleList
+                roles={state.roles}
+                selectedRoleId={selectedRole?.id ?? null}
+                pagination={state.rolePagination}
+                onSelect={setSelectedRoleId}
+                onPageChange={rolePage.setPageNumber}
+                onPageSizeChange={rolePage.setPageSize}
+              />
 
               <form className="space-y-5 rounded-xl border border-border bg-surface p-5 shadow-soft" onSubmit={submitRole} noValidate>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -416,7 +454,10 @@ export function RolesPage() {
             <AssignmentPanel
               members={state.members}
               roles={state.roles}
+              pagination={state.memberPagination}
               onToggle={toggleAssignment}
+              onPageChange={memberPage.setPageNumber}
+              onPageSizeChange={memberPage.setPageSize}
               busy={isAssigning || !canManageRoles}
               error={assignmentError}
             />
@@ -427,7 +468,7 @@ export function RolesPage() {
   )
 }
 
-function RoleList({ roles, selectedRoleId, onSelect }: { roles: TenantRole[]; selectedRoleId: string | null; onSelect: (id: string) => void }) {
+function RoleList({ roles, selectedRoleId, pagination, onSelect, onPageChange, onPageSizeChange }: { roles: TenantRole[]; selectedRoleId: string | null; pagination: PaginationMeta; onSelect: (id: string) => void; onPageChange: (page: number) => void; onPageSizeChange: (size: 10 | 20 | 50 | 100) => void }) {
   const customCount = roles.filter((role) => role.kind === 'custom').length
   return (
     <aside className="rounded-xl border border-border bg-surface p-4 shadow-soft" aria-label="فهرست نقش‌ها">
@@ -436,6 +477,11 @@ function RoleList({ roles, selectedRoleId, onSelect }: { roles: TenantRole[]; se
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"><bdi>{customCount}</bdi> سفارشی</span>
       </div>
       <div className="space-y-2">
+        {roles.length === 0 && (
+          <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+            نقشی در این صفحه وجود ندارد.
+          </p>
+        )}
         {roles.map((role) => (
           <button
             key={role.id}
@@ -455,6 +501,14 @@ function RoleList({ roles, selectedRoleId, onSelect }: { roles: TenantRole[]; se
             <span className="mt-2 block text-xs text-muted-foreground"><bdi>{role.permissionKeys.length}</bdi> مجوز · <bdi>{role.memberIds.length}</bdi> عضو</span>
           </button>
         ))}
+      </div>
+      <div className="-mx-4 mt-4">
+        <PaginationControls
+          meta={pagination}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          label="نقش‌ها"
+        />
       </div>
     </aside>
   )
@@ -547,7 +601,7 @@ function MatrixSkeleton() {
   )
 }
 
-function AssignmentPanel({ members, roles, onToggle, busy, error }: { members: TenantMember[]; roles: TenantRole[]; onToggle: (memberId: string, role: TenantRole) => void; busy: boolean; error: string | null }) {
+function AssignmentPanel({ members, roles, pagination, onToggle, onPageChange, onPageSizeChange, busy, error }: { members: TenantMember[]; roles: TenantRole[]; pagination: PaginationMeta; onToggle: (memberId: string, role: TenantRole) => void; onPageChange: (page: number) => void; onPageSizeChange: (size: 10 | 20 | 50 | 100) => void; busy: boolean; error: string | null }) {
   return (
     <section className="rounded-xl border border-border bg-surface p-5 shadow-soft" aria-label="انتساب نقش به اعضا">
       <div className="flex items-start gap-3">
@@ -568,6 +622,13 @@ function AssignmentPanel({ members, roles, onToggle, busy, error }: { members: T
             </tr>
           </thead>
           <tbody>
+            {members.length === 0 && (
+              <tr>
+                <td colSpan={Math.max(roles.length + 1, 1)} className="px-3 py-8 text-center text-muted-foreground">
+                  عضوی در این صفحه وجود ندارد.
+                </td>
+              </tr>
+            )}
             {members.map((member) => (
               <tr key={member.id} className="border-b border-border last:border-b-0">
                 <th scope="row" className="px-3 py-3 text-start font-medium">
@@ -597,6 +658,15 @@ function AssignmentPanel({ members, roles, onToggle, busy, error }: { members: T
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="-mx-5 mt-4">
+        <PaginationControls
+          meta={pagination}
+          disabled={busy}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          label="اعضا برای انتساب نقش"
+        />
       </div>
     </section>
   )

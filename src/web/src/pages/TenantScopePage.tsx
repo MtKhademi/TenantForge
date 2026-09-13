@@ -13,9 +13,12 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DashboardShell } from '@/components/shell/DashboardShell'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { SecondaryButton } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 import { SessionExpiredError } from '@/features/auth/authTypes'
+import { recoveryPageNumber } from '@/features/pagination/paginationTypes'
+import { useUrlPageState } from '@/features/pagination/useUrlPageState'
 import { useTenantPermissions } from '@/features/roles/tenantPermissions'
 import { AUDIT_VIEW_KEY, INVITATIONS_VIEW_KEY, type PermissionKey } from '@/features/roles/roleTypes'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
@@ -51,7 +54,8 @@ type MembersState =
 
 export function TenantScopePage() {
   const { tenantId } = useParams<{ tenantId: string }>()
-  const { isPlatformAdmin, scopes, getScopeById, selectHome } = useTenantScope()
+  const { pageNumber, pageSize, setPageNumber, setPageSize } = useUrlPageState()
+  const { isPlatformAdmin, selectHome } = useTenantScope()
   const { session, signOut } = useAuth()
   // S12 (F019): the in-page scope tabs follow the server-resolved tenant
   // permissions — دعوت‌ها needs `IAM.Invitations.View`, گزارش فعالیت needs
@@ -77,11 +81,15 @@ export function TenantScopePage() {
   useEffect(() => {
     if (!tenantId) return
     const requestId = ++requestIdRef.current
+    // oxlint-disable-next-line react/set-state-in-effect -- This request effect owns the visible loading state for tenant member pagination.
     setState({ kind: 'loading' })
     httpTenantMembersAdapter
-      .getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId)
+      .getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId, { pageNumber, pageSize })
       .then((data) => {
-        if (requestId === requestIdRef.current) setState({ kind: 'loaded', data })
+        if (requestId !== requestIdRef.current) return
+        setState({ kind: 'loaded', data })
+        const recovery = recoveryPageNumber(data.pagination)
+        if (recovery !== null && recovery !== pageNumber) setPageNumber(recovery)
       })
       .catch((error) => {
         if (requestId !== requestIdRef.current) return
@@ -95,7 +103,7 @@ export function TenantScopePage() {
         }
         setState({ kind: 'unavailable' })
       })
-  }, [tenantId])
+  }, [tenantId, pageNumber, pageSize, setPageNumber])
 
   const retry = useCallback(() => {
     // Re-run the effect by bumping a counter would require extra plumbing; the
@@ -105,9 +113,12 @@ export function TenantScopePage() {
     const requestId = ++requestIdRef.current
     setState({ kind: 'loading' })
     httpTenantMembersAdapter
-      .getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId)
+      .getTenantMembers(sessionRef.current?.accessToken ?? '', tenantId, { pageNumber, pageSize })
       .then((data) => {
-        if (requestId === requestIdRef.current) setState({ kind: 'loaded', data })
+        if (requestId !== requestIdRef.current) return
+        setState({ kind: 'loaded', data })
+        const recovery = recoveryPageNumber(data.pagination)
+        if (recovery !== null && recovery !== pageNumber) setPageNumber(recovery)
       })
       .catch((error) => {
         if (requestId !== requestIdRef.current) return
@@ -117,20 +128,12 @@ export function TenantScopePage() {
         }
         setState({ kind: error instanceof TenantAccessDeniedError ? 'forbidden' : 'unavailable' })
       })
-  }, [tenantId])
+  }, [tenantId, pageNumber, pageSize, setPageNumber])
 
-  // "Invalid selection" means the URL's tenant id is not in the signed-in
-  // user's own scope list (admin platform list, or the member's memberships).
-  // It is checked only once the scope list has settled: before that, a valid
-  // tenant must still be able to render its members, so we never declare an
-  // unknown id merely because the list has not loaded yet. A tenant the user
-  // does not belong to shows this denial without rendering any member data.
-  const scopeSettled = scopes !== null
-  const invalidSelection =
-    scopeSettled &&
-    state.kind !== 'loading' &&
-    tenantId !== undefined &&
-    getScopeById(tenantId) === null
+  // F022/S15: the scope list is paginated, so page-1 absence is not proof that
+  // a deep-linked tenant is invalid. The server-owned members request remains
+  // the authority: unknown, inactive and non-member tenants all render the same
+  // non-leaking 403 path below.
 
   // S12 (F019): a scope tab is a real link only when the server-resolved
   // permission set has settled and grants the key; while resolving (or after
@@ -199,25 +202,35 @@ export function TenantScopePage() {
           </nav>
         )}
 
-        {state.kind === 'loading' && !invalidSelection && <MembersSkeleton />}
-
-        {invalidSelection ? (
-          <InvalidSelection onRecover={selectHome} isPlatformAdmin={isPlatformAdmin} />
-        ) : (
-          <>
-            {state.kind === 'loaded' && <MembersLoaded data={state.data} />}
-            {state.kind === 'forbidden' && (
-              <ForbiddenTenant onRecover={selectHome} isPlatformAdmin={isPlatformAdmin} />
-            )}
-            {state.kind === 'unavailable' && <Unavailable onRetry={retry} />}
-          </>
+        {state.kind === 'loading' && <MembersSkeleton />}
+        {state.kind === 'loaded' && (
+          <MembersLoaded
+            data={state.data}
+            isBusy={false}
+            onPageChange={setPageNumber}
+            onPageSizeChange={setPageSize}
+          />
         )}
+        {state.kind === 'forbidden' && (
+          <ForbiddenTenant onRecover={selectHome} isPlatformAdmin={isPlatformAdmin} />
+        )}
+        {state.kind === 'unavailable' && <Unavailable onRetry={retry} />}
       </section>
     </DashboardShell>
   )
 }
 
-function MembersLoaded({ data }: { data: TenantMembersResponse }) {
+function MembersLoaded({
+  data,
+  isBusy,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  data: TenantMembersResponse
+  isBusy: boolean
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: 10 | 20 | 50 | 100) => void
+}) {
   const { tenant, members } = data
   return (
     <div className="space-y-4">
@@ -247,8 +260,9 @@ function MembersLoaded({ data }: { data: TenantMembersResponse }) {
         دسترسی به این داده فقط با عضویت فعال شما در این مستأجر تأیید شده است؛ انتخاب محدوده هرگز دسترسی نمی‌بخشد.
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-soft">
-        <table className="w-full min-w-[40rem] text-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] text-sm">
           <caption className="sr-only">اعضای مستأجر {tenant.name}</caption>
           <thead>
             <tr className="border-b border-border text-start">
@@ -269,12 +283,20 @@ function MembersLoaded({ data }: { data: TenantMembersResponse }) {
               members.map((member) => <MemberRow key={member.id} member={member} />)
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
+        <PaginationControls
+          meta={data.pagination}
+          disabled={isBusy}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          label="اعضای مستأجر"
+        />
       </div>
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Users aria-hidden="true" className="size-3.5" />
-        <bdi>{members.length}</bdi> عضو
+        <bdi>{new Intl.NumberFormat('fa-IR').format(data.pagination.totalCount)}</bdi> عضو کل
       </p>
     </div>
   )
@@ -341,33 +363,6 @@ function ForbiddenTenant({
           </p>
           <SecondaryButton type="button" className="mt-4" onClick={onRecover}>
             {isPlatformAdmin ? 'بازگشت به فهرست مستأجران' : 'بازگشت به مستأجران من'}
-          </SecondaryButton>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function InvalidSelection({
-  onRecover,
-  isPlatformAdmin,
-}: {
-  onRecover: () => void
-  isPlatformAdmin: boolean
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-6 shadow-soft" role="alert">
-      <div className="flex items-start gap-4">
-        <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <Building2 aria-hidden="true" className="size-6" />
-        </span>
-        <div className="space-y-1.5">
-          <p className="text-sm font-semibold">مستأجر یافت نشد</p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            این محدوده در فهرست مستأجران شما موجود نیست.
-          </p>
-          <SecondaryButton type="button" className="mt-4" onClick={onRecover}>
-            {isPlatformAdmin ? 'بازگشت به پلتفرم' : 'بازگشت به مستأجران من'}
           </SecondaryButton>
         </div>
       </div>

@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta, type PaginationQuery } from '@/features/pagination/paginationTypes'
 import {
   TenantConflictError,
   type CreateTenantRequest,
@@ -21,7 +22,7 @@ import {
  * to swap data sources.
  */
 export type TenantAdapter = {
-  listTenants(accessToken: string): Promise<TenantListResponse>
+  listTenants(accessToken: string, page: PaginationQuery): Promise<TenantListResponse>
   createTenant(accessToken: string, request: CreateTenantRequest): Promise<TenantSummary>
 }
 
@@ -117,7 +118,11 @@ function parseListResponse(payload: unknown): TenantListResponse {
   if (!Array.isArray(body.tenants)) {
     throw new ApiUnavailableError()
   }
-  return { tenants: body.tenants.map(parseTenant) }
+  try {
+    return { tenants: body.tenants.map(parseTenant), pagination: parsePaginationMeta(body.pagination) }
+  } catch {
+    throw new ApiUnavailableError()
+  }
 }
 
 function mapServerValidation(payload: unknown): Partial<Record<keyof CreateTenantRequest, string>> {
@@ -159,8 +164,10 @@ function authHeaders(accessToken: string) {
 }
 
 export const httpTenantAdapter: TenantAdapter = {
-  async listTenants(accessToken) {
-    const response = await request(TENANTS_PATH, {
+  async listTenants(accessToken, page) {
+    const params = new URLSearchParams()
+    appendPaginationParams(params, page)
+    const response = await request(`${TENANTS_PATH}?${params.toString()}`, {
       method: 'GET',
       headers: authHeaders(accessToken),
     })

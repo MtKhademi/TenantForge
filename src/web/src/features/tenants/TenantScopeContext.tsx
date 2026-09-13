@@ -11,9 +11,10 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthContext'
 import { SessionExpiredError } from '@/features/auth/authTypes'
+import { DEFAULT_PAGE_SIZE, type PaginationMeta } from '@/features/pagination/paginationTypes'
 import { httpTenantAdapter, TenantForbiddenError } from './tenantAdapter'
 import { httpTenantDiscoveryAdapter } from './tenantDiscoveryAdapter'
-import type { MembershipRole, TenantSummary } from './tenantTypes'
+import type { MembershipRole } from './tenantTypes'
 
 /**
  * S07 tenant scope — stable client context (agreed in F010, kept by F011/B007),
@@ -23,9 +24,8 @@ import type { MembershipRole, TenantSummary } from './tenantTypes'
  * switcher (in the shell header), the in-shell membership chooser and the
  * tenants page all read the same in-flight/loaded data:
  *
- * - a **platform administrator** reads the full platform tenant list
- *   (`GET /api/platform/tenants`) — both the rich `platformTenants` (with
- *   member counts / timestamps) and the switcher's `scopes`;
+ * - a **platform administrator** reads the platform tenant discovery pages
+ *   (`GET /api/platform/tenants`) and normalizes them into switcher `scopes`;
  * - an **ordinary account** reads only its own active memberships
  *   (`GET /api/auth/me/tenants`) and **never** calls the platform list, so an
  *   ordinary login/reload makes no platform request and no 403.
@@ -69,17 +69,18 @@ export type TenantScopeState = {
    * only for a platform administrator; `null` for ordinary accounts, who never
    * call the platform list.
    */
-  platformTenants: TenantSummary[] | null
-  /** True while any scope fetch is in flight (initial or refresh). */
+  /** Metadata for the loaded scope page(s), null until the first fetch settles. */
+  scopePagination: PaginationMeta | null
+  /** True while any scope fetch is in flight (initial, refresh or load-more). */
   isBusy: boolean
   /** Set only when a fetch failed and no previous data is on screen. */
   failure: 'unavailable' | 'forbidden' | null
-  /** Re-fetch (e.g. after creating a tenant). Superseding is safe. */
+  /** Re-fetch page 1 (e.g. after creating a tenant). Superseding is safe. */
   refresh(): void
-  /** Look up a scope by id; `null` when unknown. */
+  /** Load the next bounded page of scope options when available. */
+  loadMoreScopes(): void
+  /** Look up a scope by id; `null` when unknown or not loaded yet. */
   getScopeById(id: string): ScopeEntry | null
-  /** Look up a platform tenant by id; `null` for non-admins or unknown. */
-  getPlatformTenantById(id: string): TenantSummary | null
   /** Navigate into a tenant's scoped shell (selection only). */
   selectTenant(id: string): void
   /** Navigate back to the account's home (`/`): admin → dashboard, member → chooser. */
@@ -98,7 +99,7 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
   const isPlatformAdmin = session?.user.isPlatformAdmin ?? false
 
   const [scopes, setScopes] = useState<ScopeEntry[] | null>(null)
-  const [platformTenants, setPlatformTenants] = useState<TenantSummary[] | null>(null)
+  const [scopePagination, setScopePagination] = useState<PaginationMeta | null>(null)
   const [isBusy, setIsBusy] = useState(true)
   const [failure, setFailure] = useState<'unavailable' | 'forbidden' | null>(null)
 
@@ -130,30 +131,31 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
    * tenant list; ordinary account → `GET /api/auth/me/tenants`. Both resolve to
    * the same normalized shape so callers never need to know which one ran.
    */
-  const fetchCurrent = useCallback(async () => {
+  const fetchCurrent = useCallback(async (pageNumber: number) => {
     const token = sessionRef.current?.accessToken ?? ''
+    const page = { pageNumber, pageSize: DEFAULT_PAGE_SIZE }
     if (isPlatformAdminRef.current) {
-      const response = await httpTenantAdapter.listTenants(token)
-      return { scopes: response.tenants.map(toScopeEntry), platform: response.tenants }
+      const response = await httpTenantAdapter.listTenants(token, page)
+      return { scopes: response.tenants.map(toScopeEntry), pagination: response.pagination }
     }
-    const response = await httpTenantDiscoveryAdapter.listMyTenants(token)
+    const response = await httpTenantDiscoveryAdapter.listMyTenants(token, page)
     const scopes = response.tenants.map((tenant) => ({
       id: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
       membershipRole: tenant.membershipRole,
     }))
-    return { scopes, platform: null as TenantSummary[] | null }
+    return { scopes, pagination: response.pagination }
   }, [])
 
   /** Initial fetch: `isBusy` is already true at mount, so no sync setState. */
   const startInitialFetch = useCallback(() => {
     const requestId = ++listRequestIdRef.current
-    return fetchCurrent()
+    return fetchCurrent(1)
       .then((result) => {
         if (requestId !== listRequestIdRef.current) return
         setScopes(result.scopes)
-        setPlatformTenants(result.platform)
+        setScopePagination(result.pagination)
         setFailure(null)
       })
       .catch((error) => {
@@ -170,11 +172,11 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
     const requestId = ++listRequestIdRef.current
     setIsBusy(true)
     setFailure(null)
-    return fetchCurrent()
+    return fetchCurrent(1)
       .then((result) => {
         if (requestId !== listRequestIdRef.current) return
         setScopes(result.scopes)
-        setPlatformTenants(result.platform)
+        setScopePagination(result.pagination)
       })
       .catch((error) => {
         if (requestId !== listRequestIdRef.current) return
@@ -185,6 +187,31 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
       })
   }, [fetchCurrent, handleFailure])
 
+  const loadMoreScopes = useCallback(() => {
+    const nextPage = scopePagination?.hasNextPage ? scopePagination.pageNumber + 1 : null
+    if (nextPage === null || isBusy) return
+    const requestId = ++listRequestIdRef.current
+    setIsBusy(true)
+    setFailure(null)
+    return fetchCurrent(nextPage)
+      .then((result) => {
+        if (requestId !== listRequestIdRef.current) return
+        setScopes((current) => {
+          const byId = new Map((current ?? []).map((scope) => [scope.id, scope]))
+          for (const scope of result.scopes) byId.set(scope.id, scope)
+          return [...byId.values()]
+        })
+        setScopePagination(result.pagination)
+      })
+      .catch((error) => {
+        if (requestId !== listRequestIdRef.current) return
+        handleFailure(error)
+      })
+      .finally(() => {
+        if (requestId === listRequestIdRef.current) setIsBusy(false)
+      })
+  }, [fetchCurrent, handleFailure, isBusy, scopePagination])
+
   useEffect(() => {
     void startInitialFetch()
   }, [startInitialFetch])
@@ -194,10 +221,6 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
     [scopes],
   )
 
-  const getPlatformTenantById = useCallback(
-    (id: string) => platformTenants?.find((tenant) => tenant.id === id) ?? null,
-    [platformTenants],
-  )
 
   const selectTenant = useCallback(
     (id: string) => {
@@ -214,24 +237,24 @@ export function TenantScopeProvider({ children }: { children: ReactNode }) {
     () => ({
       isPlatformAdmin,
       scopes,
-      platformTenants,
+      scopePagination,
       isBusy,
       failure,
       refresh,
+      loadMoreScopes,
       getScopeById,
-      getPlatformTenantById,
       selectTenant,
       selectHome,
     }),
     [
       isPlatformAdmin,
       scopes,
-      platformTenants,
+      scopePagination,
       isBusy,
       failure,
       refresh,
+      loadMoreScopes,
       getScopeById,
-      getPlatformTenantById,
       selectTenant,
       selectHome,
     ],
