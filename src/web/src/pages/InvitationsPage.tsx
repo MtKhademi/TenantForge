@@ -577,8 +577,7 @@ function ForbiddenInvitations() {
         <div className="space-y-1.5">
           <p className="text-sm font-semibold">مدیریت دعوت‌ها مجاز نیست</p>
           <p className="text-sm leading-6 text-muted-foreground">
-            حساب فعلی مجوز دعوت در این مستأجر را ندارد. مخفی‌سازی کنترل‌های UI امنیت محسوب نمی‌شود؛
-            B010 باید همین عملیات را سمت سرور با 403 رد کند.
+            حساب فعلی مجوز مشاهدهٔ دعوت‌های این مستأجر را ندارد. سرور این درخواست را بدون افشای فهرست دعوت‌ها رد کرده است.
           </p>
         </div>
       </div>

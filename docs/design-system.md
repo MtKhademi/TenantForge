@@ -4,11 +4,20 @@
 
 TenantForge should look like a calm, capable B2B SaaS product—not a generic admin template and not a decorative AI landing page.
 
-The visual personality is precise, quiet and trustworthy. Dense administration screens remain readable through strong hierarchy and spacing rather than excessive cards, gradients or shadows.
+The visual personality is precise, quiet and trustworthy. Dense administration screens remain readable through strong hierarchy and spacing rather than excessive cards, gradients or shadows. Product screens should explain the user's next action, not expose task IDs, implementation progress or backend internals.
+
+## Language and direction
+
+The current product interface is Persian and right-to-left. Keep reusable layout code direction-aware:
+
+- use logical properties and utilities (`start`, `end`, `ms`, `me`, `ps`, `pe`) instead of physical left/right assumptions;
+- preserve `bdi` and `dir="ltr"` for emails, slugs, codes, timestamps and other identifiers;
+- localize built-in role/status labels while leaving user-entered names untouched;
+- keep development-only helper copy behind environment checks so production UI is product-facing.
 
 ## Foundations
 
-Use design tokens instead of unrelated literal values. The UI foundation task must define tokens for:
+Use design tokens instead of unrelated literal values. The UI foundation defines tokens for:
 
 - canvas, surface and elevated surface;
 - primary and muted text;
@@ -23,11 +32,13 @@ Start with a neutral slate foundation and one restrained indigo/blue brand accen
 
 ## Layout
 
-- Desktop uses a collapsible left sidebar and a compact top header.
-- Mobile uses a drawer navigation and preserves the primary page action.
+- Desktop uses a right sidebar because the interface is RTL.
+- The desktop sidebar can collapse to an icon rail; accessible names and tooltips must remain available.
+- Mobile uses a drawer navigation and preserves access to the primary page action.
 - Page titles, descriptions and actions share a repeatable header pattern.
 - Tables and forms should not be wrapped in unnecessary nested cards.
 - Empty space should clarify grouping, not inflate page height.
+- Wide tables may scroll horizontally inside their own surface, but they must not widen the viewport.
 
 ## Components
 
@@ -55,7 +66,7 @@ Every data-driven screen considers:
 - forbidden `403`;
 - success feedback.
 
-Only states relevant to the current slice must be implemented; future pages are not prebuilt.
+Only states relevant to the current slice must be implemented; future pages are not prebuilt. Denied states should be honest and non-leaking: explain that access is unavailable without exposing implementation task IDs or implying that UI hiding is authorization.
 
 ## Responsiveness and direction
 
@@ -65,7 +76,7 @@ Validate at minimum:
 - 1024 × 768 tablet;
 - 390 × 844 mobile.
 
-Layout and components must remain compatible with both LTR and RTL direction. English is the first interface language, but physical left/right assumptions should be avoided in reusable primitives.
+Layouts and components must remain compatible with both LTR and RTL direction, even though Persian RTL is the current product language. Avoid physical edge assumptions in reusable primitives.
 
 ## Visual anti-patterns
 
@@ -78,7 +89,8 @@ Avoid:
 - emoji used as the icon system;
 - random spacing values;
 - animation that delays routine administration;
-- copied dashboard-template sections unrelated to the active task.
+- copied dashboard-template sections unrelated to the active task;
+- visible task IDs, backend slice IDs or fake implementation affordances in product screens.
 
 ## Visual verification
 

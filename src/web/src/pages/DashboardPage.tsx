@@ -116,10 +116,10 @@ export function DashboardPage() {
           <div className="max-w-2xl">
             <p className="text-sm font-semibold text-primary">خلاصه سیستم</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">
-              وضعیت فعلی محیط توسعه
+              وضعیت سامانه
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              فقط اطلاعاتی که این مرحله از سیستم به‌صورت واقعی در دسترس دارد نمایش داده می‌شود؛ هیچ شاخص تحلیلی ساخته‌شده‌ای وجود ندارد.
+              خلاصهٔ زندهٔ محیط اجرا و وضعیت API؛ فقط داده‌های واقعی سامانه نمایش داده می‌شود.
             </p>
           </div>
           <SecondaryButton
@@ -169,9 +169,9 @@ export function DashboardPage() {
                 icon={<Server aria-hidden="true" className="size-5" />}
                 label="محیط"
               >
-                <bdi className="text-2xl font-semibold tracking-tight">
-                  {summary.environment}
-                </bdi>
+                  <bdi className="text-2xl font-semibold tracking-tight">
+                    {formatEnvironment(summary.environment)}
+                  </bdi>
               </SummaryCard>
 
               <SummaryCard
@@ -187,7 +187,7 @@ export function DashboardPage() {
                     )}
                   />
                   <bdi className="text-2xl font-semibold tracking-tight">
-                    {summary.apiStatus}
+                    {formatApiStatus(summary.apiStatus)}
                   </bdi>
                 </span>
               </SummaryCard>
@@ -282,6 +282,20 @@ function SummarySkeleton() {
       <div className="h-3.5 w-44 animate-pulse rounded bg-muted motion-reduce:animate-none" />
     </div>
   )
+}
+
+function formatEnvironment(value: string) {
+  if (value === 'Development') return 'توسعه'
+  if (value === 'Production') return 'تولید'
+  if (value === 'Staging') return 'آماده‌سازی'
+  return value
+}
+
+function formatApiStatus(value: string) {
+  if (value === 'Healthy') return 'سالم'
+  if (value === 'Degraded') return 'ناپایدار'
+  if (value === 'Unhealthy') return 'ناسالم'
+  return value
 }
 
 /** Persian (fa-IR) digits for contract numbers. */
