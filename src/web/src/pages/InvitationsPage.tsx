@@ -15,10 +15,13 @@ import { useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { TextInput } from '@/components/ui/TextInput'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
 import { httpInvitationAdapter } from '@/features/invitations/invitationsAdapter'
+import { recoveryPageNumber, type PaginationMeta } from '@/features/pagination/paginationTypes'
+import { useUrlPageState } from '@/features/pagination/useUrlPageState'
 import {
   InvitationConflictError,
   InvitationForbiddenError,
@@ -66,14 +69,14 @@ import { cn } from '@/lib/utils'
 
 type InvitationsState =
   | { kind: 'loading' }
-  | { kind: 'loaded'; invitations: Invitation[] }
+  | { kind: 'loaded'; invitations: Invitation[]; pagination: PaginationMeta }
   | { kind: 'forbidden' }
   | { kind: 'unavailable' }
 
 type RoleChoicesState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'loaded'; choices: InvitationRoleChoice[] }
+  | { kind: 'loaded'; choices: InvitationRoleChoice[]; pagination: PaginationMeta }
   | { kind: 'error' }
 
 type InvitationRoleChoice = {
@@ -124,6 +127,8 @@ type InviteFormValues = z.infer<typeof inviteSchema>
 
 export function InvitationsPage() {
   const { tenantId } = useParams<{ tenantId: string }>()
+  const { pageNumber, pageSize, setPageNumber, setPageSize } = useUrlPageState()
+  const roleChoicePage = useUrlPageState('roleChoice')
   const { session, signOut } = useAuth()
   // S12 (F019): the list follows `IAM.Invitations.View` (already enforced by
   // the route guard/navigation); the create form follows `IAM.Invitations.Create`.
@@ -163,6 +168,7 @@ export function InvitationsPage() {
     signOutRef.current = signOut
   }, [signOut])
 
+  // oxlint-disable-next-line react/set-state-in-effect -- Tenant changes must cancel pending submit UI and reset the form state.
   useEffect(() => {
     submitRequestIdRef.current += 1
     reset({ email: '', role: '' })
@@ -179,10 +185,12 @@ export function InvitationsPage() {
     setCreated(null)
 
     httpInvitationAdapter
-      .listInvitations(sessionRef.current?.accessToken ?? '', tenantId)
+      .listInvitations(sessionRef.current?.accessToken ?? '', tenantId, { pageNumber, pageSize })
       .then((response) => {
         if (requestId !== requestIdRef.current) return
-        setState({ kind: 'loaded', invitations: response.invitations })
+        setState({ kind: 'loaded', invitations: response.invitations, pagination: response.pagination })
+        const recovery = recoveryPageNumber(response.pagination)
+        if (recovery !== null && recovery !== pageNumber) setPageNumber(recovery)
       })
       .catch((error) => {
         if (requestId !== requestIdRef.current) return
@@ -196,8 +204,9 @@ export function InvitationsPage() {
         }
         setState({ kind: 'unavailable' })
       })
-  }, [tenantId])
+  }, [tenantId, pageNumber, pageSize, setPageNumber])
 
+  // oxlint-disable-next-line react-hooks/exhaustive-deps, react/set-state-in-effect -- The callback owns the loading/error state for the server-backed page request.
   useEffect(() => {
     loadInvitations()
   }, [loadInvitations])
@@ -211,10 +220,21 @@ export function InvitationsPage() {
     const requestId = ++roleChoicesRequestIdRef.current
     setRoleChoicesState({ kind: 'loading' })
     httpRoleAdapter
-      .listRoles(sessionRef.current?.accessToken ?? '', tenantId)
+      .listRoles(sessionRef.current?.accessToken ?? '', tenantId, {
+        pageNumber: roleChoicePage.pageNumber,
+        pageSize: roleChoicePage.pageSize,
+      })
       .then((response) => {
         if (requestId !== roleChoicesRequestIdRef.current) return
-        setRoleChoicesState({ kind: 'loaded', choices: buildRoleChoices(response.roles) })
+        const pageChoices = buildRoleChoices(response.roles)
+        setRoleChoicesState((current) => {
+          if (roleChoicePage.pageNumber === 1 || current.kind !== 'loaded') {
+            return { kind: 'loaded', choices: pageChoices, pagination: response.pagination }
+          }
+          const byValue = new Map(current.choices.map((choice) => [choice.value, choice]))
+          for (const choice of pageChoices) byValue.set(choice.value, choice)
+          return { kind: 'loaded', choices: [...byValue.values()], pagination: response.pagination }
+        })
       })
       .catch((error) => {
         if (requestId !== roleChoicesRequestIdRef.current) return
@@ -224,8 +244,9 @@ export function InvitationsPage() {
         }
         setRoleChoicesState({ kind: 'error' })
       })
-  }, [permissions.canCreateInvitations, tenantId])
+  }, [permissions.canCreateInvitations, roleChoicePage.pageNumber, roleChoicePage.pageSize, tenantId])
 
+  // oxlint-disable-next-line react-hooks/exhaustive-deps, react/set-state-in-effect -- The callback owns the loading/error state for the selector page request.
   useEffect(() => {
     loadRoleChoices()
   }, [loadRoleChoices])
@@ -244,11 +265,7 @@ export function InvitationsPage() {
           { email: values.email, role: values.role },
         )
         if (requestId !== submitRequestIdRef.current) return
-        setState((current) =>
-          current.kind === 'loaded'
-            ? { kind: 'loaded', invitations: [invitation, ...current.invitations] }
-            : current,
-        )
+        void loadInvitations()
         reset({ email: '', role: '' })
         setCreated(invitation)
       } catch (error) {
@@ -273,7 +290,7 @@ export function InvitationsPage() {
         if (requestId === submitRequestIdRef.current) setIsSubmitting(false)
       }
     },
-    [reset, roleChoicesState.kind, setError, tenantId],
+    [loadInvitations, reset, roleChoicesState.kind, setError, tenantId],
   )
 
   const submitInvite = useCallback((event: FormEvent<HTMLFormElement>) => {
@@ -407,6 +424,17 @@ export function InvitationsPage() {
                       : 'نقش داخلی یا سفارشی همین مستأجر که عضو پس از پذیرش دعوت دریافت می‌کند.'}
                   </p>
                 )}
+                {roleChoicesState.kind === 'loaded' && roleChoicesState.pagination.hasNextPage && (
+                  <SecondaryButton
+                    type="button"
+                    className="mt-3 px-3"
+                    disabled={isSubmitting}
+                    onClick={() => roleChoicePage.setPageNumber(roleChoicesState.pagination.pageNumber + 1)}
+                  >
+                    <RefreshCw aria-hidden="true" className="size-4" />
+                    بارگذاری نقش‌های بیشتر
+                  </SecondaryButton>
+                )}
               </div>
 
               <div className="border-t border-border pt-4">
@@ -427,7 +455,13 @@ export function InvitationsPage() {
               </form>
             )}
 
-            <PendingInvitations invitations={state.invitations} created={created} />
+            <PendingInvitations
+              invitations={state.invitations}
+              pagination={state.pagination}
+              created={created}
+              onPageChange={setPageNumber}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </section>
@@ -435,7 +469,7 @@ export function InvitationsPage() {
   )
 }
 
-function PendingInvitations({ invitations, created }: { invitations: Invitation[]; created: Invitation | null }) {
+function PendingInvitations({ invitations, pagination, created, onPageChange, onPageSizeChange }: { invitations: Invitation[]; pagination: PaginationMeta; created: Invitation | null; onPageChange: (page: number) => void; onPageSizeChange: (size: 10 | 20 | 50 | 100) => void }) {
   return (
     <section className="min-w-0 rounded-xl border border-border bg-surface p-5 shadow-soft" aria-label="دعوت‌های در انتظار">
       <div className="flex items-center justify-between gap-2">
@@ -504,6 +538,14 @@ function PendingInvitations({ invitations, created }: { invitations: Invitation[
           </table>
         </div>
       )}
+      <div className="-mx-5 mt-4">
+        <PaginationControls
+          meta={pagination}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          label="دعوت‌ها"
+        />
+      </div>
     </section>
   )
 }

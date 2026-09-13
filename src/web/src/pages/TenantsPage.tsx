@@ -6,9 +6,12 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { TextInput } from '@/components/ui/TextInput'
 import { useAuth } from '@/features/auth/AuthContext'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
+import { recoveryPageNumber, type PaginationMeta } from '@/features/pagination/paginationTypes'
+import { useUrlPageState } from '@/features/pagination/useUrlPageState'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import {
   httpTenantAdapter,
@@ -57,11 +60,19 @@ type CreateTenantFormValues = z.infer<typeof createTenantSchema>
 
 export function TenantsPage() {
   const { session, signOut } = useAuth()
-  // S11 (F018): this page is platform-admin-only (guarded in App.tsx). It reads
-  // the rich platform tenant list — never the member's discovery list.
-  const { platformTenants: tenants, isBusy, failure, refresh, selectTenant } = useTenantScope()
+  const { pageNumber, pageSize, setPageNumber, setPageSize } = useUrlPageState()
+  // S11 (F018): this page is platform-admin-only (guarded in App.tsx). F022
+  // gives the admin table its own paginated request, independent from the
+  // header switcher's scope page state.
+  const { refresh: refreshScopes, selectTenant } = useTenantScope()
+
+  const [tenants, setTenants] = useState<TenantSummary[] | null>(null)
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null)
+  const [isBusy, setIsBusy] = useState(true)
+  const [failure, setFailure] = useState<'unavailable' | 'forbidden' | null>(null)
 
   const [users, setUsers] = useState<PlatformUser[] | null>(null)
+  const [usersPagination, setUsersPagination] = useState<PaginationMeta | null>(null)
   const [usersBusy, setUsersBusy] = useState(true)
   const [usersFailure, setUsersFailure] = useState(false)
 
@@ -71,6 +82,7 @@ export function TenantsPage() {
 
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
+  const listRequestIdRef = useRef(0)
   const sessionRef = useRef(session)
   const signOutRef = useRef(signOut)
 
@@ -93,24 +105,72 @@ export function TenantsPage() {
     defaultValues: { name: '', slug: '', ownerUserId: '' },
   })
 
+  const loadTenants = useCallback(
+    (page: number, size: number) => {
+      const requestId = ++listRequestIdRef.current
+      setIsBusy(true)
+      setFailure(null)
+      return httpTenantAdapter
+        .listTenants(sessionRef.current?.accessToken ?? '', { pageNumber: page, pageSize: size })
+        .then((response) => {
+          if (requestId !== listRequestIdRef.current) return
+          setTenants(response.tenants)
+          setPagination(response.pagination)
+          const recovery = recoveryPageNumber(response.pagination)
+          if (recovery !== null && recovery !== page) setPageNumber(recovery)
+        })
+        .catch((error) => {
+          if (requestId !== listRequestIdRef.current) return
+          if (error instanceof SessionExpiredError) {
+            void signOutRef.current()
+            return
+          }
+          setFailure(error instanceof TenantForbiddenError ? 'forbidden' : 'unavailable')
+        })
+        .finally(() => {
+          if (requestId === listRequestIdRef.current) setIsBusy(false)
+        })
+    },
+    [setPageNumber],
+  )
+
+  useEffect(() => {
+    void loadTenants(pageNumber, pageSize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber, pageSize])
+
   /**
-   * Initial fetch of the real platform users for the Owner dropdown (real
-   * B006 data). Synchronous state is already correct at mount (`usersBusy`
-   * starts true, `usersFailure` false), so this path does no synchronous
-   * `setState` — the mount effect only subscribes to the adapter, its
-   * external system.
+   * Bounded Owner selector paging. It loads one user page at a time and appends
+   * on demand, so creating a tenant can pick an owner beyond page 1 without
+   * downloading every platform user up front.
    */
-  const startInitialUsersFetch = useCallback(() => {
+  const loadOwnerUsers = useCallback((page = 1) => {
+    setUsersBusy(true)
+    setUsersFailure(false)
     return httpUserAdapter
-      .listUsers(sessionRef.current?.accessToken ?? '')
-      .then((response) => setUsers(response.users))
-      .catch(() => setUsersFailure(true))
+      .listUsers(sessionRef.current?.accessToken ?? '', { pageNumber: page, pageSize: 50 })
+      .then((response) => {
+        setUsersPagination(response.pagination)
+        setUsers((current) => {
+          const existing = page === 1 ? [] : (current ?? [])
+          const byId = new Map(existing.map((user) => [user.id, user]))
+          for (const user of response.users) byId.set(user.id, user)
+          return [...byId.values()]
+        })
+      })
+      .catch((error) => {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+          return
+        }
+        setUsersFailure(true)
+      })
       .finally(() => setUsersBusy(false))
   }, [])
 
   useEffect(() => {
-    void startInitialUsersFetch()
-  }, [startInitialUsersFetch])
+    void loadOwnerUsers(1)
+  }, [loadOwnerUsers])
 
   const nameField = register('name')
 
@@ -140,8 +200,11 @@ export function TenantsPage() {
         )
         setCreateSuccess(`مستأجر ${created.name} با مالک نخست ایجاد شد.`)
         reset()
-        // Background refresh: the new row appears without a skeleton flash.
-        void refresh()
+        // Background refresh the current table page/total and the header
+        // switcher's scope options. New tenants sort to the last page, so do
+        // not inject the created row into an unrelated current page.
+        void loadTenants(pageNumber, pageSize)
+        refreshScopes()
       } catch (error) {
         if (error instanceof SessionExpiredError) {
           void signOutRef.current()
@@ -155,11 +218,11 @@ export function TenantsPage() {
           setError('name', { message: error.message })
         }
         nameInputRef.current?.focus()
-      }       finally {
+      } finally {
         setIsCreating(false)
       }
     },
-    [refresh, reset, setError],
+    [loadTenants, pageNumber, pageSize, refreshScopes, reset, setError],
   )
 
   const submitCreateTenant = useCallback(
@@ -191,7 +254,7 @@ export function TenantsPage() {
                 aria-label="به‌روزرسانی فهرست مستأجران"
                 className="px-3"
                 disabled={isBusy}
-                onClick={() => refresh()}
+                onClick={() => void loadTenants(pageNumber, pageSize)}
               >
                 <RefreshCw
                   aria-hidden="true"
@@ -318,9 +381,34 @@ export function TenantsPage() {
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-muted-foreground" id="tenant-owner-hint">
-                    کاربر پلتفرمی که مالک نخست این مستأجر می‌شود.
+                    کاربر پلتفرمی که مالک نخست این مستأجر می‌شود. برای رسیدن به کاربران بعدی،
+                    صفحه‌های بعدی را جداگانه بارگذاری کنید.
                   </p>
                 )}
+                {usersFailure ? (
+                  <SecondaryButton type="button" className="mt-3 px-3" onClick={() => void loadOwnerUsers(1)}>
+                    <RefreshCw aria-hidden="true" className="size-4" />
+                    تلاش دوباره برای کاربران
+                  </SecondaryButton>
+                ) : usersPagination?.hasNextPage ? (
+                  <SecondaryButton
+                    type="button"
+                    className="mt-3 px-3"
+                    disabled={usersBusy}
+                    onClick={() => void loadOwnerUsers(usersPagination.pageNumber + 1)}
+                  >
+                    {usersBusy ? (
+                      <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                    ) : (
+                      <RefreshCw aria-hidden="true" className="size-4" />
+                    )}
+                    بارگذاری کاربران بیشتر
+                  </SecondaryButton>
+                ) : usersPagination && usersPagination.totalCount > 0 ? (
+                  <p className="mt-3 text-xs text-muted-foreground" role="status">
+                    همهٔ <bdi>{new Intl.NumberFormat('fa-IR').format(usersPagination.totalCount)}</bdi> کاربر قابل انتخاب بارگذاری شده‌اند.
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -365,7 +453,7 @@ export function TenantsPage() {
                     ? 'حساب فعلی مجوز مدیریت مستأجران پلتفرم را ندارد.'
                     : 'هم‌اکنون نمی‌توانیم مستأجران را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'}
                 </p>
-                <Button type="button" className="mt-3 min-w-32" onClick={() => refresh()}>
+                <Button type="button" className="mt-3 min-w-32" onClick={() => void loadTenants(pageNumber, pageSize)}>
                   <RefreshCw aria-hidden="true" className="me-2 size-4" />
                   تلاش دوباره
                 </Button>
@@ -386,26 +474,35 @@ export function TenantsPage() {
           </div>
         )}
 
-        {tenants !== null && tenants.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-soft">
-            <table className="w-full min-w-[46rem] text-sm">
-              <caption className="sr-only">فهرست مستأجران پلتفرم</caption>
-              <thead>
-                <tr className="border-b border-border text-start">
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">نام</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">شناسه</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">وضعیت</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">اعضا</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">ساخته‌شده در</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">عملیات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tenants.map((tenant) => (
-                  <TenantRow key={tenant.id} tenant={tenant} onEnter={() => selectTenant(tenant.id)} />
-                ))}
-              </tbody>
-            </table>
+        {tenants !== null && tenants.length > 0 && pagination !== null && (
+          <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[46rem] text-sm">
+                <caption className="sr-only">فهرست مستأجران پلتفرم</caption>
+                <thead>
+                  <tr className="border-b border-border text-start">
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">نام</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">شناسه</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">وضعیت</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">اعضا</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">ساخته‌شده در</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenants.map((tenant) => (
+                    <TenantRow key={tenant.id} tenant={tenant} onEnter={() => selectTenant(tenant.id)} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <PaginationControls
+              meta={pagination}
+              disabled={isBusy}
+              onPageChange={setPageNumber}
+              onPageSizeChange={setPageSize}
+              label="مستأجران"
+            />
           </div>
         )}
       </section>

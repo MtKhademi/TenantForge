@@ -6,9 +6,12 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { TextInput } from '@/components/ui/TextInput'
 import { useAuth } from '@/features/auth/AuthContext'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
+import { recoveryPageNumber, type PaginationMeta } from '@/features/pagination/paginationTypes'
+import { useUrlPageState } from '@/features/pagination/useUrlPageState'
 import { httpUserAdapter, UserForbiddenError, UserValidationError } from '@/features/users/userAdapter'
 import {
   UserConflictError,
@@ -49,7 +52,9 @@ type CreateUserFormValues = z.infer<typeof createUserSchema>
 
 export function UsersPage() {
   const { session, signOut } = useAuth()
+  const { pageNumber, pageSize, setPageNumber, setPageSize } = useUrlPageState()
   const [users, setUsers] = useState<PlatformUser[] | null>(null)
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null)
   const [isBusy, setIsBusy] = useState(true)
   const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   // Monotonic guard: a superseded list fetch never writes.
@@ -92,53 +97,46 @@ export function UsersPage() {
   }, [])
 
   /**
-   * Initial list fetch: the synchronous state is already correct at mount
-   * (`isBusy` starts true), so this path does no synchronous `setState` —
-   * the mount effect only subscribes to the adapter, its external system.
+   * Fetch the requested page. Runs on mount, on page/size change (via the
+   * effect below) and on manual refresh/retry. A superseded request never
+   * writes, so rapid page/size changes cannot flash stale rows.
    */
-  const startInitialFetch = useCallback(() => {
-    const requestId = ++listRequestIdRef.current
-    return httpUserAdapter
-      .listUsers(sessionRef.current?.accessToken ?? '')
-      .then((response) => {
-        if (requestId !== listRequestIdRef.current) return
-        setUsers(response.users)
-        setListFailure(null)
-      })
-      .catch((error) => {
-        if (requestId !== listRequestIdRef.current) return
-        // Initial failure: users stays null, the error panel takes over.
-        // Refetch failure after a success keeps the table on screen.
-        handleListFailure(error)
-      })
-      .finally(() => {
-        if (requestId === listRequestIdRef.current) setIsBusy(false)
-      })
-  }, [handleListFailure])
-
-  /** Refresh/retry (event handlers): mark busy synchronously, then fetch. */
-  const loadUsers = useCallback(() => {
-    const requestId = ++listRequestIdRef.current
-    setIsBusy(true)
-    setListFailure(null)
-    return httpUserAdapter
-      .listUsers(sessionRef.current?.accessToken ?? '')
-      .then((response) => {
-        if (requestId !== listRequestIdRef.current) return
-        setUsers(response.users)
-      })
-      .catch((error) => {
-        if (requestId !== listRequestIdRef.current) return
-        handleListFailure(error)
-      })
-      .finally(() => {
-        if (requestId === listRequestIdRef.current) setIsBusy(false)
-      })
-  }, [handleListFailure])
+  const loadUsers = useCallback(
+    (page: number, size: number) => {
+      const requestId = ++listRequestIdRef.current
+      setIsBusy(true)
+      setListFailure(null)
+      return httpUserAdapter
+        .listUsers(sessionRef.current?.accessToken ?? '', { pageNumber: page, pageSize: size })
+        .then((response) => {
+          if (requestId !== listRequestIdRef.current) return
+          setUsers(response.users)
+          setPagination(response.pagination)
+          // A mutation or expiry can leave the requested page beyond the new
+          // last page; recover with one bounded refetch instead of showing a
+          // stuck empty page.
+          const recovery = recoveryPageNumber(response.pagination)
+          if (recovery !== null && recovery !== page) {
+            setPageNumber(recovery)
+          }
+        })
+        .catch((error) => {
+          if (requestId !== listRequestIdRef.current) return
+          // Initial failure: users stays null, the error panel takes over.
+          // Refetch failure after a success keeps the table on screen.
+          handleListFailure(error)
+        })
+        .finally(() => {
+          if (requestId === listRequestIdRef.current) setIsBusy(false)
+        })
+    },
+    [handleListFailure, setPageNumber],
+  )
 
   useEffect(() => {
-    void startInitialFetch()
-  }, [startInitialFetch])
+    void loadUsers(pageNumber, pageSize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber, pageSize])
 
   // Focus moves into the form when it opens (and back to the toggle on
   // close/cancel — see closeForm), done in an effect so the DOM has updated.
@@ -164,8 +162,10 @@ export function UsersPage() {
         const created = await httpUserAdapter.createUser(sessionRef.current?.accessToken ?? '', values)
         setCreateSuccess(`کاربر ${created.displayName} ایجاد شد.`)
         reset()
-        // Background re-fetch: the new row appears without a skeleton flash.
-        void loadUsers()
+        // Background re-fetch of the current page/total. Users are ordered
+        // createdAtUtc ASC, so a new row lands on the last page — this never
+        // prepends it onto an unrelated current page.
+        void loadUsers(pageNumber, pageSize)
       } catch (error) {
         if (error instanceof SessionExpiredError) {
           void signOutRef.current()
@@ -185,7 +185,7 @@ export function UsersPage() {
         setIsCreating(false)
       }
     },
-    [loadUsers, reset, setError],
+    [loadUsers, pageNumber, pageSize, reset, setError],
   )
   const submitCreateUser = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -219,7 +219,7 @@ export function UsersPage() {
                 aria-label="به‌روزرسانی فهرست کاربران"
                 className="px-3"
                 disabled={isBusy}
-                onClick={() => void loadUsers()}
+                onClick={() => void loadUsers(pageNumber, pageSize)}
               >
                 <RefreshCw
                   aria-hidden="true"
@@ -371,7 +371,7 @@ export function UsersPage() {
                     ? 'حساب فعلی مجوز مدیریت کاربران پلتفرم را ندارد.'
                     : 'هم‌اکنون نمی‌توانیم کاربران را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'}
                 </p>
-                <Button type="button" className="mt-3 min-w-32" onClick={() => void loadUsers()}>
+                <Button type="button" className="mt-3 min-w-32" onClick={() => void loadUsers(pageNumber, pageSize)}>
                   <RefreshCw aria-hidden="true" className="me-2 size-4" />
                   تلاش دوباره
                 </Button>
@@ -392,25 +392,34 @@ export function UsersPage() {
           </div>
         )}
 
-        {users !== null && users.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-soft">
-            <table className="w-full min-w-[40rem] text-sm">
-              <caption className="sr-only">فهرست حساب‌های پلتفرم</caption>
-              <thead>
-                <tr className="border-b border-border text-start">
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">ایمیل</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">نام نمایشی</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">وضعیت</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">نقش</th>
-                  <th scope="col" className="px-4 py-3 text-start font-semibold">ساخته‌شده در</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <UserRow key={user.id} user={user} />
-                ))}
-              </tbody>
-            </table>
+        {users !== null && users.length > 0 && pagination !== null && (
+          <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[40rem] text-sm">
+                <caption className="sr-only">فهرست حساب‌های پلتفرم</caption>
+                <thead>
+                  <tr className="border-b border-border text-start">
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">ایمیل</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">نام نمایشی</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">وضعیت</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">نقش</th>
+                    <th scope="col" className="px-4 py-3 text-start font-semibold">ساخته‌شده در</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <UserRow key={user.id} user={user} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <PaginationControls
+              meta={pagination}
+              disabled={isBusy}
+              onPageChange={setPageNumber}
+              onPageSizeChange={setPageSize}
+              label="کاربران"
+            />
           </div>
         )}
       </section>

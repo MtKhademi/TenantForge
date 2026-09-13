@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta, type PaginationQuery } from '@/features/pagination/paginationTypes'
 import type { MyTenant, MyTenantListResponse } from './tenantTypes'
 
 /**
@@ -27,7 +28,7 @@ import type { MyTenant, MyTenantListResponse } from './tenantTypes'
  * which is strictly richer than a membership row.
  */
 export type TenantDiscoveryAdapter = {
-  listMyTenants(accessToken: string): Promise<MyTenantListResponse>
+  listMyTenants(accessToken: string, page: PaginationQuery): Promise<MyTenantListResponse>
 }
 
 const MY_TENANTS_PATH = '/api/auth/me/tenants'
@@ -77,7 +78,11 @@ function parseMyTenantList(payload: unknown): MyTenantListResponse {
   if (!Array.isArray(body.tenants)) {
     throw new ApiUnavailableError()
   }
-  return { tenants: body.tenants.map(parseMyTenant) }
+  try {
+    return { tenants: body.tenants.map(parseMyTenant), pagination: parsePaginationMeta(body.pagination) }
+  } catch {
+    throw new ApiUnavailableError()
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -100,8 +105,10 @@ async function request(path: string, init: RequestInit): Promise<Response> {
 }
 
 export const httpTenantDiscoveryAdapter: TenantDiscoveryAdapter = {
-  async listMyTenants(accessToken) {
-    const response = await request(MY_TENANTS_PATH, {
+  async listMyTenants(accessToken, page) {
+    const params = new URLSearchParams()
+    appendPaginationParams(params, page)
+    const response = await request(`${MY_TENANTS_PATH}?${params.toString()}`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${accessToken}` },
     })

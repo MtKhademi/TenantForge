@@ -2,6 +2,7 @@ import {
   ApiUnavailableError,
   SessionExpiredError,
 } from '@/features/auth/authTypes'
+import { appendPaginationParams, parsePaginationMeta } from '@/features/pagination/paginationTypes'
 import { AuditForbiddenError } from './auditTypes'
 import type { AuditAction, AuditEvent, AuditListResponse, AuditQuery } from './auditTypes'
 
@@ -34,6 +35,7 @@ function auditPath(tenantId: string, query?: AuditQuery) {
   const params = new URLSearchParams()
   if (query?.action) params.set('action', query.action)
   if (query?.fromUtc) params.set('fromUtc', query.fromUtc)
+  if (query) appendPaginationParams(params, query)
   const suffix = params.toString()
   return `/api/tenants/${encodeURIComponent(tenantId)}/audit${suffix ? `?${suffix}` : ''}`
 }
@@ -120,7 +122,11 @@ function parseAuditList(payload: unknown): AuditListResponse {
   if (typeof payload !== 'object' || payload === null) throw new ApiUnavailableError()
   const body = payload as Record<string, unknown>
   if (!Array.isArray(body.events)) throw new ApiUnavailableError()
-  return { events: body.events.map(parseAuditEvent) }
+  try {
+    return { events: body.events.map(parseAuditEvent), pagination: parsePaginationMeta(body.pagination) }
+  } catch {
+    throw new ApiUnavailableError()
+  }
 }
 
 export const httpAuditAdapter: AuditAdapter = {

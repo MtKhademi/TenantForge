@@ -1,3 +1,5 @@
+import type { PaginationMeta } from '@/features/pagination/paginationTypes'
+
 /**
  * S10 tenant invitations — the fixed request/response contract (F015).
  *
@@ -47,6 +49,7 @@ export type Invitation = {
 /** `GET /api/tenants/{tenantId}/invitations` — the tenant's active invitations. */
 export type InvitationListResponse = {
   invitations: Invitation[]
+  pagination: PaginationMeta
 }
 
 /**

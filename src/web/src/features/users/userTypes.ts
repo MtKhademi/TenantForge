@@ -1,9 +1,13 @@
+import type { PaginationMeta } from '@/features/pagination/paginationTypes'
+
 /**
  * S06 user management — the fixed request/response contract (F008).
  *
  * F008 mocks these exact fields; F009 connects the real endpoints. The
  * shape here is the smallest contract B006 must implement, so it is the
- * source of truth both sides keep in sync.
+ * source of truth both sides keep in sync. S15 (F022/B015) adds server
+ * pagination: the `users` array is now one page, and `pagination` carries
+ * the metadata to reach the rest.
  */
 
 /** Account lifecycle at this stage: a user is created active. */
@@ -25,9 +29,10 @@ export type PlatformUser = {
   createdAtUtc: string
 }
 
-/** `GET /api/platform/users` — first-page collection. */
+/** `GET /api/platform/users?pageNumber=&pageSize=` — one page of the collection. */
 export type UserListResponse = {
   users: PlatformUser[]
+  pagination: PaginationMeta
 }
 
 /** `POST /api/platform/users` request body. */

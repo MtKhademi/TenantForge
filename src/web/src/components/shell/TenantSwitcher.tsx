@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils'
  * - while the scope list is still loading the menu shows one busy row.
  */
 export function TenantSwitcher() {
-  const { scopes, isBusy, isPlatformAdmin, selectTenant, selectHome } = useTenantScope()
+  const { scopes, scopePagination, isBusy, isPlatformAdmin, loadMoreScopes, selectTenant, selectHome } = useTenantScope()
   const { tenantId: activeTenantId } = useParams<{ tenantId: string }>()
   const location = useLocation()
   const onTenantRoute = location.pathname.startsWith('/t/')
@@ -174,6 +174,19 @@ export function TenantSwitcher() {
             {!isBusy && scopes !== null && scopes.length === 0 && (
               <li className="px-2.5 py-2 text-xs text-muted-foreground" role="presentation">
                 {isPlatformAdmin ? 'هنوز مستأجری ایجاد نشده است.' : 'عضویت فعالی در مستأجری ندارید.'}
+              </li>
+            )}
+            {scopePagination?.hasNextPage && (
+              <li className="border-t border-border pt-1" role="presentation">
+                <button
+                  type="button"
+                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60"
+                  disabled={isBusy}
+                  onClick={() => loadMoreScopes()}
+                >
+                  {isBusy ? <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+                  بارگذاری مستأجران بیشتر
+                </button>
               </li>
             )}
           </ul>

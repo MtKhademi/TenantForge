@@ -1,3 +1,5 @@
+import type { PaginationMeta } from '@/features/pagination/paginationTypes'
+
 export type PermissionKind = 'read' | 'write'
 
 /**
@@ -50,6 +52,7 @@ export type TenantRole = {
 
 export type TenantRoleListResponse = {
   roles: TenantRole[]
+  pagination: PaginationMeta
 }
 
 export type CreateTenantRoleRequest = {
