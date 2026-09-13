@@ -6,19 +6,23 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Tenants;
 
 internal static partial class TenantsFeature
 {
-    private const int FirstPageSize = 50;
-
     public static IEndpointRouteBuilder MapTenantsFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/platform/tenants", async (IamDbContext db) =>
+        endpoints.MapGet("/api/platform/tenants", async (HttpRequest request, IamDbContext db) =>
         {
-            var tenantRows = await db.Tenants
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
+
+            var query = db.Tenants
                 .AsNoTracking()
                 .GroupJoin(
                     db.TenantMemberships.AsNoTracking(),
@@ -34,9 +38,9 @@ internal static partial class TenantsFeature
                         tenant.CreatedAtUtc
                     })
                 .OrderBy(tenant => tenant.CreatedAtUtc)
-                .ThenBy(tenant => tenant.Id)
-                .Take(FirstPageSize)
-                .ToListAsync();
+                .ThenBy(tenant => tenant.Id);
+
+            var (tenantRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var tenants = tenantRows.Select(tenant => new TenantSummaryResponse(
                 tenant.Id,
@@ -47,7 +51,7 @@ internal static partial class TenantsFeature
                 tenant.CreatedAtUtc.UtcDateTime.ToString("O")))
                 .ToList();
 
-            return Results.Ok(new TenantListResponse(tenants));
+            return Results.Ok(new TenantListResponse(tenants, pagination));
         })
         .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
 
@@ -177,7 +181,7 @@ internal static partial class TenantsFeature
 
 internal sealed record CreateTenantRequest(string? Name, string? Slug, string? OwnerUserId);
 
-internal sealed record TenantListResponse(IReadOnlyList<TenantSummaryResponse> Tenants);
+internal sealed record TenantListResponse(IReadOnlyList<TenantSummaryResponse> Tenants, PaginationMetadata Pagination);
 
 internal sealed record TenantSummaryResponse(
     Guid Id,

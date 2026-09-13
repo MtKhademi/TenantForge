@@ -5,28 +5,32 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Users;
 
 internal static class UsersFeature
 {
-    private const int FirstPageSize = 50;
     private const int MinimumPasswordLength = 8;
 
     public static IEndpointRouteBuilder MapUsersFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/platform/users", async (IamDbContext db) =>
+        endpoints.MapGet("/api/platform/users", async (HttpRequest request, IamDbContext db) =>
         {
-            var accounts = await db.Accounts
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
+
+            var query = db.Accounts
                 .AsNoTracking()
                 .OrderBy(account => account.CreatedAtUtc)
-                .ThenBy(account => account.Id)
-                .Take(FirstPageSize)
-                .ToListAsync();
+                .ThenBy(account => account.Id);
 
+            var (accounts, pagination) = await PaginationSupport.PageAsync(query, page);
             var users = accounts.Select(UserResponse.FromAccount).ToList();
-            return Results.Ok(new UsersListResponse(users));
+            return Results.Ok(new UsersListResponse(users, pagination));
         })
         // S11: the global account directory belongs exclusively to a platform
         // administrator. The named claim policy (registered in IAMConfig) does
@@ -126,7 +130,7 @@ internal static class UsersFeature
 
 internal sealed record CreateUserRequest(string? Email, string? DisplayName, string? Password);
 
-internal sealed record UsersListResponse(IReadOnlyList<UserResponse> Users);
+internal sealed record UsersListResponse(IReadOnlyList<UserResponse> Users, PaginationMetadata Pagination);
 
 internal sealed record UserResponse(
     Guid Id,

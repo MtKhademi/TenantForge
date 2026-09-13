@@ -91,6 +91,13 @@ public sealed class RolePermissionDbFixture : IamDbFixtureBase
     }
 }
 
+public sealed class PaginationDbFixture : IamDbFixtureBase
+{
+    public PaginationDbFixture() : base("tenantforge_pagination_tests")
+    {
+    }
+}
+
 [CollectionDefinition(nameof(TenantDiscoveryIsolatedCollection))]
 public sealed class TenantDiscoveryIsolatedCollection : ICollectionFixture<TenantDiscoveryDbFixture>
 {
@@ -98,5 +105,10 @@ public sealed class TenantDiscoveryIsolatedCollection : ICollectionFixture<Tenan
 
 [CollectionDefinition(nameof(RolePermissionIsolatedCollection))]
 public sealed class RolePermissionIsolatedCollection : ICollectionFixture<RolePermissionDbFixture>
+{
+}
+
+[CollectionDefinition(nameof(PaginationIsolatedCollection))]
+public sealed class PaginationIsolatedCollection : ICollectionFixture<PaginationDbFixture>
 {
 }

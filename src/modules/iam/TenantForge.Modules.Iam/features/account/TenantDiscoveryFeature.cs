@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Account;
@@ -19,8 +20,13 @@ internal static class TenantDiscoveryFeature
 {
     public static IEndpointRouteBuilder MapTenantDiscoveryFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/auth/me/tenants", async (ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/auth/me/tenants", async (HttpRequest request, ClaimsPrincipal principal, IamDbContext db) =>
         {
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
+
             // .RequireAuthorization() already rejected a missing/invalid JWT
             // with 401, so principal.Identity is authenticated here. But a
             // stateless token can outlive row state, so "sub" is verified
@@ -47,7 +53,7 @@ internal static class TenantDiscoveryFeature
             // membership row at all, so it is naturally excluded. Ordered by
             // name then id for a stable, duplicate-free result (the unique
             // (tenantId, accountId) index already guarantees no duplicates).
-            var tenantRows = await db.TenantMemberships
+            var query = db.TenantMemberships
                 .AsNoTracking()
                 .Where(membership => membership.AccountId == accountId.Value)
                 .Join(
@@ -63,8 +69,9 @@ internal static class TenantDiscoveryFeature
                         membership.Role
                     })
                 .OrderBy(row => row.Name)
-                .ThenBy(row => row.Id)
-                .ToListAsync();
+                .ThenBy(row => row.Id);
+
+            var (tenantRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var tenants = tenantRows
                 .Select(row => new DiscoveredTenantResponse(
@@ -75,7 +82,7 @@ internal static class TenantDiscoveryFeature
                     row.Role.ToString()))
                 .ToList();
 
-            return Results.Ok(new TenantDiscoveryResponse(tenants));
+            return Results.Ok(new TenantDiscoveryResponse(tenants, pagination));
         })
         .RequireAuthorization();
 
@@ -96,7 +103,7 @@ internal static class TenantDiscoveryFeature
     }
 }
 
-internal sealed record TenantDiscoveryResponse(IReadOnlyList<DiscoveredTenantResponse> Tenants);
+internal sealed record TenantDiscoveryResponse(IReadOnlyList<DiscoveredTenantResponse> Tenants, PaginationMetadata Pagination);
 
 internal sealed record DiscoveredTenantResponse(
     Guid Id,

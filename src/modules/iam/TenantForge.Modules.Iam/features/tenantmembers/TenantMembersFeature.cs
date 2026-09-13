@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.TenantMembers;
@@ -14,9 +15,15 @@ internal static class TenantMembersFeature
     {
         endpoints.MapGet("/api/tenants/{tenantId}/members", async (
             string tenantId,
+            HttpRequest request,
             ClaimsPrincipal principal,
             IamDbContext db) =>
         {
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
+
             var accountId = GetAuthenticatedAccountId(principal);
             if (accountId is null)
             {
@@ -54,7 +61,7 @@ internal static class TenantMembersFeature
                 return Results.Forbid();
             }
 
-            var memberRows = await db.TenantMemberships
+            var query = db.TenantMemberships
                 .AsNoTracking()
                 .Where(membership => membership.TenantId == tenantGuid)
                 .Join(
@@ -72,8 +79,9 @@ internal static class TenantMembersFeature
                     })
                 .OrderBy(member => member.DisplayName)
                 .ThenBy(member => member.Email)
-                .ThenBy(member => member.Id)
-                .ToListAsync();
+                .ThenBy(member => member.Id);
+
+            var (memberRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var members = memberRows.Select(member => new TenantMemberResponse(
                 member.Id,
@@ -84,7 +92,7 @@ internal static class TenantMembersFeature
                 member.CreatedAtUtc.UtcDateTime.ToString("O")))
                 .ToList();
 
-            return Results.Ok(new TenantMembersResponse(tenant, members));
+            return Results.Ok(new TenantMembersResponse(tenant, members, pagination));
         })
         .RequireAuthorization();
 
@@ -107,7 +115,8 @@ internal static class TenantMembersFeature
 
 internal sealed record TenantMembersResponse(
     TenantContextResponse Tenant,
-    IReadOnlyList<TenantMemberResponse> Members);
+    IReadOnlyList<TenantMemberResponse> Members,
+    PaginationMetadata Pagination);
 
 internal sealed record TenantContextResponse(
     Guid Id,

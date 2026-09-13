@@ -74,7 +74,7 @@ one valid Spec link.
 | B012 | S11 | Close platform user access and expose my tenants | done | B009, B011, F017 | — |
 | B013 | S12 | Unify tenant permission semantics and protect administrators | done | B012, F018 | — |
 | B014 | S13 | Make invitation creation atomic and tenant scoped | done | B013, F019 | — |
-| B015 | S15 | Add consistent pagination to collection APIs and query filters | planned | B014, F021 | [Spec](backend/B015-list-pagination.md) |
+| B015 | S15 | Add consistent pagination to collection APIs and query filters | done | B014, F021 | — |
 
 ## Cleanup batch: S11–S14
 

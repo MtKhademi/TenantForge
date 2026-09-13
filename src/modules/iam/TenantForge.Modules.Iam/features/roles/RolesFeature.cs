@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Roles;
@@ -45,12 +46,17 @@ internal static class RolesFeature
         endpoints.MapGet("/api/permissions/catalog", () => Results.Ok(new PermissionCatalogResponse(CatalogGroups)))
             .RequireAuthorization();
 
-        endpoints.MapGet("/api/tenants/{tenantId}/roles", async (string tenantId, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/tenants/{tenantId}/roles", async (string tenantId, HttpRequest request, ClaimsPrincipal principal, IamDbContext db) =>
         {
             var access = await AuthorizeTenantAccessAsync(tenantId, principal, db);
             if (access.Result is not null) return access.Result;
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
 
-            return Results.Ok(new TenantRolesResponse(await BuildRoleResponsesAsync(db, access.TenantId)));
+            var (roles, pagination) = await BuildPagedRoleResponsesAsync(db, access.TenantId, page);
+            return Results.Ok(new PagedTenantRolesResponse(roles, pagination));
         }).RequireAuthorization();
 
         endpoints.MapPost("/api/tenants/{tenantId}/roles", async (string tenantId, CreateRoleRequest request, ClaimsPrincipal principal, IamDbContext db) =>
@@ -246,9 +252,27 @@ internal static class RolesFeature
 
     private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Guid tenantId)
     {
-        var roles = await db.TenantRoles.AsNoTracking().Where(role => role.TenantId == tenantId).OrderBy(role => role.Name).ToListAsync();
+        var roles = await db.TenantRoles.AsNoTracking().Where(role => role.TenantId == tenantId).OrderBy(role => role.Name).ThenBy(role => role.Id).ToListAsync();
+        return await BuildRoleResponsesAsync(db, tenantId, roles);
+    }
+
+    private static async Task<(IReadOnlyList<TenantRoleResponse> Roles, PaginationMetadata Pagination)> BuildPagedRoleResponsesAsync(IamDbContext db, Guid tenantId, PaginationQuery page)
+    {
+        var query = db.TenantRoles.AsNoTracking()
+            .Where(role => role.TenantId == tenantId)
+            .OrderBy(role => role.Name)
+            .ThenBy(role => role.Id);
+        var totalCount = await query.CountAsync();
+        var roles = await query.Skip(page.Offset).Take(page.PageSize).ToListAsync();
+        return (await BuildRoleResponsesAsync(db, tenantId, roles), PaginationMetadata.From(page, totalCount));
+    }
+
+    private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Guid tenantId, IReadOnlyList<TenantRole> roles)
+    {
+        var roleIds = roles.Select(role => role.Id).ToHashSet();
         var assignments = await db.TenantMemberRoleAssignments.AsNoTracking()
             .Join(db.TenantMemberships.AsNoTracking().Where(member => member.TenantId == tenantId), assignment => assignment.TenantMembershipId, member => member.Id, (assignment, member) => new { assignment.TenantRoleId, MemberId = member.Id })
+            .Where(assignment => roleIds.Contains(assignment.TenantRoleId))
             .ToListAsync();
 
         return roles.Select(role => new TenantRoleResponse(
@@ -390,6 +414,7 @@ internal sealed record PermissionCatalogResponse(IReadOnlyList<PermissionGroupRe
 internal sealed record PermissionGroupResponse(string Id, string Label, string Description, IReadOnlyList<PermissionResponse> Permissions);
 internal sealed record PermissionResponse(string Key, string Label, string Description, string Kind);
 internal sealed record TenantRolesResponse(IReadOnlyList<TenantRoleResponse> Roles);
+internal sealed record PagedTenantRolesResponse(IReadOnlyList<TenantRoleResponse> Roles, PaginationMetadata Pagination);
 internal sealed record TenantRoleResponse(Guid Id, string Name, string Description, string Kind, IReadOnlyList<string> PermissionKeys, IReadOnlyList<Guid> MemberIds, string CreatedAtUtc, string UpdatedAtUtc);
 internal sealed record CreateRoleRequest(string? Name, IReadOnlyList<string>? PermissionKeys);
 internal sealed record UpdateRoleRequest(IReadOnlyList<string>? PermissionKeys);
