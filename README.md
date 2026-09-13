@@ -4,6 +4,8 @@ TenantForge is an open-source, production-minded starter kit for building multi-
 
 The project grows through small, visible vertical slices. Each delivered capability has a browser-visible consumer, an explicit API contract, and learning notes for backend slices.
 
+**راهنمای استفاده از برنامه:** اگر می‌خواهید با مسیرهای واقعی ادمین پلتفرم یا کار داخل یک مستأجر شروع کنید، [راهنمای فارسی کار با TenantForge](docs/user-guide/README.md) را باز کنید.
+
 ## What works today
 
 The current milestone includes:
@@ -30,10 +32,9 @@ These are intentionally deferred to later slices:
 - invitation acceptance and account registration from an invitation;
 - email delivery, resend and revoke actions;
 - refresh-token rotation and long-lived session management;
-- collection pagination in the UI;
-- a broad Persian user guide.
+- invitation acceptance and member self-onboarding.
 
-The invitation UI therefore shows pending invitation records only. It must not be read as proof that an email was sent or that acceptance is implemented.
+The invitation UI therefore shows pending invitation records only. It must not be read as proof that an email was sent, that acceptance is implemented or that a new membership was created.
 
 ## Stack
 
