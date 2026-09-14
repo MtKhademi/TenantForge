@@ -65,6 +65,14 @@ Module convention:
   must remain visible. Never validate at registration time, block async
   startup, use a hosted service to conceal the await, or introduce a generic
   lifecycle framework for hypothetical modules.
+
+Identifier convention:
+
+- IAM database identity and foreign-key columns are PostgreSQL `bigint`; IAM
+  domain and EF model values are `Tsid`; HTTP request/response IDs and JWT
+  subjects are canonical 13-character TSID strings. Never leak the backing
+  integer into JSON or accept it from a client. B017/S19 is the authoritative
+  live Spec until this migration is delivered.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow
