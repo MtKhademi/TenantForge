@@ -109,11 +109,17 @@ through uncommitted sibling files.
   curl through the WSL gateway IP.
 - Make `WebApplicationFactory` test hosts hermetic with a temp content root so
   on-disk `appsettings.*.json` cannot leak into tests.
-- Persist IAM entity identifiers as PostgreSQL `bigint`, model them as `Tsid`
+- Persist entity identifiers as PostgreSQL `bigint`, model them as `Tsid`
   inside .NET, and expose/accept only canonical 13-character TSID strings at
   HTTP and JWT boundaries. Never serialize the backing integer to JSON or
-  accept decimal IDs from clients. B017/S19 introduces this convention; its
-  live Spec is authoritative until delivery.
+  accept decimal IDs from clients.
+- B018/S20 introduces `TenantForge.BuildingBlocks` for stable cross-module
+  contracts and system-wide primitives. Modules may reference BuildingBlocks;
+  BuildingBlocks never references the API or a module. Admit a type only when
+  it is meaningful without a business module and has a proven cross-module or
+  accepted system-wide contract. New code starts in its owning module; never
+  use BuildingBlocks as a `Common`, `Utils` or speculative-reuse bucket.
+  Follow B018's live Spec until delivery.
 
 See `docs/architecture.md` ("Local development environment") and the
 `backend-mentor` agent for the full detail.
