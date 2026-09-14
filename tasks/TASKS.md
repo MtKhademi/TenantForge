@@ -75,6 +75,7 @@ one valid Spec link.
 | B013 | S12 | Unify tenant permission semantics and protect administrators | done | B012, F018 | — |
 | B014 | S13 | Make invitation creation atomic and tenant scoped | done | B013, F019 | — |
 | B015 | S15 | Add consistent pagination to collection APIs and query filters | done | B014, F021 | — |
+| B016 | S18 | Collapse IAM startup behind one registration and one activation seam | planned | B015 | [Spec](backend/B016-iam-module-composition-seam.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -127,3 +128,13 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   prerequisites; existing task dependencies and statuses remain unchanged.
 - The deliverable is docs/user-guide/README.md in Persian, linked prominently
   from the root README. This row registers the writing task, not a completed guide.
+
+## IAM module composition seam: S18
+
+- [S18 — Keep IAM composition inside the IAM module](slices/018-iam-module-composition-seam.md)
+- B016 is the next backend architecture task after B015. It preserves every
+  existing HTTP contract and browser flow while reducing the API host to one
+  IAM registration call before `Build` and one asynchronous IAM activation
+  call after `Build`.
+- B016 and F022 have no file ownership overlap and may proceed in parallel.
+  Neither task may absorb the other's scope.
