@@ -79,6 +79,7 @@ one valid Spec link.
 | B017 | S19 | Replace persisted IAM GUID identifiers with TSIDs | done | B016 | — |
 | B018 | S20 | Extract stable cross-module building blocks | planned | B017 | [Spec](backend/B018-building-blocks.md) |
 | B019 | S21 | Create a living IAM knowledge base and update gate | planned | B018 | [Spec](backend/B019-iam-knowledge-base.md) |
+| B020 | S22 | Create a living BuildingBlocks knowledge and admission guide | planned | B019 | [Spec](backend/B020-building-blocks-knowledge.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -177,3 +178,16 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   `IAM.md impact: none — <specific reason>`.
 - This task changes documentation and agent workflow only. Runtime behavior,
   database schema, endpoints and frontend remain unchanged.
+
+
+## Living BuildingBlocks knowledge: S22
+
+- [S22 — Give BuildingBlocks one living ownership guide](slices/022-building-blocks-knowledge.md)
+- B020 follows B019 and extends its read-first/document-impact workflow to
+  `docs/building-blocks/README.md`.
+- The guide catalogs every exported type, consumer, dependency and contract
+  test, and requires admission evidence before shared code can enter the
+  project.
+- Future BuildingBlocks changes must update the guide or state
+  `BuildingBlocks docs impact: none — <specific reason>`; review blocks vague
+  or missing impact decisions.
