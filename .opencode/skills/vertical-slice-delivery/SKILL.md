@@ -109,6 +109,11 @@ through uncommitted sibling files.
   curl through the WSL gateway IP.
 - Make `WebApplicationFactory` test hosts hermetic with a temp content root so
   on-disk `appsettings.*.json` cannot leak into tests.
+- Persist IAM entity identifiers as PostgreSQL `bigint`, model them as `Tsid`
+  inside .NET, and expose/accept only canonical 13-character TSID strings at
+  HTTP and JWT boundaries. Never serialize the backing integer to JSON or
+  accept decimal IDs from clients. B017/S19 introduces this convention; its
+  live Spec is authoritative until delivery.
 
 See `docs/architecture.md` ("Local development environment") and the
 `backend-mentor` agent for the full detail.

@@ -76,6 +76,7 @@ one valid Spec link.
 | B014 | S13 | Make invitation creation atomic and tenant scoped | done | B013, F019 | — |
 | B015 | S15 | Add consistent pagination to collection APIs and query filters | done | B014, F021 | — |
 | B016 | S18 | Collapse IAM startup behind one registration and one activation seam | done | B015 | — |
+| B017 | S19 | Replace persisted IAM GUID identifiers with TSIDs | planned | B016 | [Spec](backend/B017-tsid-identifiers.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -138,3 +139,13 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   call after `Build`.
 - B016 and F022 have no file ownership overlap and may proceed in parallel.
   Neither task may absorb the other's scope.
+
+## TSID identifiers: S19
+
+- [S19 — Use one safe identifier across database, domain and HTTP boundaries](slices/019-tsid-identifiers.md)
+- B017 starts only after B016 is delivered because it changes IAM domain types,
+  persistence mappings, startup verification and every IAM HTTP identifier.
+- The migration must preserve existing rows and relationships while replacing
+  persisted UUID identity columns with PostgreSQL `bigint`. Existing JWTs and
+  bookmarked GUID URLs are intentionally invalid after deployment; users must
+  sign in again. Registering this task does not implement the migration.
