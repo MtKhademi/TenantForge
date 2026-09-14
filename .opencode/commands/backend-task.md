@@ -90,9 +90,11 @@ The Git preflight is a short routing step, not a diagnostic task.
 2. Restate the fixed API contract and present request flow, learning goal,
    expected files, integration tests, validation, branch
    `backend/<id-lowercase>-<slug>` and explicit out-of-scope work.
-3. Present todos and ask `Approve`, `Change` or `Cancel`; stop and wait.
+3. This is the first routine approval gate. Present the complete todos once,
+   ask `Approve`, `Change` or `Cancel`, then stop and wait.
 4. Before approval, do not edit product or task files, install packages or run
-   build commands. The selected task branch already exists.
+   build commands. The selected task branch already exists. Do not split the
+   plan into multiple permission questions.
 
 ## Execute
 
@@ -104,14 +106,19 @@ The Git preflight is a short routing step, not a diagnostic task.
 4. Perform every step yourself in this same `backend-mentor` conversation.
    Never call the `task` tool or delegate any phase.
 5. After each step succeeds, immediately update `todowrite`: complete that one
-   todo and start the next one. Show the evidence and next step; never
-   batch-complete hidden work.
+   todo and start the next one. Show the evidence and next action, then continue
+   automatically. This progress message is informational: do not ask permission
+   to begin/continue a normal approved todo and do not stop after messages such
+   as “Next active step”.
 6. Keep product edits under backend ownership and create the required learning
    note. Never redesign or edit frontend files.
 7. Run focused integration tests, affected backend tests and solution build as
    separate visible todos.
 8. Review the diff for frontend edits, secrets, generated artifacts, weakened
    tests, future work and unrelated changes.
+9. Between plan approval and final review, pause only for a real blocker,
+   material scope/API-contract change, missing authority, destructive action
+   requiring approval, or direct user interruption.
 
 ## Review and delivery
 
@@ -119,15 +126,17 @@ The Git preflight is a short routing step, not a diagnostic task.
    `in_progress` to `review`.
 2. Compare the complete diff with the live Spec, source slice, API contract,
    security rules and acceptance criteria.
-3. Present findings, evidence, checked acceptance criteria, remaining risks and
-   the final todo state. Ask the user to choose `Approve`, `Change` or
-   `Cancel`, then stop and wait.
+3. This is the second and final routine approval gate. Present findings,
+   complete diff/evidence, checked acceptance criteria, remaining risks and the
+   final todo state. Ask the user to choose `Approve`, `Change` or `Cancel`,
+   then stop and wait before commit, push and pull-request creation.
 4. On `Change`, add correction and revalidation todos, execute them one at a
    time and return to this review gate.
 5. On `Cancel`, preserve the branch, ledger state, Spec and current files and
    stop without delivery.
-6. After final `Approve`, capture the checked acceptance criteria and evidence
-   for the PR body, then as separate visible todos:
+6. After final `Approve`, do not ask for another permission. Capture the
+   checked acceptance criteria and evidence for the PR body, then as separate
+   visible todos:
    - change only the active `tasks/TASKS.md` row from `review` to `done`;
    - replace that row's Spec link with `—`;
    - delete exactly the active tracked Spec with
