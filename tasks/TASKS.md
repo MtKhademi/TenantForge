@@ -77,6 +77,7 @@ one valid Spec link.
 | B015 | S15 | Add consistent pagination to collection APIs and query filters | done | B014, F021 | — |
 | B016 | S18 | Collapse IAM startup behind one registration and one activation seam | done | B015 | — |
 | B017 | S19 | Replace persisted IAM GUID identifiers with TSIDs | done | B016 | — |
+| B018 | S20 | Extract stable cross-module building blocks | planned | B017 | [Spec](backend/B018-building-blocks.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -149,3 +150,16 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   persisted UUID identity columns with PostgreSQL `bigint`. Existing JWTs and
   bookmarked GUID URLs are intentionally invalid after deployment; users must
   sign in again. Registering this task does not implement the migration.
+
+
+## Cross-module building blocks: S20
+
+- [S20 — Extract stable cross-module building blocks](slices/020-building-blocks.md)
+- B018 follows the completed TSID migration because it relocates the proven
+  identifier seam as well as `IModuleConfig` into
+  `TenantForge.BuildingBlocks`.
+- The task preserves all runtime contracts. It introduces an explicit
+  API → module → BuildingBlocks dependency rule and a strict admission test so
+  the new project cannot become an ownerless `Common` utility bucket.
+- Pagination, EF converters and IAM business concerns remain IAM-owned until a
+  second real consumer proves a narrower shared abstraction.
