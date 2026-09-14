@@ -46,8 +46,9 @@ Before editing, state:
 - one primary learning goal;
 - validation and explicit out-of-scope work.
 
-Require `Approve`, `Change` or `Cancel`. Do not edit, install, branch or build
-before approval.
+This is the first of exactly two routine blocking gates. Require `Approve`,
+`Change` or `Cancel`. Do not edit, install, branch or build before approval,
+and do not split the plan into step-by-step permission prompts.
 
 ## Visible todo protocol
 
@@ -56,9 +57,14 @@ After plan approval:
 1. call `todowrite` with the complete approved sequence;
 2. keep exactly one todo `in_progress`;
 3. perform that step in the current primary agent;
-4. immediately mark it `completed`, start the next todo and show its evidence;
-5. never complete multiple unseen steps in one todo update;
-6. on failure, keep the failed step active and add or revise the smallest
+4. immediately mark it `completed`, start the next todo, show its evidence and
+   continue automatically;
+5. treat progress updates as information, never as a request to start/continue
+   an ordinary approved todo;
+6. never complete multiple unseen steps in one todo update;
+7. pause only for a real blocker, material scope/contract change, missing
+   authority, destructive action requiring approval or direct user interruption;
+8. on failure, keep the failed step active and add or revise the smallest
    recovery todo.
 
 Keep build, focused tests, broader tests, browser/API demo, learning note,
@@ -127,13 +133,14 @@ See `docs/architecture.md` ("Local development environment") and the
 ## Review and delivery
 
 After all checks pass, review the complete diff yourself in the same primary
-conversation. Present findings, acceptance evidence and remaining risks. Require
-`Approve`, `Change` or `Cancel` before delivery.
+conversation. Present findings, acceptance evidence and remaining risks. This
+is the second and final routine blocking gate: require `Approve`, `Change` or
+`Cancel` before commit, push and PR creation.
 
 On `Change`, add visible correction and revalidation todos, execute them one at
 a time and repeat self-review. On `Cancel`, preserve the branch and stop.
 
-After final approval:
+After final approval, never ask for a third routine permission:
 
 1. continue the same visible todo list;
 2. preserve the checked Spec acceptance criteria and evidence for the PR body;
