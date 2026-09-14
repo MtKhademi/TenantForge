@@ -1,10 +1,12 @@
+using TSID.Creator.NET;
+
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class TenantMembership
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
-    public Guid TenantId { get; private set; }
-    public Guid AccountId { get; private set; }
+    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid TenantId { get; private set; }
+    public Tsid AccountId { get; private set; }
     public TenantMembershipRole Role { get; private set; } = TenantMembershipRole.Owner;
     public DateTimeOffset CreatedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
 
@@ -12,27 +14,27 @@ internal sealed class TenantMembership
     {
     }
 
-    public static TenantMembership CreateOwner(Guid tenantId, Guid accountId, DateTimeOffset nowUtc) =>
+    public static TenantMembership CreateOwner(Tsid tenantId, Tsid accountId, DateTimeOffset nowUtc) =>
         Create(tenantId, accountId, TenantMembershipRole.Owner, nowUtc);
 
-    public static TenantMembership CreateMember(Guid tenantId, Guid accountId, DateTimeOffset nowUtc) =>
+    public static TenantMembership CreateMember(Tsid tenantId, Tsid accountId, DateTimeOffset nowUtc) =>
         Create(tenantId, accountId, TenantMembershipRole.Member, nowUtc);
 
-    private static TenantMembership Create(Guid tenantId, Guid accountId, TenantMembershipRole role, DateTimeOffset nowUtc)
+    private static TenantMembership Create(Tsid tenantId, Tsid accountId, TenantMembershipRole role, DateTimeOffset nowUtc)
     {
-        if (tenantId == Guid.Empty)
+        if (IamId.IsDefault(tenantId))
         {
             throw new ArgumentException("Tenant id is required.", nameof(tenantId));
         }
 
-        if (accountId == Guid.Empty)
+        if (IamId.IsDefault(accountId))
         {
             throw new ArgumentException("Account id is required.", nameof(accountId));
         }
 
         return new TenantMembership
         {
-            Id = Guid.NewGuid(),
+            Id = IamId.NewId(),
             TenantId = tenantId,
             AccountId = accountId,
             Role = role,

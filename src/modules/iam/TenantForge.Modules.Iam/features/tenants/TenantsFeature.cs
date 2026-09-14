@@ -43,7 +43,7 @@ internal static partial class TenantsFeature
             var (tenantRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var tenants = tenantRows.Select(tenant => new TenantSummaryResponse(
-                tenant.Id,
+                IamId.Format(tenant.Id),
                 tenant.Name,
                 tenant.Slug,
                 tenant.Status.ToString(),
@@ -72,7 +72,11 @@ internal static partial class TenantsFeature
                 return DuplicateSlugProblem();
             }
 
-            var ownerAccountId = Guid.Parse(request.OwnerUserId!);
+            // Validate() already ran IamId.TryParse on ownerUserId; the null
+            // coalesce is unreachable in the normal flow and, if it ever were
+            // hit, simply falls through to the same "Select an existing active
+            // owner" 400 rather than throwing.
+            var ownerAccountId = IamId.TryParse(request.OwnerUserId, out var parsedOwner) ? parsedOwner : default;
             var ownerExists = await db.Accounts.AnyAsync(account =>
                 account.Id == ownerAccountId && account.Status == AccountStatus.Active);
             if (!ownerExists)
@@ -109,14 +113,14 @@ internal static partial class TenantsFeature
             }
 
             var response = new TenantSummaryResponse(
-                tenant.Id,
+                IamId.Format(tenant.Id),
                 tenant.Name,
                 tenant.Slug,
                 tenant.Status.ToString(),
                 MemberCount: 1,
                 tenant.CreatedAtUtc.UtcDateTime.ToString("O"));
 
-            return Results.Created($"/api/platform/tenants/{tenant.Id}", response);
+            return Results.Created($"/api/platform/tenants/{IamId.Format(tenant.Id)}", response);
         })
         .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
 
@@ -159,7 +163,11 @@ internal static partial class TenantsFeature
         {
             errors["ownerUserId"] = ["Select the first tenant owner."];
         }
-        else if (!Guid.TryParse(request.OwnerUserId, out var ownerUserId) || ownerUserId == Guid.Empty)
+        // B017/S19: owner input must be a canonical TSID string. IamId.TryParse
+        // already rejects GUID-shaped and decimal input, so a GUID owner id now
+        // fails as "Select a valid owner user." (400) — the same validation
+        // failure the old shape produced, without weakening the check.
+        else if (!IamId.TryParse(request.OwnerUserId, out _))
         {
             errors["ownerUserId"] = ["Select a valid owner user."];
         }
@@ -184,7 +192,7 @@ internal sealed record CreateTenantRequest(string? Name, string? Slug, string? O
 internal sealed record TenantListResponse(IReadOnlyList<TenantSummaryResponse> Tenants, PaginationMetadata Pagination);
 
 internal sealed record TenantSummaryResponse(
-    Guid Id,
+    string Id,
     string Name,
     string Slug,
     string Status,

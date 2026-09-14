@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
+using TSID.Creator.NET;
 
 namespace TenantForge.Modules.Iam.Features.Account;
 
@@ -75,7 +76,7 @@ internal static class TenantDiscoveryFeature
 
             var tenants = tenantRows
                 .Select(row => new DiscoveredTenantResponse(
-                    row.Id,
+                    IamId.Format(row.Id),
                     row.Name,
                     row.Slug,
                     row.Status.ToString(),
@@ -89,24 +90,26 @@ internal static class TenantDiscoveryFeature
         return endpoints;
     }
 
-    private static Guid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
+    private static Tsid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
     {
         if (principal.Identity is not { IsAuthenticated: true })
         {
             return null;
         }
 
-        var subject = principal.FindFirstValue("sub");
-        return Guid.TryParse(subject, out var accountId) && accountId != Guid.Empty
-            ? accountId
-            : null;
+        // B017/S19: the subject must be a canonical TSID string. A legacy
+        // GUID-subject token is authenticated by the handler but names no
+        // account in the new representation, so it is denied here (403, the
+        // endpoint's fail-closed answer for an authenticated-but-unusable
+        // caller) instead of crashing or being forwarded.
+        return IamId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 }
 
 internal sealed record TenantDiscoveryResponse(IReadOnlyList<DiscoveredTenantResponse> Tenants, PaginationMetadata Pagination);
 
 internal sealed record DiscoveredTenantResponse(
-    Guid Id,
+    string Id,
     string Name,
     string Slug,
     string Status,

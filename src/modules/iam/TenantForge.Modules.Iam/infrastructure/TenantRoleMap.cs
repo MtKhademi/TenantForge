@@ -10,8 +10,8 @@ internal sealed class TenantRoleMap : IEntityTypeConfiguration<TenantRole>
     {
         builder.ToTable("iam_tenant_roles");
         builder.HasKey(role => role.Id);
-        builder.Property(role => role.Id).HasColumnName("id");
-        builder.Property(role => role.TenantId).HasColumnName("tenant_id").IsRequired();
+        builder.Property(role => role.Id).HasColumnName("id").HasConversion(TsidValueConverter.Shared).ValueGeneratedNever();
+        builder.Property(role => role.TenantId).HasColumnName("tenant_id").HasConversion(TsidValueConverter.Shared).IsRequired();
         builder.Property(role => role.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
         builder.Property(role => role.NormalizedName).HasColumnName("normalized_name").HasMaxLength(80).IsRequired();
         builder.Property(role => role.Description).HasColumnName("description").HasMaxLength(200).IsRequired();

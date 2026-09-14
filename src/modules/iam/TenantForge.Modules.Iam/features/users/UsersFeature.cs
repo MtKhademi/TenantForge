@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
 
@@ -78,7 +79,7 @@ internal static class UsersFeature
             }
 
             var response = UserResponse.FromAccount(account);
-            return Results.Created($"/api/platform/users/{account.Id}", response);
+            return Results.Created($"/api/platform/users/{IamId.Format(account.Id)}", response);
         })
         .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
 
@@ -133,7 +134,7 @@ internal sealed record CreateUserRequest(string? Email, string? DisplayName, str
 internal sealed record UsersListResponse(IReadOnlyList<UserResponse> Users, PaginationMetadata Pagination);
 
 internal sealed record UserResponse(
-    Guid Id,
+    string Id,
     string Email,
     string DisplayName,
     string Status,
@@ -141,7 +142,7 @@ internal sealed record UserResponse(
     string CreatedAtUtc)
 {
     public static UserResponse FromAccount(global::TenantForge.Modules.Iam.Domain.Account account) => new(
-        account.Id,
+        IamId.Format(account.Id),
         account.Email,
         account.DisplayName,
         account.Status.ToString(),

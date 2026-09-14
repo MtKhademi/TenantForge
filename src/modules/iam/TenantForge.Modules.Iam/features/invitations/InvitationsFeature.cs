@@ -33,7 +33,7 @@ internal static class InvitationsFeature
                 .ThenBy(invitation => invitation.Id);
             var (invitationRows, pagination) = await PaginationSupport.PageAsync(query, page);
             var invitations = invitationRows
-                .Select(invitation => new InvitationResponse(invitation.Id, invitation.Email, invitation.Role, invitation.Status, invitation.ExpiresAtUtc.UtcDateTime.ToString("O"), invitation.CreatedAtUtc.UtcDateTime.ToString("O")))
+                .Select(invitation => new InvitationResponse(IamId.Format(invitation.Id), invitation.Email, invitation.Role, invitation.Status, invitation.ExpiresAtUtc.UtcDateTime.ToString("O"), invitation.CreatedAtUtc.UtcDateTime.ToString("O")))
                 .ToList();
 
             return Results.Ok(new InvitationListResponse(invitations, pagination));
@@ -51,7 +51,7 @@ internal static class InvitationsFeature
             var role = request.Role!.Trim();
 
             await using var transaction = await db.Database.BeginTransactionAsync();
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({auth.TenantId.ToString() + ":" + normalizedEmail}, 0))");
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({IamId.Format(auth.TenantId) + ":" + normalizedEmail}, 0))");
 
             var roleExists = InvitationRoles.Contains(role) || await db.TenantRoles.AnyAsync(r => r.TenantId == auth.TenantId && r.Name == role);
             if (!roleExists)
@@ -79,8 +79,8 @@ internal static class InvitationsFeature
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            var response = new InvitationResponse(invitation.Id, invitation.Email, invitation.Role, invitation.Status, invitation.ExpiresAtUtc.UtcDateTime.ToString("O"), invitation.CreatedAtUtc.UtcDateTime.ToString("O"));
-            return Results.Created($"/api/tenants/{auth.TenantId}/invitations/{invitation.Id}", response);
+            var response = new InvitationResponse(IamId.Format(invitation.Id), invitation.Email, invitation.Role, invitation.Status, invitation.ExpiresAtUtc.UtcDateTime.ToString("O"), invitation.CreatedAtUtc.UtcDateTime.ToString("O"));
+            return Results.Created($"/api/tenants/{IamId.Format(auth.TenantId)}/invitations/{IamId.Format(invitation.Id)}", response);
         }).RequireAuthorization();
 
         return endpoints;
@@ -106,4 +106,4 @@ internal static class InvitationsFeature
 
 internal sealed record CreateInvitationRequest(string? Email, string? Role);
 internal sealed record InvitationListResponse(IReadOnlyList<InvitationResponse> Invitations, PaginationMetadata Pagination);
-internal sealed record InvitationResponse(Guid Id, string Email, string Role, string Status, string ExpiresAtUtc, string CreatedAtUtc);
+internal sealed record InvitationResponse(string Id, string Email, string Role, string Status, string ExpiresAtUtc, string CreatedAtUtc);

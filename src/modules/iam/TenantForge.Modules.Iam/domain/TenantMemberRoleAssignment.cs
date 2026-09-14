@@ -1,16 +1,18 @@
+using TSID.Creator.NET;
+
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class TenantMemberRoleAssignment
 {
-    public Guid TenantMembershipId { get; private set; }
-    public Guid TenantRoleId { get; private set; }
+    public Tsid TenantMembershipId { get; private set; }
+    public Tsid TenantRoleId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
 
     private TenantMemberRoleAssignment()
     {
     }
 
-    public static TenantMemberRoleAssignment Create(Guid tenantMembershipId, Guid tenantRoleId, DateTimeOffset nowUtc)
+    public static TenantMemberRoleAssignment Create(Tsid tenantMembershipId, Tsid tenantRoleId, DateTimeOffset nowUtc)
     {
         return new TenantMemberRoleAssignment
         {

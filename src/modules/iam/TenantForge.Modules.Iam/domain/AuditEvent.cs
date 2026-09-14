@@ -1,10 +1,12 @@
+using TSID.Creator.NET;
+
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class AuditEvent
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
-    public Guid TenantId { get; private set; }
-    public Guid ActorAccountId { get; private set; }
+    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid TenantId { get; private set; }
+    public Tsid ActorAccountId { get; private set; }
     public string Actor { get; private set; } = string.Empty;
     public string ActorEmail { get; private set; } = string.Empty;
     public string Action { get; private set; } = string.Empty;
@@ -16,11 +18,11 @@ internal sealed class AuditEvent
     {
     }
 
-    public static AuditEvent Create(Guid tenantId, Guid actorAccountId, string actor, string actorEmail, string action, string target, string details, DateTimeOffset nowUtc)
+    public static AuditEvent Create(Tsid tenantId, Tsid actorAccountId, string actor, string actorEmail, string action, string target, string details, DateTimeOffset nowUtc)
     {
         return new AuditEvent
         {
-            Id = Guid.NewGuid(),
+            Id = IamId.NewId(),
             TenantId = tenantId,
             ActorAccountId = actorAccountId,
             Actor = actor.Trim(),

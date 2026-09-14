@@ -13,7 +13,9 @@ internal sealed class AccountMap : IEntityTypeConfiguration<Account>
         builder.HasKey(account => account.Id);
 
         builder.Property(account => account.Id)
-            .HasColumnName("id");
+            .HasColumnName("id")
+            .HasConversion(TsidValueConverter.Shared)
+            .ValueGeneratedNever();
 
         builder.Property(account => account.Email)
             .HasColumnName("email")

@@ -7,6 +7,7 @@ using Npgsql;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
+using TSID.Creator.NET;
 
 namespace TenantForge.Modules.Iam.Features.Roles;
 
@@ -88,16 +89,16 @@ internal static class RolesFeature
                 return DuplicateRoleProblem();
             }
 
-            var response = (await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == role.Id);
+            var response = (await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == IamId.Format(role.Id));
             return Results.Created($"/api/tenants/{access.TenantId}/roles/{role.Id}", response);
         }).RequireAuthorization();
 
         endpoints.MapPut("/api/tenants/{tenantId}/roles/{roleId}", async (string tenantId, string roleId, UpdateRoleRequest request, ClaimsPrincipal principal, IamDbContext db) =>
         {
-            var tenantGuid = ParseTenantId(tenantId);
-            var roleGuid = ParseTenantId(roleId);
+            var tenantTsid = ParseTenantId(tenantId);
+            var roleTsid = ParseTenantId(roleId);
             var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, RolesManagePermission);
-            if (tenantGuid is null || roleGuid is null || access.Result is not null)
+            if (tenantTsid is null || roleTsid is null || access.Result is not null)
             {
                 return access.Result ?? Results.Forbid();
             }
@@ -109,7 +110,7 @@ internal static class RolesFeature
             }
 
             await using var transaction = await BeginTenantMutationAsync(db, access.TenantId);
-            var role = await db.TenantRoles.SingleOrDefaultAsync(item => item.TenantId == access.TenantId && item.Id == roleGuid.Value);
+            var role = await db.TenantRoles.SingleOrDefaultAsync(item => item.TenantId == access.TenantId && item.Id == roleTsid.Value);
             if (role is null)
             {
                 await transaction.RollbackAsync();
@@ -133,7 +134,7 @@ internal static class RolesFeature
             db.AuditEvents.Add(AuditEvent.Create(access.TenantId, access.AccountId, access.Actor, access.ActorEmail, "Role.Updated", role.Name, $"مجوزهای نقش {role.Name} به‌روزرسانی شد.", now));
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
-            return Results.Ok((await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == role.Id));
+            return Results.Ok((await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == IamId.Format(role.Id)));
         }).RequireAuthorization();
 
         endpoints.MapPut("/api/tenants/{tenantId}/members/{memberId}/roles/{roleId}", async (string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db) =>
@@ -197,15 +198,15 @@ internal static class RolesFeature
 
     internal static async Task<TenantAccess> AuthorizeTenantAccessAsync(string tenantId, ClaimsPrincipal principal, IamDbContext db, string? permissionKey = null)
     {
-        var tenantGuid = ParseTenantId(tenantId);
+        var tenantTsid = ParseTenantId(tenantId);
         var accountId = GetAuthenticatedAccountId(principal);
-        if (tenantGuid is null || accountId is null)
+        if (tenantTsid is null || accountId is null)
         {
             return TenantAccess.Forbidden;
         }
 
         var row = await db.TenantMemberships.AsNoTracking()
-            .Where(member => member.TenantId == tenantGuid.Value && member.AccountId == accountId.Value)
+            .Where(member => member.TenantId == tenantTsid.Value && member.AccountId == accountId.Value)
             .Join(db.Accounts.AsNoTracking().Where(account => account.Status == AccountStatus.Active), member => member.AccountId, account => account.Id, (member, account) => new { Membership = member, Account = account })
             .Join(db.Tenants.AsNoTracking().Where(tenant => tenant.Status == TenantStatus.Active), row => row.Membership.TenantId, tenant => tenant.Id, (row, tenant) => row)
             .SingleOrDefaultAsync();
@@ -217,46 +218,46 @@ internal static class RolesFeature
 
         if (permissionKey is not null)
         {
-            var permissions = await ResolvePermissionsAsync(db, tenantGuid.Value, accountId.Value);
+            var permissions = await ResolvePermissionsAsync(db, tenantTsid.Value, accountId.Value);
             if (!permissions.Contains(permissionKey, StringComparer.Ordinal))
             {
                 return TenantAccess.Forbidden;
             }
         }
 
-        return new(tenantGuid.Value, accountId.Value, row.Membership.Id, row.Membership.Role, row.Account.DisplayName, row.Account.Email, null);
+        return new(tenantTsid.Value, accountId.Value, row.Membership.Id, row.Membership.Role, row.Account.DisplayName, row.Account.Email, null);
     }
 
-    internal static async Task<bool> HasPermissionAsync(IamDbContext db, Guid tenantId, Guid accountId, string permissionKey) =>
+    internal static async Task<bool> HasPermissionAsync(IamDbContext db, Tsid tenantId, Tsid accountId, string permissionKey) =>
         (await ResolvePermissionsAsync(db, tenantId, accountId)).Contains(permissionKey, StringComparer.Ordinal);
 
     private static async Task<AssignmentValidation> ValidateAssignmentAsync(string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db)
     {
-        var memberGuid = ParseTenantId(memberId);
-        var roleGuid = ParseTenantId(roleId);
+        var memberTsid = ParseTenantId(memberId);
+        var roleTsid = ParseTenantId(roleId);
         var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, RolesManagePermission);
-        if (memberGuid is null || roleGuid is null || access.Result is not null)
+        if (memberTsid is null || roleTsid is null || access.Result is not null)
         {
             return AssignmentValidation.Forbidden;
         }
 
-        var memberExists = await db.TenantMemberships.AnyAsync(member => member.TenantId == access.TenantId && member.Id == memberGuid.Value);
-        var roleExists = await db.TenantRoles.AnyAsync(role => role.TenantId == access.TenantId && role.Id == roleGuid.Value);
+        var memberExists = await db.TenantMemberships.AnyAsync(member => member.TenantId == access.TenantId && member.Id == memberTsid.Value);
+        var roleExists = await db.TenantRoles.AnyAsync(role => role.TenantId == access.TenantId && role.Id == roleTsid.Value);
         if (!memberExists || !roleExists)
         {
-            return new(access.TenantId, memberGuid.Value, roleGuid.Value, access.AccountId, access.Actor, access.ActorEmail, Results.NotFound());
+            return new(access.TenantId, memberTsid.Value, roleTsid.Value, access.AccountId, access.Actor, access.ActorEmail, Results.NotFound());
         }
 
-        return new(access.TenantId, memberGuid.Value, roleGuid.Value, access.AccountId, access.Actor, access.ActorEmail, null);
+        return new(access.TenantId, memberTsid.Value, roleTsid.Value, access.AccountId, access.Actor, access.ActorEmail, null);
     }
 
-    private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Guid tenantId)
+    private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Tsid tenantId)
     {
         var roles = await db.TenantRoles.AsNoTracking().Where(role => role.TenantId == tenantId).OrderBy(role => role.Name).ThenBy(role => role.Id).ToListAsync();
         return await BuildRoleResponsesAsync(db, tenantId, roles);
     }
 
-    private static async Task<(IReadOnlyList<TenantRoleResponse> Roles, PaginationMetadata Pagination)> BuildPagedRoleResponsesAsync(IamDbContext db, Guid tenantId, PaginationQuery page)
+    private static async Task<(IReadOnlyList<TenantRoleResponse> Roles, PaginationMetadata Pagination)> BuildPagedRoleResponsesAsync(IamDbContext db, Tsid tenantId, PaginationQuery page)
     {
         var query = db.TenantRoles.AsNoTracking()
             .Where(role => role.TenantId == tenantId)
@@ -267,7 +268,7 @@ internal static class RolesFeature
         return (await BuildRoleResponsesAsync(db, tenantId, roles), PaginationMetadata.From(page, totalCount));
     }
 
-    private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Guid tenantId, IReadOnlyList<TenantRole> roles)
+    private static async Task<IReadOnlyList<TenantRoleResponse>> BuildRoleResponsesAsync(IamDbContext db, Tsid tenantId, IReadOnlyList<TenantRole> roles)
     {
         var roleIds = roles.Select(role => role.Id).ToHashSet();
         var assignments = await db.TenantMemberRoleAssignments.AsNoTracking()
@@ -276,17 +277,17 @@ internal static class RolesFeature
             .ToListAsync();
 
         return roles.Select(role => new TenantRoleResponse(
-            role.Id,
+            IamId.Format(role.Id),
             role.Name,
             role.Description,
             role.Kind,
             role.PermissionKeys,
-            assignments.Where(a => a.TenantRoleId == role.Id).Select(a => a.MemberId).OrderBy(id => id).ToList(),
+            assignments.Where(a => a.TenantRoleId == role.Id).Select(a => IamId.Format(a.MemberId)).OrderBy(id => id, StringComparer.Ordinal).ToList(),
             role.CreatedAtUtc.UtcDateTime.ToString("O"),
             role.UpdatedAtUtc.UtcDateTime.ToString("O"))).ToList();
     }
 
-    private static async Task<IReadOnlyList<string>> ResolvePermissionsAsync(IamDbContext db, Guid tenantId, Guid accountId)
+    private static async Task<IReadOnlyList<string>> ResolvePermissionsAsync(IamDbContext db, Tsid tenantId, Tsid accountId)
     {
         var membership = await db.TenantMemberships.AsNoTracking()
             .Where(member => member.TenantId == tenantId && member.AccountId == accountId)
@@ -313,7 +314,7 @@ internal static class RolesFeature
         return keys.OrderBy(key => key, StringComparer.Ordinal).ToList();
     }
 
-    private static async Task<bool> HasAnyEffectiveRoleAdministratorAsync(IamDbContext db, Guid tenantId, Guid? updatedRoleId, IReadOnlyList<string>? updatedPermissionKeys, RemovedAssignment? removedAssignment)
+    private static async Task<bool> HasAnyEffectiveRoleAdministratorAsync(IamDbContext db, Tsid tenantId, Tsid? updatedRoleId, IReadOnlyList<string>? updatedPermissionKeys, RemovedAssignment? removedAssignment)
     {
         var activeMembers = await db.TenantMemberships.AsNoTracking()
             .Where(member => member.TenantId == tenantId)
@@ -360,10 +361,10 @@ internal static class RolesFeature
         return administratorAccountIds.Count > 0;
     }
 
-    private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTenantMutationAsync(IamDbContext db, Guid tenantId)
+    private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTenantMutationAsync(IamDbContext db, Tsid tenantId)
     {
         var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({tenantId.ToString()}, 0))");
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({IamId.Format(tenantId)}, 0))");
         return transaction;
     }
 
@@ -389,13 +390,14 @@ internal static class RolesFeature
         return errors;
     }
 
-    private static Guid? ParseTenantId(string value) => Guid.TryParse(value, out var id) && id != Guid.Empty ? id : null;
+    private static Tsid? ParseTenantId(string value) => IamId.TryParseNullable(value);
 
-    private static Guid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
+    private static Tsid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
     {
         if (principal.Identity is not { IsAuthenticated: true }) return null;
-        var subject = principal.FindFirstValue("sub");
-        return Guid.TryParse(subject, out var accountId) && accountId != Guid.Empty ? accountId : null;
+        // B017/S19: subject must be a canonical TSID string; a legacy
+        // GUID-subject token is denied (403 here) instead of crashing.
+        return IamId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) => exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
@@ -403,10 +405,10 @@ internal static class RolesFeature
     private static IResult DuplicateRoleProblem() => Results.Problem(title: "Duplicate tenant role", detail: "A role with this name already exists in this tenant.", statusCode: StatusCodes.Status409Conflict);
 }
 
-internal sealed record TenantAccess(Guid TenantId, Guid AccountId, Guid MembershipId, TenantMembershipRole MembershipRole, string Actor, string ActorEmail, IResult? Result)
+internal sealed record TenantAccess(Tsid TenantId, Tsid AccountId, Tsid MembershipId, TenantMembershipRole MembershipRole, string Actor, string ActorEmail, IResult? Result)
 {
     public bool IsOwner => MembershipRole == TenantMembershipRole.Owner;
-    public static TenantAccess Forbidden { get; } = new(Guid.Empty, Guid.Empty, Guid.Empty, TenantMembershipRole.Member, string.Empty, string.Empty, Results.Forbid());
+    public static TenantAccess Forbidden { get; } = new(default, default, default, TenantMembershipRole.Member, string.Empty, string.Empty, Results.Forbid());
 }
 
 internal sealed record ActorSnapshot(string DisplayName, string Email);
@@ -415,12 +417,12 @@ internal sealed record PermissionGroupResponse(string Id, string Label, string D
 internal sealed record PermissionResponse(string Key, string Label, string Description, string Kind);
 internal sealed record TenantRolesResponse(IReadOnlyList<TenantRoleResponse> Roles);
 internal sealed record PagedTenantRolesResponse(IReadOnlyList<TenantRoleResponse> Roles, PaginationMetadata Pagination);
-internal sealed record TenantRoleResponse(Guid Id, string Name, string Description, string Kind, IReadOnlyList<string> PermissionKeys, IReadOnlyList<Guid> MemberIds, string CreatedAtUtc, string UpdatedAtUtc);
+internal sealed record TenantRoleResponse(string Id, string Name, string Description, string Kind, IReadOnlyList<string> PermissionKeys, IReadOnlyList<string> MemberIds, string CreatedAtUtc, string UpdatedAtUtc);
 internal sealed record CreateRoleRequest(string? Name, IReadOnlyList<string>? PermissionKeys);
 internal sealed record UpdateRoleRequest(IReadOnlyList<string>? PermissionKeys);
 internal sealed record ResolvedPermissionsResponse(IReadOnlyList<string> Permissions);
-internal sealed record AssignmentValidation(Guid TenantId, Guid MemberId, Guid RoleId, Guid AccountId, string Actor, string ActorEmail, IResult? Result)
+internal sealed record AssignmentValidation(Tsid TenantId, Tsid MemberId, Tsid RoleId, Tsid AccountId, string Actor, string ActorEmail, IResult? Result)
 {
-    public static AssignmentValidation Forbidden { get; } = new(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, string.Empty, string.Empty, Results.Forbid());
+    public static AssignmentValidation Forbidden { get; } = new(default, default, default, default, string.Empty, string.Empty, Results.Forbid());
 }
-internal sealed record RemovedAssignment(Guid TenantMembershipId, Guid TenantRoleId);
+internal sealed record RemovedAssignment(Tsid TenantMembershipId, Tsid TenantRoleId);

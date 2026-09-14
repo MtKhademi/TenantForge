@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.IdentityModel.Tokens;
+using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
@@ -48,7 +49,7 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
         var root = document.RootElement;
 
         var id = root.GetProperty("id").GetString()!;
-        Assert.True(Guid.TryParse(id, out _), "id must be the persisted account id (a GUID)");
+        Assert.True(IamId.TryParse(id, out _), "id must be the persisted account id as a canonical TSID string");
         Assert.Equal(ApiFactory.Email, root.GetProperty("email").GetString());
         Assert.Equal(ApiFactory.DisplayName, root.GetProperty("displayName").GetString());
         Assert.True(root.GetProperty("isPlatformAdmin").GetBoolean());
@@ -58,7 +59,7 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
     public async Task NonAdminAuthenticatedAccount_Returns200_WithIsPlatformAdminFalse()
     {
         using var client = CreateClient();
-        var accountId = Guid.NewGuid().ToString();
+        var accountId = IamId.Format(IamId.NewId());
         var accessToken = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             subject: accountId,
@@ -94,6 +95,20 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
     {
         using var client = CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "not.a.jwt");
+
+        var response = await client.GetAsync("/api/auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("11111111-1111-1111-1111-111111111111")]
+    [InlineData("1234567890123")]
+    public async Task LegacyGuidOrDecimalSubject_Returns401(string subject)
+    {
+        using var client = CreateClient();
+        var token = TestJwtFactory.Issue(signingKey: ApiFactory.SigningKey, subject: subject);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetAsync("/api/auth/me");
 
@@ -178,15 +193,15 @@ internal static class TestJwtFactory
         string? email = null,
         string? displayName = null)
     {
-        // The default sub is an arbitrary GUID; these helpers exercise token
-        // validation (signature/issuer/audience/lifetime), so most tests do not
-        // assert the specific id. It is a GUID to mirror the real
-        // (persisted-account) shape.
+        // The default sub is an arbitrary TSID string; these helpers exercise
+        // token validation (signature/issuer/audience/lifetime), so most tests
+        // do not assert the specific id. It mirrors the public persisted-account
+        // identifier shape without exposing the bigint backing value.
         var descriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(
             [
-                new Claim(JwtRegisteredClaimNames.Sub, subject ?? Guid.NewGuid().ToString()),
+                new Claim(JwtRegisteredClaimNames.Sub, subject ?? IamId.Format(IamId.NewId())),
                 new Claim(JwtRegisteredClaimNames.Email, email ?? ApiFactory.Email),
                 new Claim(JwtRegisteredClaimNames.Name, displayName ?? ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", isPlatformAdmin ? "true" : "false")
@@ -218,7 +233,7 @@ internal static class TestJwtFactory
             audience: "TenantForge",
             claims: new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, Guid.NewGuid().ToString()),
+                new Claim(JwtRegisteredClaimNames.Sub, IamId.Format(IamId.NewId())),
                 new Claim(JwtRegisteredClaimNames.Email, ApiFactory.Email),
                 new Claim(JwtRegisteredClaimNames.Name, ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", "true")
