@@ -23,13 +23,23 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 - `/front-task` runs directly in the primary `ui-engineer` conversation.
 - `/backend-task` runs directly in the primary `backend-mentor` conversation.
 - Never call the `task` tool, start a subagent or delegate a phase.
-- After plan approval, create the todo list with `todowrite` and keep exactly one
-  item `in_progress`.
-- Update the todo list immediately after every completed step and show the
-  evidence and next step. Never hide several implementation steps inside one
-  todo update.
-- Perform final diff review in the same agent and require final user approval
-  before delivery.
+- Routine execution has exactly two blocking user-approval gates:
+  1. after reading/analyzing the task, present the summary and complete plan,
+     ask `Approve`, `Change` or `Cancel`, then wait;
+  2. after implementation, validation and self-review are complete, present the
+     final diff/evidence, ask `Approve`, `Change` or `Cancel`, then wait
+     before commit, push and pull-request creation.
+- After the first approval, create the todo list with `todowrite` and keep
+  exactly one item `in_progress`.
+- Between the two gates, todo/progress updates are informational, not permission
+  requests. Immediately continue to the next approved todo after reporting its
+  evidence; never ask whether to start, continue, run normal validation or move
+  to the next step.
+- Pause between gates only for a real blocker, a material scope/contract change,
+  missing authority, destructive action requiring approval, or an explicit user
+  interruption.
+- After the second approval, finish commit, push and PR creation without asking
+  for a third routine approval.
 
 ## Task ledger and Spec lifecycle
 
