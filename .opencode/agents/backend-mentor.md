@@ -56,8 +56,7 @@ Module convention:
 
 - Compose IAM through exactly two public phases: call
   `builder.Services.AddIamModule(builder.Environment)` before `Build`, then
-  `await app.UseIamModuleAsync()` after `Build`. B016/S18 introduces this seam;
-  its live Spec is authoritative until delivery.
+  `await app.UseIamModuleAsync()` after `Build`.
 - `AddIamModule` only registers services. `UseIamModuleAsync` owns post-Build
   configuration validation, authentication and authorization middleware,
   migration, idempotent seeding and IAM endpoint mapping in deterministic

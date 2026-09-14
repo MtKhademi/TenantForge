@@ -40,30 +40,42 @@ Rules:
 
 Each module exposes exactly one public static seam class plus a module-config
 class; everything else in the module is `internal`, so the API host cannot
-reach into feature details. The host composes a module with three calls:
+reach into feature details. The host composes a module with exactly two calls:
+registration before `Build`, asynchronous activation after `Build`.
 
 ```csharp
 builder.Services.AddIamModule(builder.Environment);
+
 var app = builder.Build();
-IamModule.ValidateIamModuleConfiguration(builder.Environment, app.Configuration);
-app.MapIamModule();
+
+await app.UseIamModuleAsync();
 ```
 
-- `IamModule` (public) is the seam: `AddIamModule` (DI registration),
-  `ValidateIamModuleConfiguration` (startup validation), `MapIamModule`
-  (endpoint mapping).
+- `IamModule` (public) is the seam, with exactly two public static members:
+  - `AddIamModule` — registration only. Adds every IAM-owned service to the
+    container. Performs no I/O and makes no pass/fail decision, because
+    `WebApplication.CreateBuilder` has not consumed every configuration source
+    yet (and `WebApplicationFactory` test configuration is injected later).
+  - `UseIamModuleAsync` — activation. Runs once, after `Build`, in
+    deterministic order: validate the fully assembled configuration (fail
+    closed), install authentication middleware, install authorization
+    middleware, apply pending migrations, seed the platform administrator
+    idempotently, then map every IAM endpoint.
+  - Configuration validation, migration, seeding and endpoint mapping are
+    `private` helpers called only from `UseIamModuleAsync`; the host cannot
+    call them separately.
 - `IModuleConfig` is the module-config contract: a `SectionName` (the top-level
   config tag, e.g. `IAM`), `RegisterServices`, and `ValidateConfiguration`.
 - `IAMConfig : IModuleConfig` reads its section from `IConfiguration`, throws at
   startup when the configuration is not correct (fail closed), and only then
   registers services.
-- Validation runs **after** `builder.Build()`, never at registration time:
-  `WebApplication.CreateBuilder` has not consumed every configuration source
-  then, and `WebApplicationFactory` test configuration is injected afterwards.
-  Registering services is allowed pre-Build; deciding pass/fail is not.
+- Activation's database work is genuinely asynchronous (`await`ed), never
+  blocked with `.Wait()`/`.Result`/`.GetAwaiter().GetResult()`, and never
+  hidden inside a hosted service merely to avoid awaiting it in `Program.cs`.
 
 Future modules (tenancy, audit, ...) follow the same seam shape: one public
-module class, one `<X>ModuleConfig : IModuleConfig`, features stay internal.
+module class exposing one registration method and one asynchronous activation
+method, one `<X>ModuleConfig : IModuleConfig`, features stay internal.
 
 ## Authentication evolution
 

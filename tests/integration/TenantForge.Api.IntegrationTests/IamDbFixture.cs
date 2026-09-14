@@ -98,6 +98,19 @@ public sealed class PaginationDbFixture : IamDbFixtureBase
     }
 }
 
+/// <summary>
+/// A dedicated database for the composition-seam startup tests, which build
+/// two independent hosts back-to-back against the same database to observe
+/// restart idempotency. Kept off the shared main database so its seeded admin
+/// never affects other classes' row-count assumptions.
+/// </summary>
+public sealed class CompositionSeamDbFixture : IamDbFixtureBase
+{
+    public CompositionSeamDbFixture() : base("tenantforge_composition_seam_tests")
+    {
+    }
+}
+
 [CollectionDefinition(nameof(TenantDiscoveryIsolatedCollection))]
 public sealed class TenantDiscoveryIsolatedCollection : ICollectionFixture<TenantDiscoveryDbFixture>
 {
@@ -110,5 +123,10 @@ public sealed class RolePermissionIsolatedCollection : ICollectionFixture<RolePe
 
 [CollectionDefinition(nameof(PaginationIsolatedCollection))]
 public sealed class PaginationIsolatedCollection : ICollectionFixture<PaginationDbFixture>
+{
+}
+
+[CollectionDefinition(nameof(CompositionSeamIsolatedCollection))]
+public sealed class CompositionSeamIsolatedCollection : ICollectionFixture<CompositionSeamDbFixture>
 {
 }

@@ -20,24 +20,15 @@ builder.Services.AddIamModule(builder.Environment);
 
 var app = builder.Build();
 
-IamModule.ValidateIamModuleConfiguration(builder.Environment, app.Configuration);
-
 app.UseCors();
 
-// Authentication and authorization run in every environment. The JWT scheme is
-// registered by the IAM module unconditionally, but outside Development its
-// signing key does not exist (configuration validation forbids it), so token
-// validation always fails and protected endpoints answer 401 — fail closed.
-app.UseAuthentication();
-app.UseAuthorization();
-
-// Apply pending IAM migrations and seed the platform administrator (idempotent)
-// before the host starts serving. Runs after configuration validation, so the
-// connection string and seed section are known to be present/well-formed.
-await IamModule.SeedIamModuleAsync(app.Services);
+// IAM activation owns, in deterministic order: configuration validation
+// (fail closed), authentication middleware, authorization middleware,
+// pending migrations, idempotent platform-administrator seeding, and mapping
+// every IAM endpoint. The host does not call any of those steps separately.
+await app.UseIamModuleAsync();
 
 app.MapHealth();
-app.MapIamModule();
 
 app.Run();
 
