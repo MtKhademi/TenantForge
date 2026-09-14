@@ -13,14 +13,18 @@ internal sealed class TenantMembershipMap : IEntityTypeConfiguration<TenantMembe
         builder.HasKey(membership => membership.Id);
 
         builder.Property(membership => membership.Id)
-            .HasColumnName("id");
+            .HasColumnName("id")
+            .HasConversion(TsidValueConverter.Shared)
+            .ValueGeneratedNever();
 
         builder.Property(membership => membership.TenantId)
             .HasColumnName("tenant_id")
+            .HasConversion(TsidValueConverter.Shared)
             .IsRequired();
 
         builder.Property(membership => membership.AccountId)
             .HasColumnName("account_id")
+            .HasConversion(TsidValueConverter.Shared)
             .IsRequired();
 
         builder.Property(membership => membership.Role)

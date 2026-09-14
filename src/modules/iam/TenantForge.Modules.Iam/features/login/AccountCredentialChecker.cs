@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam.Features.Login;
@@ -37,7 +38,7 @@ internal sealed class AccountCredentialChecker(
         }
 
         return new AuthenticatedAccount(
-            account.Id.ToString(),
+            IamId.Format(account.Id),
             account.Email,
             account.DisplayName,
             account.IsPlatformAdmin);

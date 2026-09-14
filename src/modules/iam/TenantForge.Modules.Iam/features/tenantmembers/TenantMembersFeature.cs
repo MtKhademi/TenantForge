@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
+using TSID.Creator.NET;
 
 namespace TenantForge.Modules.Iam.Features.TenantMembers;
 
@@ -30,7 +31,11 @@ internal static class TenantMembersFeature
                 return Results.Forbid();
             }
 
-            if (!Guid.TryParse(tenantId, out var tenantGuid) || tenantGuid == Guid.Empty)
+            // B017/S19: the tenant route value must be a canonical TSID string.
+            // A malformed, GUID-shaped or decimal value is not a known tenant, so
+            // the endpoint fails closed with 403 (the same answer it always gave
+            // for an unknown tenant id) rather than throwing.
+            if (!IamId.TryParse(tenantId, out var tenantTsid))
             {
                 return Results.Forbid();
             }
@@ -38,7 +43,7 @@ internal static class TenantMembersFeature
             var hasTenantMembership = await db.TenantMemberships
                 .AsNoTracking()
                 .AnyAsync(membership =>
-                    membership.TenantId == tenantGuid
+                    membership.TenantId == tenantTsid
                     && membership.AccountId == accountId.Value);
 
             if (!hasTenantMembership)
@@ -48,9 +53,9 @@ internal static class TenantMembersFeature
 
             var tenant = await db.Tenants
                 .AsNoTracking()
-                .Where(tenant => tenant.Id == tenantGuid && tenant.Status == TenantStatus.Active)
+                .Where(tenant => tenant.Id == tenantTsid && tenant.Status == TenantStatus.Active)
                 .Select(tenant => new TenantContextResponse(
-                    tenant.Id,
+                    IamId.Format(tenant.Id),
                     tenant.Name,
                     tenant.Slug,
                     tenant.Status.ToString()))
@@ -63,7 +68,7 @@ internal static class TenantMembersFeature
 
             var query = db.TenantMemberships
                 .AsNoTracking()
-                .Where(membership => membership.TenantId == tenantGuid)
+                .Where(membership => membership.TenantId == tenantTsid)
                 .Join(
                     db.Accounts.AsNoTracking(),
                     membership => membership.AccountId,
@@ -84,8 +89,8 @@ internal static class TenantMembersFeature
             var (memberRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var members = memberRows.Select(member => new TenantMemberResponse(
-                member.Id,
-                member.UserId,
+                IamId.Format(member.Id),
+                IamId.Format(member.UserId),
                 member.Email,
                 member.DisplayName,
                 member.Role.ToString(),
@@ -99,17 +104,17 @@ internal static class TenantMembersFeature
         return endpoints;
     }
 
-    private static Guid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
+    private static Tsid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
     {
         if (principal.Identity is not { IsAuthenticated: true })
         {
             return null;
         }
 
-        var subject = principal.FindFirstValue("sub");
-        return Guid.TryParse(subject, out var accountId) && accountId != Guid.Empty
-            ? accountId
-            : null;
+        // B017/S19: subject must be a canonical TSID string; a legacy
+        // GUID-subject token is denied (403 here, the endpoint's fail-closed
+        // answer for an authenticated-but-unusable caller).
+        return IamId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 }
 
@@ -119,14 +124,14 @@ internal sealed record TenantMembersResponse(
     PaginationMetadata Pagination);
 
 internal sealed record TenantContextResponse(
-    Guid Id,
+    string Id,
     string Name,
     string Slug,
     string Status);
 
 internal sealed record TenantMemberResponse(
-    Guid Id,
-    Guid UserId,
+    string Id,
+    string UserId,
     string Email,
     string DisplayName,
     string Role,

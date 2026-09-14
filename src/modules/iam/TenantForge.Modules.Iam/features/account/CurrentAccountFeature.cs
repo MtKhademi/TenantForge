@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using TenantForge.Modules.Iam.Domain;
 
 namespace TenantForge.Modules.Iam.Features.Account;
 
@@ -26,14 +27,27 @@ internal static class CurrentAccountFeature
             var isPlatformAdmin = bool.TryParse(
                 principal.FindFirstValue("isPlatformAdmin"), out var admin) && admin;
 
-            if (string.IsNullOrWhiteSpace(id)
-                || string.IsNullOrWhiteSpace(email)
+            // B017/S19: a token whose subject is not a canonical TSID string
+            // (e.g. a legacy GUID-subject token minted before the identifier
+            // migration) is rejected here, at authentication time, rather than
+            // forwarded as an opaque string. This is the point at which the old
+            // identity representation stops being accepted: the token still
+            // validates cryptographically, but its subject no longer names a
+            // live account shape, so the caller must sign in again.
+            if (!IamId.TryParse(id, out var accountId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (string.IsNullOrWhiteSpace(email)
                 || string.IsNullOrWhiteSpace(displayName))
             {
                 return Results.Unauthorized();
             }
 
-            return Results.Ok(new CurrentAccountResponse(id, email, displayName, isPlatformAdmin));
+            // Re-emit in canonical form: even a lower-case subject is accepted
+            // (Crockford base32 is case-insensitive) but always normalized.
+            return Results.Ok(new CurrentAccountResponse(IamId.Format(accountId), email, displayName, isPlatformAdmin));
         })
         .RequireAuthorization();
 

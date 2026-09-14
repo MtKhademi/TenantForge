@@ -13,7 +13,9 @@ internal sealed class TenantMap : IEntityTypeConfiguration<Tenant>
         builder.HasKey(tenant => tenant.Id);
 
         builder.Property(tenant => tenant.Id)
-            .HasColumnName("id");
+            .HasColumnName("id")
+            .HasConversion(TsidValueConverter.Shared)
+            .ValueGeneratedNever();
 
         builder.Property(tenant => tenant.Name)
             .HasColumnName("name")

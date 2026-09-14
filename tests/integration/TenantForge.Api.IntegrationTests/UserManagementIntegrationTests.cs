@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using TSID.Creator.NET;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -32,13 +33,14 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
         return new TenantPair(tenant.Id, owner.Id, member.Id);
     }
 
-    private static void Authorize(HttpClient client, Guid accountId)
+    private static void Authorize(HttpClient client, Tsid accountId)
     {
+        var accountIdText = IamId.Format(accountId);
         var token = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: false,
-            subject: accountId.ToString(),
-            email: $"{accountId:N}@tenantforge.local",
+            subject: accountIdText,
+            email: $"{accountIdText}@tenantforge.local",
             displayName: "Tenant Account");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
@@ -80,7 +82,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
         var seededAdmin = users.EnumerateArray().Single(user =>
             user.GetProperty("email").GetString() == ApiFactory.Email);
 
-        Assert.True(Guid.TryParse(seededAdmin.GetProperty("id").GetString(), out _));
+        Assert.True(IamId.TryParse(seededAdmin.GetProperty("id").GetString(), out _));
         Assert.Equal(ApiFactory.DisplayName, seededAdmin.GetProperty("displayName").GetString());
         Assert.Equal("Active", seededAdmin.GetProperty("status").GetString());
         Assert.True(seededAdmin.GetProperty("isPlatformAdmin").GetBoolean());
@@ -111,7 +113,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
         using var createDocument = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
         var created = createDocument.RootElement;
-        Assert.True(Guid.TryParse(created.GetProperty("id").GetString(), out _));
+        Assert.True(IamId.TryParse(created.GetProperty("id").GetString(), out _));
         Assert.Equal(email, created.GetProperty("email").GetString());
         Assert.Equal("New Team Member", created.GetProperty("displayName").GetString());
         Assert.Equal("Active", created.GetProperty("status").GetString());
@@ -250,9 +252,9 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
             // Own tenantId.
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}")).StatusCode);
+                (await client.GetAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={tenant.TenantId}", new
+                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}", new
                 {
                     email,
                     displayName = "Denied",
@@ -261,9 +263,9 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
             // Foreign tenantId.
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.GetAsync($"/api/platform/users?tenantId={foreignTenant.TenantId}")).StatusCode);
+                (await client.GetAsync($"/api/platform/users?tenantId={IamId.Format(foreignTenant.TenantId)}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={foreignTenant.TenantId}", new
+                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={IamId.Format(foreignTenant.TenantId)}", new
                 {
                     email,
                     displayName = "Denied",
@@ -288,7 +290,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.MemberAccountId);
 
-        var response = await client.GetAsync($"/api/platform/users?tenantId={tenant.TenantId}");
+        var response = await client.GetAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -299,5 +301,5 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
         Assert.DoesNotContain("displayName", body, StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed record TenantPair(Guid TenantId, Guid OwnerAccountId, Guid MemberAccountId);
+    private sealed record TenantPair(Tsid TenantId, Tsid OwnerAccountId, Tsid MemberAccountId);
 }

@@ -10,9 +10,9 @@ internal sealed class AuditEventMap : IEntityTypeConfiguration<AuditEvent>
     {
         builder.ToTable("iam_audit_events");
         builder.HasKey(auditEvent => auditEvent.Id);
-        builder.Property(auditEvent => auditEvent.Id).HasColumnName("id");
-        builder.Property(auditEvent => auditEvent.TenantId).HasColumnName("tenant_id").IsRequired();
-        builder.Property(auditEvent => auditEvent.ActorAccountId).HasColumnName("actor_account_id").IsRequired();
+        builder.Property(auditEvent => auditEvent.Id).HasColumnName("id").HasConversion(TsidValueConverter.Shared).ValueGeneratedNever();
+        builder.Property(auditEvent => auditEvent.TenantId).HasColumnName("tenant_id").HasConversion(TsidValueConverter.Shared).IsRequired();
+        builder.Property(auditEvent => auditEvent.ActorAccountId).HasColumnName("actor_account_id").HasConversion(TsidValueConverter.Shared).IsRequired();
         builder.Property(auditEvent => auditEvent.Actor).HasColumnName("actor").HasMaxLength(200).IsRequired();
         builder.Property(auditEvent => auditEvent.ActorEmail).HasColumnName("actor_email").HasMaxLength(254).IsRequired();
         builder.Property(auditEvent => auditEvent.Action).HasColumnName("action").HasMaxLength(80).IsRequired();

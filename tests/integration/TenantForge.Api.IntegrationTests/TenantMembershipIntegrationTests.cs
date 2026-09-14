@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using TSID.Creator.NET;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -37,7 +38,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
-    private async Task<Guid> CreateOwnerUserAsync(string email)
+    private async Task<Tsid> CreateOwnerUserAsync(string email)
     {
         await using var context = db.CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -59,15 +60,15 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         {
             name = " Acme Property ",
             slug = slug.ToUpperInvariant(),
-            ownerUserId
+            ownerUserId = IamId.Format(ownerUserId)
         });
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
 
         using var createDocument = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
         var created = createDocument.RootElement;
-        var tenantId = created.GetProperty("id").GetGuid();
-        Assert.NotEqual(Guid.Empty, tenantId);
+        var tenantId = created.GetProperty("id").GetString()!;
+        Assert.True(IamId.TryParse(tenantId, out var parsedTenantId));
         Assert.Equal("Acme Property", created.GetProperty("name").GetString());
         Assert.Equal(slug, created.GetProperty("slug").GetString());
         Assert.Equal("Active", created.GetProperty("status").GetString());
@@ -76,7 +77,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
 
         await using (var context = db.CreateContext())
         {
-            var membership = await context.TenantMemberships.SingleAsync(m => m.TenantId == tenantId);
+            var membership = await context.TenantMemberships.SingleAsync(m => m.TenantId == parsedTenantId);
             Assert.Equal(ownerUserId, membership.AccountId);
             Assert.Equal(TenantMembershipRole.Owner, membership.Role);
         }
@@ -90,7 +91,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         var createdInList = listDocument.RootElement
             .GetProperty("tenants")
             .EnumerateArray()
-            .Single(tenant => tenant.GetProperty("id").GetGuid() == tenantId);
+            .Single(tenant => tenant.GetProperty("id").GetString() == tenantId);
 
         Assert.Equal("Acme Property", createdInList.GetProperty("name").GetString());
         Assert.Equal(slug, createdInList.GetProperty("slug").GetString());
@@ -122,7 +123,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         {
             name = "Unknown Owner Tenant",
             slug = unknownOwnerSlug,
-            ownerUserId = Guid.NewGuid()
+            ownerUserId = IamId.Format(IamId.NewId())
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, unknownOwnerResponse.StatusCode);
@@ -149,7 +150,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         {
             name = "First Tenant",
             slug,
-            ownerUserId = firstOwnerUserId
+            ownerUserId = IamId.Format(firstOwnerUserId)
         });
         Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
 
@@ -157,7 +158,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         {
             name = "Duplicate Tenant",
             slug = slug.ToUpperInvariant(),
-            ownerUserId = secondOwnerUserId
+            ownerUserId = IamId.Format(secondOwnerUserId)
         });
 
         Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
@@ -188,7 +189,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         {
             name = "Unauthorized Tenant",
             slug = "unauthorized-tenant",
-            ownerUserId = Guid.NewGuid()
+            ownerUserId = IamId.Format(IamId.NewId())
         })).StatusCode);
     }
 
@@ -204,7 +205,7 @@ public class TenantMembershipIntegrationTests(IamDbFixture db) : IDisposable
         {
             name = "Forbidden Tenant",
             slug = "forbidden-tenant",
-            ownerUserId = Guid.NewGuid()
+            ownerUserId = IamId.Format(IamId.NewId())
         })).StatusCode);
     }
 }

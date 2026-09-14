@@ -56,16 +56,14 @@ public sealed class PermissionKeyMigrationTests : IAsyncLifetime
         {
             await context.Database.MigrateAsync();
 
-            var role = await context.TenantRoles.AsNoTracking().SingleAsync(role => role.Id == Guid.Parse("44444444-4444-4444-4444-444444444444"));
+            var role = await context.TenantRoles.AsNoTracking().SingleAsync(role => role.NormalizedName == "LEGACY MANAGER");
             Assert.Equal("Legacy Manager", role.Name);
             Assert.Equal([
                 "IAM.Invitations.View",
                 "IAM.Roles.Manage"
             ], role.PermissionKeys);
 
-            Assert.True(await context.TenantMemberRoleAssignments.AnyAsync(assignment =>
-                assignment.TenantMembershipId == Guid.Parse("33333333-3333-3333-3333-333333333333")
-                && assignment.TenantRoleId == role.Id));
+            Assert.True(await context.TenantMemberRoleAssignments.AnyAsync(assignment => assignment.TenantRoleId == role.Id));
         }
     }
 

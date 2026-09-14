@@ -1,8 +1,10 @@
+using TSID.Creator.NET;
+
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class Account
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
+    public Tsid Id { get; private set; } = IamId.NewId();
     public string Email { get; private set; } = string.Empty;
     public string NormalizedEmail { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
@@ -43,7 +45,7 @@ internal sealed class Account
 
         return new Account
         {
-            Id = Guid.NewGuid(),
+            Id = IamId.NewId(),
             Email = trimmedEmail,
             NormalizedEmail = NormalizeEmail(trimmedEmail),
             DisplayName = trimmedDisplayName,
@@ -82,7 +84,7 @@ internal sealed class Account
 
         return new Account
         {
-            Id = Guid.NewGuid(),
+            Id = IamId.NewId(),
             Email = trimmedEmail,
             NormalizedEmail = NormalizeEmail(trimmedEmail),
             DisplayName = trimmedDisplayName,

@@ -1,9 +1,11 @@
+using TSID.Creator.NET;
+
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class TenantRole
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
-    public Guid TenantId { get; private set; }
+    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid TenantId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string Description { get; private set; } = "نقش سفارشی مستأجر؛ قابل ویرایش و قابل انتساب به اعضا.";
@@ -16,13 +18,13 @@ internal sealed class TenantRole
     {
     }
 
-    public static TenantRole Create(Guid tenantId, string name, IEnumerable<string> permissionKeys, DateTimeOffset nowUtc)
+    public static TenantRole Create(Tsid tenantId, string name, IEnumerable<string> permissionKeys, DateTimeOffset nowUtc)
     {
         var trimmedName = name.Trim();
         var now = nowUtc.ToUniversalTime();
         return new TenantRole
         {
-            Id = Guid.NewGuid(),
+            Id = IamId.NewId(),
             TenantId = tenantId,
             Name = trimmedName,
             NormalizedName = NormalizeName(trimmedName),

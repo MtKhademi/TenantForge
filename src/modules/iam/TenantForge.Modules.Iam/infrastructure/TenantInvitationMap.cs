@@ -10,8 +10,8 @@ internal sealed class TenantInvitationMap : IEntityTypeConfiguration<TenantInvit
     {
         builder.ToTable("iam_tenant_invitations");
         builder.HasKey(invitation => invitation.Id);
-        builder.Property(invitation => invitation.Id).HasColumnName("id");
-        builder.Property(invitation => invitation.TenantId).HasColumnName("tenant_id").IsRequired();
+        builder.Property(invitation => invitation.Id).HasColumnName("id").HasConversion(TsidValueConverter.Shared).ValueGeneratedNever();
+        builder.Property(invitation => invitation.TenantId).HasColumnName("tenant_id").HasConversion(TsidValueConverter.Shared).IsRequired();
         builder.Property(invitation => invitation.Email).HasColumnName("email").HasMaxLength(254).IsRequired();
         builder.Property(invitation => invitation.NormalizedEmail).HasColumnName("normalized_email").HasMaxLength(254).IsRequired();
         builder.Property(invitation => invitation.Role).HasColumnName("role").HasMaxLength(80).IsRequired();

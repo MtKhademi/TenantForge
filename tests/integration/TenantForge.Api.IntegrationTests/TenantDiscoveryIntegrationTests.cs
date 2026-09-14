@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using TSID.Creator.NET;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -28,13 +29,14 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
 
     private HttpClient CreateClient() => _factory.CreateClient();
 
-    private static void Authorize(HttpClient client, Guid accountId, bool isPlatformAdmin = false)
+    private static void Authorize(HttpClient client, Tsid accountId, bool isPlatformAdmin = false)
     {
+        var accountIdText = IamId.Format(accountId);
         var token = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: isPlatformAdmin,
-            subject: accountId.ToString(),
-            email: $"{accountId:N}@tenantforge.local",
+            subject: accountIdText,
+            email: $"{accountIdText}@tenantforge.local",
             displayName: "Discovery Account");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
@@ -91,11 +93,11 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
 
         // Ordered by tenant name, then id: "Alpha ..." sorts before "Zeta ...".
         Assert.Equal(fixture.AlphaName, tenants[0].GetProperty("name").GetString());
-        Assert.Equal(fixture.AlphaId, tenants[0].GetProperty("id").GetGuid());
+        Assert.Equal(IamId.Format(fixture.AlphaId), tenants[0].GetProperty("id").GetString());
         Assert.Equal("Member", tenants[0].GetProperty("membershipRole").GetString());
 
         Assert.Equal(fixture.ZetaName, tenants[1].GetProperty("name").GetString());
-        Assert.Equal(fixture.ZetaId, tenants[1].GetProperty("id").GetGuid());
+        Assert.Equal(IamId.Format(fixture.ZetaId), tenants[1].GetProperty("id").GetString());
         Assert.Equal("Owner", tenants[1].GetProperty("membershipRole").GetString());
 
         // The discovery DTO stays minimal: id, name, slug, status,
@@ -153,14 +155,14 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var tenants = document.RootElement.GetProperty("tenants").EnumerateArray().ToList();
-        var ids = tenants.Select(t => t.GetProperty("id").GetGuid()).ToList();
+        var ids = tenants.Select(t => t.GetProperty("id").GetString()).ToList();
 
         // The admin sees only their one membership — no bypass enumerates the
         // caller's other tenants or the suspended/stranger tenants.
         Assert.Single(ids);
-        Assert.Equal(fixture.AlphaId, ids[0]);
-        Assert.DoesNotContain(fixture.StrangerId, ids);
-        Assert.DoesNotContain(fixture.SuspendedId, ids);
+        Assert.Equal(IamId.Format(fixture.AlphaId), ids[0]);
+        Assert.DoesNotContain(IamId.Format(fixture.StrangerId), ids);
+        Assert.DoesNotContain(IamId.Format(fixture.SuspendedId), ids);
     }
 
     [Fact]
@@ -193,7 +195,7 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
         // Valid signature and claims, but the sub points at an account that
         // does not exist in iam_accounts.
         using var client = CreateClient();
-        Authorize(client, Guid.NewGuid());
+        Authorize(client, IamId.NewId());
 
         var response = await client.GetAsync("/api/auth/me/tenants");
 
@@ -232,11 +234,11 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
         typeof(T).GetProperty(nameof(Tenant.Status))!.SetValue(entity, status);
 
     private sealed record DiscoveryFixture(
-        Guid AccountId,
-        Guid ZetaId,
+        Tsid AccountId,
+        Tsid ZetaId,
         string ZetaName,
-        Guid AlphaId,
+        Tsid AlphaId,
         string AlphaName,
-        Guid StrangerId,
-        Guid SuspendedId);
+        Tsid StrangerId,
+        Tsid SuspendedId);
 }
