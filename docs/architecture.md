@@ -2,6 +2,8 @@
 
 This document records the intended destination. Each capability is introduced only when an active task needs it.
 
+For current IAM module behavior — routes, configuration, identifiers, domain model, persistence, authentication/authorization and tests — read the [IAM module handbook](modules/IAM.md) instead of this document; it is the current-state source and is kept in sync by every IAM-touching task.
+
 ## System shape
 
 TenantForge is a modular monolith with a separate React single-page application.

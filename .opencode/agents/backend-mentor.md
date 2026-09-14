@@ -84,6 +84,19 @@ Building-block convention:
   auth/JWT, seeding, permission catalogs, entities, DTOs, migrations and feature
   handlers in their owning module until a later visible slice proves a neutral
   contract. Follow B018's live Spec until delivery.
+
+Living module knowledge:
+
+- `docs/modules/IAM.md` is the current, searchable IAM handbook. Read it first
+  during discovery whenever a task touches `src/modules/iam/**` or an IAM
+  contract in `TenantForge.BuildingBlocks`/the API host, then verify the
+  relevant facts against current code.
+- Before review, classify the diff against `IAM.md`'s change-impact checklist:
+  update the affected sections in the same task, or record the exact
+  declaration `IAM.md impact: none — <specific reason>` in self-review and the
+  PR body. A vague "docs not needed" is not accepted.
+- Historical learning notes and source slices explain why a past change
+  happened; they never override the current handbook or current code.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow

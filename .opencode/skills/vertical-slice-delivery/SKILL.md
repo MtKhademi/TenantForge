@@ -134,6 +134,21 @@ through uncommitted sibling files.
 See `docs/architecture.md` ("Local development environment") and the
 `backend-mentor` agent for the full detail.
 
+## Living module knowledge (backend)
+
+- `docs/modules/IAM.md` is the current, searchable IAM handbook. Any task
+  that reads or changes `src/modules/iam/**`, or an IAM contract living in
+  `TenantForge.BuildingBlocks`/the API host, reads it first during discovery
+  and verifies the relevant facts against current code.
+- Before review, classify the diff against `IAM.md`'s change-impact
+  checklist: update the affected sections in the same task, or record the
+  exact declaration `IAM.md impact: none — <specific reason>` in self-review
+  and the PR body. A vague "docs not needed" does not satisfy this gate.
+- Historical learning notes and source slices explain why a past change
+  happened; they never override the current handbook or current code.
+- A future module that gains its own living handbook follows this same
+  read-first/impact-gate shape.
+
 ## Review and delivery
 
 After all checks pass, review the complete diff yourself in the same primary
