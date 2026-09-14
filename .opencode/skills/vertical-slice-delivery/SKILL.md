@@ -96,10 +96,15 @@ through uncommitted sibling files.
 ## Verification environment (backend)
 
 - This machine has no Linux `dotnet` CLI; use `dotnet.exe` (Windows SDK via WSL interop, .NET 10) for build/test/run.
-- Compose modules through their public seam only (`IamModule.AddIamModule` /
-  `ValidateIamModuleConfiguration` / `MapIamModule`); features stay `internal`,
-  and module configuration follows `IModuleConfig`. Validate configuration only
-  after `builder.Build()`, never at registration.
+- Compose IAM through exactly two module-owned phases: registration with
+  `builder.Services.AddIamModule(builder.Environment)` before `Build`, then
+  asynchronous activation with `await app.UseIamModuleAsync()` after `Build`.
+  The activation seam owns IAM configuration validation, authentication and
+  authorization middleware, migration, idempotent seeding and IAM endpoint
+  mapping in that order. Features stay `internal`. Never validate at service
+  registration time, block asynchronous startup work, or expose those concerns
+  as separate host calls. B016/S18 introduces and verifies this convention;
+  follow its live Spec while that task is not yet delivered.
 - `dotnet.exe run` forces `Development`; run the built DLL for Production runs.
 - Windows hosts are not reachable from WSL on `127.0.0.1`; bind `0.0.0.0` and
   curl through the WSL gateway IP.
