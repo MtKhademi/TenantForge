@@ -54,9 +54,18 @@ Environment (this machine):
 
 Module convention:
 
-- Compose modules through their public seam only (`IamModule.AddIamModule` / `ValidateIamModuleConfiguration` / `MapIamModule`); everything else in a module stays `internal`.
-- Module configuration follows `IModuleConfig` (`SectionName`, `RegisterServices`, `ValidateConfiguration`); the config class reads its section from `IConfiguration`, throws at startup when the configuration is not correct, and registers services only when correct.
-- Never validate configuration at service-registration time; run validation after `builder.Build()` so late configuration sources (including test hosts) are seen.
+- Compose IAM through exactly two public phases: call
+  `builder.Services.AddIamModule(builder.Environment)` before `Build`, then
+  `await app.UseIamModuleAsync()` after `Build`. B016/S18 introduces this seam;
+  its live Spec is authoritative until delivery.
+- `AddIamModule` only registers services. `UseIamModuleAsync` owns post-Build
+  configuration validation, authentication and authorization middleware,
+  migration, idempotent seeding and IAM endpoint mapping in deterministic
+  order. Do not expose or call those concerns separately from the API host.
+- Module configuration follows `IModuleConfig`; late configuration sources
+  must remain visible. Never validate at registration time, block async
+  startup, use a hosted service to conceal the await, or introduce a generic
+  lifecycle framework for hypothetical modules.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow
