@@ -78,6 +78,7 @@ one valid Spec link.
 | B016 | S18 | Collapse IAM startup behind one registration and one activation seam | done | B015 | — |
 | B017 | S19 | Replace persisted IAM GUID identifiers with TSIDs | done | B016 | — |
 | B018 | S20 | Extract stable cross-module building blocks | planned | B017 | [Spec](backend/B018-building-blocks.md) |
+| B019 | S21 | Create a living IAM knowledge base and update gate | planned | B018 | [Spec](backend/B019-iam-knowledge-base.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -163,3 +164,16 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   the new project cannot become an ownerless `Common` utility bucket.
 - Pagination, EF converters and IAM business concerns remain IAM-owned until a
   second real consumer proves a narrower shared abstraction.
+
+
+## Living IAM knowledge base: S21
+
+- [S21 — Give agents one living IAM knowledge source](slices/021-iam-knowledge-base.md)
+- B019 follows B018 so the handbook records the final BuildingBlocks namespaces
+  and dependency direction rather than immediately documenting obsolete paths.
+- `docs/modules/IAM.md` becomes the read-first source for IAM questions.
+  Backend discovery and review must classify every IAM change: update the
+  affected handbook sections or state
+  `IAM.md impact: none — <specific reason>`.
+- This task changes documentation and agent workflow only. Runtime behavior,
+  database schema, endpoints and frontend remain unchanged.
