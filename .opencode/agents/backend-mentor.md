@@ -68,11 +68,19 @@ Module convention:
 
 Identifier convention:
 
-- IAM database identity and foreign-key columns are PostgreSQL `bigint`; IAM
-  domain and EF model values are `Tsid`; HTTP request/response IDs and JWT
-  subjects are canonical 13-character TSID strings. Never leak the backing
-  integer into JSON or accept it from a client. B017/S19 is the authoritative
-  live Spec until this migration is delivered.
+- Database identity and foreign-key columns are PostgreSQL `bigint`; domain
+  and EF model values are `Tsid`; HTTP request/response IDs and JWT subjects
+  are canonical 13-character TSID strings. Never leak the backing integer into
+  JSON or accept it from a client.
+
+Building-block convention:
+
+- B018/S20 introduces `TenantForge.BuildingBlocks`. Dependency direction is
+  API → module → BuildingBlocks; BuildingBlocks never references the API or a
+  module. Move only stable cross-module contracts or accepted system-wide
+  primitives there. New code starts in its owning module; never treat the
+  project as a `Common`, `Utils` or speculative-reuse bucket. Follow B018's
+  live Spec until delivery.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow
