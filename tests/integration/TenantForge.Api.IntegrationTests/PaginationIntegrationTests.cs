@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -19,7 +20,7 @@ public class PaginationIntegrationTests(PaginationDbFixture db) : IDisposable
 
     private static void Authorize(HttpClient client, Tsid accountId, bool isPlatformAdmin = false)
     {
-        var accountIdText = IamId.Format(accountId);
+        var accountIdText = TsidId.Format(accountId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: isPlatformAdmin,
@@ -44,7 +45,7 @@ public class PaginationIntegrationTests(PaginationDbFixture db) : IDisposable
         }
 
         using var adminClient = CreateClient();
-        Authorize(adminClient, IamId.NewId(), isPlatformAdmin: true);
+        Authorize(adminClient, TsidId.NewId(), isPlatformAdmin: true);
 
         var usersPage1 = await GetJsonAsync(adminClient, "/api/platform/users?pageNumber=1&pageSize=20");
         var usersPage2 = await GetJsonAsync(adminClient, "/api/platform/users?pageNumber=2&pageSize=20");
@@ -57,7 +58,7 @@ public class PaginationIntegrationTests(PaginationDbFixture db) : IDisposable
         Assert.Equal(25, tenantsPage2.GetProperty("tenants").GetArrayLength());
 
         using var memberClient = CreateClient();
-        Authorize(memberClient, IamId.NewId());
+        Authorize(memberClient, TsidId.NewId());
         var denied = await memberClient.GetAsync("/api/platform/users?pageNumber=2&pageSize=20");
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         Assert.DoesNotContain("pagination", await denied.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
@@ -73,24 +74,24 @@ public class PaginationIntegrationTests(PaginationDbFixture db) : IDisposable
         var myTenants = await GetJsonAsync(ownerClient, "/api/auth/me/tenants?pageNumber=2&pageSize=20");
         AssertPagination(myTenants, 2, 20, minTotalCount: 55, hasPrevious: true, hasNext: true);
         Assert.Equal(20, myTenants.GetProperty("tenants").GetArrayLength());
-        Assert.DoesNotContain(IamId.Format(fixture.SuspendedTenantId), myTenants.GetProperty("tenants").EnumerateArray().Select(item => item.GetProperty("id").GetString()));
+        Assert.DoesNotContain(TsidId.Format(fixture.SuspendedTenantId), myTenants.GetProperty("tenants").EnumerateArray().Select(item => item.GetProperty("id").GetString()));
 
-        var membersPage = await GetJsonAsync(ownerClient, $"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/members?pageNumber=3&pageSize=20");
+        var membersPage = await GetJsonAsync(ownerClient, $"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/members?pageNumber=3&pageSize=20");
         Assert.True(membersPage.TryGetProperty("tenant", out _));
         AssertPagination(membersPage, 3, 20, minTotalCount: 56, hasPrevious: true, hasNext: false);
         Assert.True(membersPage.GetProperty("members").GetArrayLength() is > 0 and <= 20);
 
-        var rolesPage = await GetJsonAsync(ownerClient, $"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/roles?pageNumber=2&pageSize=25");
+        var rolesPage = await GetJsonAsync(ownerClient, $"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/roles?pageNumber=2&pageSize=25");
         AssertPagination(rolesPage, 2, 25, minTotalCount: 55, hasPrevious: true, hasNext: true);
         var firstRole = rolesPage.GetProperty("roles").EnumerateArray().First();
         Assert.True(firstRole.GetProperty("permissionKeys").GetArrayLength() >= 1);
         Assert.True(firstRole.GetProperty("memberIds").GetArrayLength() >= 1);
 
-        var invitationsPage = await GetJsonAsync(ownerClient, $"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/invitations?pageNumber=2&pageSize=20");
+        var invitationsPage = await GetJsonAsync(ownerClient, $"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/invitations?pageNumber=2&pageSize=20");
         AssertPagination(invitationsPage, 2, 20, expectedTotalCount: 55, hasPrevious: true, hasNext: true);
         Assert.Equal(20, invitationsPage.GetProperty("invitations").GetArrayLength());
 
-        var auditPage = await GetJsonAsync(ownerClient, $"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/audit?action=Role.Created&pageNumber=2&pageSize=20");
+        var auditPage = await GetJsonAsync(ownerClient, $"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/audit?action=Role.Created&pageNumber=2&pageSize=20");
         AssertPagination(auditPage, 2, 20, expectedTotalCount: 55, hasPrevious: true, hasNext: true);
         Assert.All(auditPage.GetProperty("events").EnumerateArray(), item => Assert.Equal("Role.Created", item.GetProperty("action").GetString()));
     }
@@ -102,11 +103,11 @@ public class PaginationIntegrationTests(PaginationDbFixture db) : IDisposable
         using var ownerClient = CreateClient();
         Authorize(ownerClient, fixture.OwnerAccountId);
 
-        var beyond = await GetJsonAsync(ownerClient, $"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/members?pageNumber=999&pageSize=10");
+        var beyond = await GetJsonAsync(ownerClient, $"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/members?pageNumber=999&pageSize=10");
         Assert.Empty(beyond.GetProperty("members").EnumerateArray());
         AssertPagination(beyond, 999, 10, minTotalCount: 56, hasPrevious: true, hasNext: false);
 
-        var zeroMatch = await GetJsonAsync(ownerClient, $"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/audit?action=Role.Unassigned&pageNumber=1&pageSize=10");
+        var zeroMatch = await GetJsonAsync(ownerClient, $"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/audit?action=Role.Unassigned&pageNumber=1&pageSize=10");
         Assert.Empty(zeroMatch.GetProperty("events").EnumerateArray());
         AssertPagination(zeroMatch, 1, 10, expectedTotalCount: 0, hasPrevious: false, hasNext: false);
 
@@ -124,10 +125,10 @@ public class PaginationIntegrationTests(PaginationDbFixture db) : IDisposable
         using var strangerClient = CreateClient();
         Authorize(strangerClient, fixture.StrangerAccountId);
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/members?pageNumber=2&pageSize=20")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/roles?pageNumber=2&pageSize=20")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/invitations?pageNumber=2&pageSize=20")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{IamId.Format(fixture.PrimaryTenantId)}/audit?pageNumber=2&pageSize=20")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/members?pageNumber=2&pageSize=20")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/roles?pageNumber=2&pageSize=20")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/invitations?pageNumber=2&pageSize=20")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await strangerClient.GetAsync($"/api/tenants/{TsidId.Format(fixture.PrimaryTenantId)}/audit?pageNumber=2&pageSize=20")).StatusCode);
     }
 
     private async Task<PaginationFixture> ArrangeTenantScopedDataAsync()

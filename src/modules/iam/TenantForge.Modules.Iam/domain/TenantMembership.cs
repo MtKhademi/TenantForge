@@ -1,10 +1,11 @@
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class TenantMembership
 {
-    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid Id { get; private set; } = TsidId.NewId();
     public Tsid TenantId { get; private set; }
     public Tsid AccountId { get; private set; }
     public TenantMembershipRole Role { get; private set; } = TenantMembershipRole.Owner;
@@ -22,19 +23,19 @@ internal sealed class TenantMembership
 
     private static TenantMembership Create(Tsid tenantId, Tsid accountId, TenantMembershipRole role, DateTimeOffset nowUtc)
     {
-        if (IamId.IsDefault(tenantId))
+        if (TsidId.IsDefault(tenantId))
         {
             throw new ArgumentException("Tenant id is required.", nameof(tenantId));
         }
 
-        if (IamId.IsDefault(accountId))
+        if (TsidId.IsDefault(accountId))
         {
             throw new ArgumentException("Account id is required.", nameof(accountId));
         }
 
         return new TenantMembership
         {
-            Id = IamId.NewId(),
+            Id = TsidId.NewId(),
             TenantId = tenantId,
             AccountId = accountId,
             Role = role,

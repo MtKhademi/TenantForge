@@ -114,12 +114,16 @@ through uncommitted sibling files.
   HTTP and JWT boundaries. Never serialize the backing integer to JSON or
   accept decimal IDs from clients.
 - B018/S20 introduces `TenantForge.BuildingBlocks` for stable cross-module
-  contracts and system-wide primitives. Modules may reference BuildingBlocks;
+  contracts and system-wide primitives; its first admitted types are
+  `IModuleConfig` and `TsidId`. Modules may reference BuildingBlocks;
   BuildingBlocks never references the API or a module. Admit a type only when
   it is meaningful without a business module and has a proven cross-module or
   accepted system-wide contract. New code starts in its owning module; never
-  use BuildingBlocks as a `Common`, `Utils` or speculative-reuse bucket.
-  Follow B018's live Spec until delivery.
+  use BuildingBlocks as a `Common`, `Utils` or speculative-reuse bucket. Keep
+  EF converters, pagination helpers, auth/JWT, seeding, permission catalogs,
+  entities, DTOs, migrations and feature handlers in their owning module until
+  a later visible slice proves a neutral contract. Follow B018's live Spec until
+  delivery.
 
 See `docs/architecture.md` ("Local development environment") and the
 `backend-mentor` agent for the full detail.

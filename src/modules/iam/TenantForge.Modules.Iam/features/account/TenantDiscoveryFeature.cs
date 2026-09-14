@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
@@ -76,7 +77,7 @@ internal static class TenantDiscoveryFeature
 
             var tenants = tenantRows
                 .Select(row => new DiscoveredTenantResponse(
-                    IamId.Format(row.Id),
+                    TsidId.Format(row.Id),
                     row.Name,
                     row.Slug,
                     row.Status.ToString(),
@@ -102,7 +103,7 @@ internal static class TenantDiscoveryFeature
         // account in the new representation, so it is denied here (403, the
         // endpoint's fail-closed answer for an authenticated-but-unusable
         // caller) instead of crashing or being forwarded.
-        return IamId.TryParseNullable(principal.FindFirstValue("sub"));
+        return TsidId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 }
 

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TenantForge.BuildingBlocks.Modules;
 using TenantForge.Modules.Iam.Features.Account;
 using TenantForge.Modules.Iam.Features.Audit;
 using TenantForge.Modules.Iam.Features.Dashboard;

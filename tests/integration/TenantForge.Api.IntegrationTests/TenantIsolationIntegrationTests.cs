@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -63,7 +64,7 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
         {
             Subject = new ClaimsIdentity(
             [
-                new Claim(JwtRegisteredClaimNames.Sub, IamId.Format(account.Id)),
+                new Claim(JwtRegisteredClaimNames.Sub, TsidId.Format(account.Id)),
                 new Claim(JwtRegisteredClaimNames.Email, account.Email),
                 new Claim(JwtRegisteredClaimNames.Name, account.DisplayName),
                 new Claim("isPlatformAdmin", account.IsPlatformAdmin ? "true" : "false")
@@ -91,8 +92,8 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         AuthorizeAs(client, sharedMember);
 
-        var acmeResponse = await client.GetAsync($"/api/tenants/{IamId.Format(acme.Id)}/members");
-        var globexResponse = await client.GetAsync($"/api/tenants/{IamId.Format(globex.Id)}/members");
+        var acmeResponse = await client.GetAsync($"/api/tenants/{TsidId.Format(acme.Id)}/members");
+        var globexResponse = await client.GetAsync($"/api/tenants/{TsidId.Format(globex.Id)}/members");
 
         Assert.Equal(HttpStatusCode.OK, acmeResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, globexResponse.StatusCode);
@@ -100,8 +101,8 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
         using var acmeDocument = JsonDocument.Parse(await acmeResponse.Content.ReadAsStringAsync());
         using var globexDocument = JsonDocument.Parse(await globexResponse.Content.ReadAsStringAsync());
 
-        Assert.Equal(IamId.Format(acme.Id), acmeDocument.RootElement.GetProperty("tenant").GetProperty("id").GetString());
-        Assert.Equal(IamId.Format(globex.Id), globexDocument.RootElement.GetProperty("tenant").GetProperty("id").GetString());
+        Assert.Equal(TsidId.Format(acme.Id), acmeDocument.RootElement.GetProperty("tenant").GetProperty("id").GetString());
+        Assert.Equal(TsidId.Format(globex.Id), globexDocument.RootElement.GetProperty("tenant").GetProperty("id").GetString());
 
         var acmeEmails = acmeDocument.RootElement.GetProperty("members")
             .EnumerateArray()
@@ -132,7 +133,7 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         AuthorizeAs(client, acmeMember);
 
-        var response = await client.GetAsync($"/api/tenants/{IamId.Format(globex.Id)}/members");
+        var response = await client.GetAsync($"/api/tenants/{TsidId.Format(globex.Id)}/members");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -148,7 +149,7 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
         AuthorizeAs(client, account);
 
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/tenants/not-a-tsid/members")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/tenants/{IamId.Format(IamId.NewId())}/members")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/tenants/{TsidId.Format(TsidId.NewId())}/members")).StatusCode);
     }
 
     [Fact]
@@ -156,7 +157,7 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
     {
         using var client = CreateClient();
 
-        var response = await client.GetAsync($"/api/tenants/{IamId.Format(IamId.NewId())}/members");
+        var response = await client.GetAsync($"/api/tenants/{TsidId.Format(TsidId.NewId())}/members");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -170,7 +171,7 @@ public class TenantIsolationIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         AuthorizeAs(client, platformAdmin);
 
-        var response = await client.GetAsync($"/api/tenants/{IamId.Format(tenant.Id)}/members");
+        var response = await client.GetAsync($"/api/tenants/{TsidId.Format(tenant.Id)}/members");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

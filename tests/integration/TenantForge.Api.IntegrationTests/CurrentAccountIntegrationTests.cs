@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.IdentityModel.Tokens;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -49,7 +50,7 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
         var root = document.RootElement;
 
         var id = root.GetProperty("id").GetString()!;
-        Assert.True(IamId.TryParse(id, out _), "id must be the persisted account id as a canonical TSID string");
+        Assert.True(TsidId.TryParse(id, out _), "id must be the persisted account id as a canonical TSID string");
         Assert.Equal(ApiFactory.Email, root.GetProperty("email").GetString());
         Assert.Equal(ApiFactory.DisplayName, root.GetProperty("displayName").GetString());
         Assert.True(root.GetProperty("isPlatformAdmin").GetBoolean());
@@ -59,7 +60,7 @@ public class CurrentAccountIntegrationTests(IamDbFixture db) : IDisposable
     public async Task NonAdminAuthenticatedAccount_Returns200_WithIsPlatformAdminFalse()
     {
         using var client = CreateClient();
-        var accountId = IamId.Format(IamId.NewId());
+        var accountId = TsidId.Format(TsidId.NewId());
         var accessToken = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             subject: accountId,
@@ -201,7 +202,7 @@ internal static class TestJwtFactory
         {
             Subject = new ClaimsIdentity(
             [
-                new Claim(JwtRegisteredClaimNames.Sub, subject ?? IamId.Format(IamId.NewId())),
+                new Claim(JwtRegisteredClaimNames.Sub, subject ?? TsidId.Format(TsidId.NewId())),
                 new Claim(JwtRegisteredClaimNames.Email, email ?? ApiFactory.Email),
                 new Claim(JwtRegisteredClaimNames.Name, displayName ?? ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", isPlatformAdmin ? "true" : "false")
@@ -233,7 +234,7 @@ internal static class TestJwtFactory
             audience: "TenantForge",
             claims: new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, IamId.Format(IamId.NewId())),
+                new Claim(JwtRegisteredClaimNames.Sub, TsidId.Format(TsidId.NewId())),
                 new Claim(JwtRegisteredClaimNames.Email, ApiFactory.Email),
                 new Claim(JwtRegisteredClaimNames.Name, ApiFactory.DisplayName),
                 new Claim("isPlatformAdmin", "true")

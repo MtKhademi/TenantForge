@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -42,7 +43,7 @@ public class LoginIntegrationTests(IamDbFixture db) : IDisposable
         var user = root.GetProperty("user");
         // The id now comes from the persisted account as a canonical TSID string, not the bigint backing value.
         var id = user.GetProperty("id").GetString()!;
-        Assert.True(IamId.TryParse(id, out _), "user.id must be the persisted account id as a canonical TSID string");
+        Assert.True(TsidId.TryParse(id, out _), "user.id must be the persisted account id as a canonical TSID string");
         Assert.Equal(ApiFactory.Email, user.GetProperty("email").GetString());
         Assert.Equal(ApiFactory.DisplayName, user.GetProperty("displayName").GetString());
         Assert.True(user.GetProperty("isPlatformAdmin").GetBoolean());
@@ -67,7 +68,7 @@ public class LoginIntegrationTests(IamDbFixture db) : IDisposable
         var jwt = handler.ReadJwtToken(accessToken);
 
         var sub = jwt.Claims.Single(c => c.Type == "sub").Value;
-        Assert.True(IamId.TryParse(sub, out _), "sub must be the persisted account id as a canonical TSID string");
+        Assert.True(TsidId.TryParse(sub, out _), "sub must be the persisted account id as a canonical TSID string");
         Assert.Equal(ApiFactory.Email, jwt.Claims.Single(c => c.Type == "email").Value);
         Assert.Equal(ApiFactory.DisplayName, jwt.Claims.Single(c => c.Type == "name").Value);
         Assert.Equal("true", jwt.Claims.Single(c => c.Type == "isPlatformAdmin").Value);

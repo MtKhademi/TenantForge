@@ -1,10 +1,11 @@
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class AuditEvent
 {
-    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid Id { get; private set; } = TsidId.NewId();
     public Tsid TenantId { get; private set; }
     public Tsid ActorAccountId { get; private set; }
     public string Actor { get; private set; } = string.Empty;
@@ -22,7 +23,7 @@ internal sealed class AuditEvent
     {
         return new AuditEvent
         {
-            Id = IamId.NewId(),
+            Id = TsidId.NewId(),
             TenantId = tenantId,
             ActorAccountId = actorAccountId,
             Actor = actor.Trim(),

@@ -10,7 +10,7 @@ namespace TenantForge.Modules.Iam.Infrastructure;
 /// type to its <c>Tsid</c> properties — there is no per-entity converter, so the
 /// representation rule lives in exactly one class. The backing integer never
 /// crosses the HTTP/JWT boundary: transport formatting is owned by
-/// <c>IamId.Format</c>, not by this converter.
+/// <c>TsidId.Format</c>, not by this converter.
 ///
 /// The conversion is applied explicitly on each <c>Tsid</c> property (via
 /// <c>Property(...).HasConversion(TsidValueConverter.Shared)</c>) rather than

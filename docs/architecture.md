@@ -36,6 +36,39 @@ Rules:
 - Contracts are introduced only for demonstrated cross-module needs.
 - Infrastructure remains replaceable but is not abstracted prematurely.
 
+### BuildingBlocks admission rule
+
+`TenantForge.BuildingBlocks` is the only shared backend project. It is deliberately
+not named `Common`, `Shared`, `Utils` or `Helpers`: a semantic name plus an
+admission rule keeps it from becoming an ownerless bucket for speculative reuse.
+
+A type enters BuildingBlocks only when it is a stable cross-module contract or an
+accepted system-wide primitive, is meaningful without a business module, and has
+no dependency on the API host or a module. New code starts in its owning module
+and moves only after that rule is met.
+
+Current dependency direction is one-way:
+
+```text
+TenantForge.Api
+  → TenantForge.Modules.Iam
+  → TenantForge.BuildingBlocks
+```
+
+BuildingBlocks must not reference the API host, IAM, another module, EF Core,
+Npgsql, feature handlers or module-specific options. Its first admitted types are
+`TenantForge.BuildingBlocks.Modules.IModuleConfig` and
+`TenantForge.BuildingBlocks.Identifiers.TsidId`.
+
+The following stay in IAM until a later visible slice proves a neutral contract:
+
+- `TsidValueConverter` — EF-specific and currently has no second persistence
+  consumer;
+- `PaginationSupport` — currently couples HTTP query binding, validation text,
+  `IQueryable` and EF execution;
+- `IAMConfig`, JWT/auth options, seeding, permission keys, authorization,
+  entities, DTOs, migrations and feature handlers — IAM-owned behavior.
+
 ### Module composition seam
 
 Each module exposes exactly one public static seam class plus a module-config
@@ -64,8 +97,9 @@ await app.UseIamModuleAsync();
   - Configuration validation, migration, seeding and endpoint mapping are
     `private` helpers called only from `UseIamModuleAsync`; the host cannot
     call them separately.
-- `IModuleConfig` is the module-config contract: a `SectionName` (the top-level
-  config tag, e.g. `IAM`), `RegisterServices`, and `ValidateConfiguration`.
+- `IModuleConfig` lives in BuildingBlocks as the module-config contract: a
+  `SectionName` (the top-level config tag, e.g. `IAM`), `RegisterServices`, and
+  `ValidateConfiguration`.
 - `IAMConfig : IModuleConfig` reads its section from `IConfiguration`, throws at
   startup when the configuration is not correct (fail closed), and only then
   registers services.

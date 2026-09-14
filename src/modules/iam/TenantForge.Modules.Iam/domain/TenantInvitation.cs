@@ -1,12 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class TenantInvitation
 {
-    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid Id { get; private set; } = TsidId.NewId();
     public Tsid TenantId { get; private set; }
     public string Email { get; private set; } = string.Empty;
     public string NormalizedEmail { get; private set; } = string.Empty;
@@ -26,7 +27,7 @@ internal sealed class TenantInvitation
         var now = nowUtc.ToUniversalTime();
         return new TenantInvitation
         {
-            Id = IamId.NewId(),
+            Id = TsidId.NewId(),
             TenantId = tenantId,
             Email = normalizedEmail,
             NormalizedEmail = normalizedEmail,

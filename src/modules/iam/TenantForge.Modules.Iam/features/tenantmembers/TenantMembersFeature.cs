@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
@@ -35,7 +36,7 @@ internal static class TenantMembersFeature
             // A malformed, GUID-shaped or decimal value is not a known tenant, so
             // the endpoint fails closed with 403 (the same answer it always gave
             // for an unknown tenant id) rather than throwing.
-            if (!IamId.TryParse(tenantId, out var tenantTsid))
+            if (!TsidId.TryParse(tenantId, out var tenantTsid))
             {
                 return Results.Forbid();
             }
@@ -55,7 +56,7 @@ internal static class TenantMembersFeature
                 .AsNoTracking()
                 .Where(tenant => tenant.Id == tenantTsid && tenant.Status == TenantStatus.Active)
                 .Select(tenant => new TenantContextResponse(
-                    IamId.Format(tenant.Id),
+                    TsidId.Format(tenant.Id),
                     tenant.Name,
                     tenant.Slug,
                     tenant.Status.ToString()))
@@ -89,8 +90,8 @@ internal static class TenantMembersFeature
             var (memberRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var members = memberRows.Select(member => new TenantMemberResponse(
-                IamId.Format(member.Id),
-                IamId.Format(member.UserId),
+                TsidId.Format(member.Id),
+                TsidId.Format(member.UserId),
                 member.Email,
                 member.DisplayName,
                 member.Role.ToString(),
@@ -114,7 +115,7 @@ internal static class TenantMembersFeature
         // B017/S19: subject must be a canonical TSID string; a legacy
         // GUID-subject token is denied (403 here, the endpoint's fail-closed
         // answer for an authenticated-but-unusable caller).
-        return IamId.TryParseNullable(principal.FindFirstValue("sub"));
+        return TsidId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 }
 

@@ -1,25 +1,25 @@
 using TSID.Creator.NET;
-using TenantForge.Modules.Iam.Domain;
+using TenantForge.BuildingBlocks.Identifiers;
 using Xunit;
 
 namespace TenantForge.Api.IntegrationTests;
 
 /// <summary>
-/// B017/S19: unit-style coverage for the IAM identifier seam
-/// (<see cref="IamId"/>). These tests need no database — they verify the
+/// B018/S20: unit-style coverage for the system TSID identifier seam
+/// (<see cref="TsidId"/>). These tests need no database — they verify the
 /// representation rules at the boundary: generation, the <c>long</c>
 /// round-trip, canonical formatting, invalid input, and the default value.
 /// </summary>
-public class IamIdTests
+public class TsidIdTests
 {
     [Fact]
     public void NewId_ProducesCanonical13CharacterString()
     {
-        var id = IamId.NewId();
+        var id = TsidId.NewId();
 
-        var formatted = IamId.Format(id);
+        var formatted = TsidId.Format(id);
 
-        Assert.Equal(IamId.CanonicalLength, formatted.Length);
+        Assert.Equal(TsidId.CanonicalLength, formatted.Length);
         // Round-trips through the package's own long representation.
         Assert.Equal(id, Tsid.From(id.ToLong()));
     }
@@ -27,7 +27,7 @@ public class IamIdTests
     [Fact]
     public void NewId_IsTimeSortableAndUniqueAcrossManyGenerations()
     {
-        var ids = Enumerable.Range(0, 5_000).Select(_ => IamId.NewId()).ToList();
+        var ids = Enumerable.Range(0, 5_000).Select(_ => TsidId.NewId()).ToList();
         var longs = ids.Select(id => id.ToLong()).ToList();
 
         Assert.Equal(longs.Count, longs.Distinct().Count());
@@ -40,36 +40,36 @@ public class IamIdTests
     [Fact]
     public void Format_RoundTripsThroughLong()
     {
-        var id = IamId.NewId();
-        var asString = IamId.Format(id);
+        var id = TsidId.NewId();
+        var asString = TsidId.Format(id);
 
         var reparsed = Tsid.From(id.ToLong());
 
         Assert.Equal(id, reparsed);
-        Assert.Equal(asString, IamId.Format(reparsed));
+        Assert.Equal(asString, TsidId.Format(reparsed));
     }
 
     [Fact]
     public void TryParse_AcceptsCanonicalUppercaseAndNormalizes()
     {
-        var id = IamId.NewId();
-        var canonical = IamId.Format(id);
+        var id = TsidId.NewId();
+        var canonical = TsidId.Format(id);
 
-        Assert.True(IamId.TryParse(canonical, out var parsed));
+        Assert.True(TsidId.TryParse(canonical, out var parsed));
         Assert.Equal(id, parsed);
     }
 
     [Fact]
     public void TryParse_AcceptsLowercaseButFormatNormalizesToUppercase()
     {
-        var id = IamId.NewId();
-        var canonical = IamId.Format(id);
+        var id = TsidId.NewId();
+        var canonical = TsidId.Format(id);
         var lower = canonical.ToLowerInvariant();
 
-        Assert.True(IamId.TryParse(lower, out var parsed));
+        Assert.True(TsidId.TryParse(lower, out var parsed));
         Assert.Equal(id, parsed);
         // Re-emitting always yields the canonical upper-case form.
-        Assert.Equal(canonical, IamId.Format(parsed));
+        Assert.Equal(canonical, TsidId.Format(parsed));
     }
 
     [Theory]
@@ -78,7 +78,7 @@ public class IamIdTests
     [InlineData("   ")]
     public void TryParse_RejectsNullOrBlank(string? value)
     {
-        Assert.False(IamId.TryParse(value, out _));
+        Assert.False(TsidId.TryParse(value, out _));
     }
 
     [Theory]
@@ -93,7 +93,7 @@ public class IamIdTests
     [InlineData("01226N0640J7QEXTRA")]
     public void TryParse_RejectsMalformedInput(string value)
     {
-        Assert.False(IamId.TryParse(value, out _));
+        Assert.False(TsidId.TryParse(value, out _));
     }
 
     [Theory]
@@ -102,7 +102,7 @@ public class IamIdTests
     [InlineData("00000000000OO")]
     public void TryParse_RejectsNonCrockfordCharacters(string value)
     {
-        Assert.False(IamId.TryParse(value, out _));
+        Assert.False(TsidId.TryParse(value, out _));
     }
 
     [Fact]
@@ -113,10 +113,10 @@ public class IamIdTests
         // character above 0x7F would otherwise escape as an out-of-range index;
         // the seam bounds the input first.
         const string value = "01226N0640J7é"; // 12 Crockford chars + é (U+00E9)
-        Assert.False(IamId.TryParse(value, out _));
+        Assert.False(TsidId.TryParse(value, out _));
 
         const string highValue = "01226N0640J7ß"; // 12 Crockford chars + ß (U+00DF)
-        Assert.False(IamId.TryParse(highValue, out _));
+        Assert.False(TsidId.TryParse(highValue, out _));
     }
 
     [Fact]
@@ -124,24 +124,24 @@ public class IamIdTests
     {
         // "0000000000000" is a valid 13-char Crockford string but decodes to the
         // all-zero long, which is the domain's "unset" sentinel.
-        Assert.False(IamId.TryParse("0000000000000", out var parsed));
-        Assert.True(IamId.IsDefault(parsed));
+        Assert.False(TsidId.TryParse("0000000000000", out var parsed));
+        Assert.True(TsidId.IsDefault(parsed));
     }
 
     [Fact]
     public void IsDefault_ReflectsTheAllZeroValue()
     {
-        Assert.True(IamId.IsDefault(default(Tsid)));
-        Assert.False(IamId.IsDefault(IamId.NewId()));
+        Assert.True(TsidId.IsDefault(default(Tsid)));
+        Assert.False(TsidId.IsDefault(TsidId.NewId()));
     }
 
     [Fact]
     public void ParseThenFormat_IsIdempotentForAnyValidId()
     {
-        var id = IamId.NewId();
-        var canonical = IamId.Format(id);
+        var id = TsidId.NewId();
+        var canonical = TsidId.Format(id);
 
-        Assert.True(IamId.TryParse(canonical, out var roundTripped));
-        Assert.Equal(canonical, IamId.Format(roundTripped));
+        Assert.True(TsidId.TryParse(canonical, out var roundTripped));
+        Assert.Equal(canonical, TsidId.Format(roundTripped));
     }
 }
