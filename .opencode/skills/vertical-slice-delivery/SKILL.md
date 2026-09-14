@@ -103,8 +103,7 @@ through uncommitted sibling files.
   authorization middleware, migration, idempotent seeding and IAM endpoint
   mapping in that order. Features stay `internal`. Never validate at service
   registration time, block asynchronous startup work, or expose those concerns
-  as separate host calls. B016/S18 introduces and verifies this convention;
-  follow its live Spec while that task is not yet delivered.
+  as separate host calls.
 - `dotnet.exe run` forces `Development`; run the built DLL for Production runs.
 - Windows hosts are not reachable from WSL on `127.0.0.1`; bind `0.0.0.0` and
   curl through the WSL gateway IP.

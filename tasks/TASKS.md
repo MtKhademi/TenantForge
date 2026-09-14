@@ -75,7 +75,7 @@ one valid Spec link.
 | B013 | S12 | Unify tenant permission semantics and protect administrators | done | B012, F018 | — |
 | B014 | S13 | Make invitation creation atomic and tenant scoped | done | B013, F019 | — |
 | B015 | S15 | Add consistent pagination to collection APIs and query filters | done | B014, F021 | — |
-| B016 | S18 | Collapse IAM startup behind one registration and one activation seam | planned | B015 | [Spec](backend/B016-iam-module-composition-seam.md) |
+| B016 | S18 | Collapse IAM startup behind one registration and one activation seam | done | B015 | — |
 
 ## Cleanup batch: S11–S14
 
