@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
@@ -43,7 +44,7 @@ internal static partial class TenantsFeature
             var (tenantRows, pagination) = await PaginationSupport.PageAsync(query, page);
 
             var tenants = tenantRows.Select(tenant => new TenantSummaryResponse(
-                IamId.Format(tenant.Id),
+                TsidId.Format(tenant.Id),
                 tenant.Name,
                 tenant.Slug,
                 tenant.Status.ToString(),
@@ -72,11 +73,11 @@ internal static partial class TenantsFeature
                 return DuplicateSlugProblem();
             }
 
-            // Validate() already ran IamId.TryParse on ownerUserId; the null
+            // Validate() already ran TsidId.TryParse on ownerUserId; the null
             // coalesce is unreachable in the normal flow and, if it ever were
             // hit, simply falls through to the same "Select an existing active
             // owner" 400 rather than throwing.
-            var ownerAccountId = IamId.TryParse(request.OwnerUserId, out var parsedOwner) ? parsedOwner : default;
+            var ownerAccountId = TsidId.TryParse(request.OwnerUserId, out var parsedOwner) ? parsedOwner : default;
             var ownerExists = await db.Accounts.AnyAsync(account =>
                 account.Id == ownerAccountId && account.Status == AccountStatus.Active);
             if (!ownerExists)
@@ -113,14 +114,14 @@ internal static partial class TenantsFeature
             }
 
             var response = new TenantSummaryResponse(
-                IamId.Format(tenant.Id),
+                TsidId.Format(tenant.Id),
                 tenant.Name,
                 tenant.Slug,
                 tenant.Status.ToString(),
                 MemberCount: 1,
                 tenant.CreatedAtUtc.UtcDateTime.ToString("O"));
 
-            return Results.Created($"/api/platform/tenants/{IamId.Format(tenant.Id)}", response);
+            return Results.Created($"/api/platform/tenants/{TsidId.Format(tenant.Id)}", response);
         })
         .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
 
@@ -163,11 +164,11 @@ internal static partial class TenantsFeature
         {
             errors["ownerUserId"] = ["Select the first tenant owner."];
         }
-        // B017/S19: owner input must be a canonical TSID string. IamId.TryParse
+        // B017/S19: owner input must be a canonical TSID string. TsidId.TryParse
         // already rejects GUID-shaped and decimal input, so a GUID owner id now
         // fails as "Select a valid owner user." (400) — the same validation
         // failure the old shape produced, without weakening the check.
-        else if (!IamId.TryParse(request.OwnerUserId, out _))
+        else if (!TsidId.TryParse(request.OwnerUserId, out _))
         {
             errors["ownerUserId"] = ["Select a valid owner user."];
         }

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -35,7 +36,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
 
     private static void Authorize(HttpClient client, Tsid accountId)
     {
-        var accountIdText = IamId.Format(accountId);
+        var accountIdText = TsidId.Format(accountId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: false,
@@ -47,7 +48,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
     private static async Task<HttpStatusCode> SendWithOverlapAsync(HttpClient client, Tsid tenantId, object request, Barrier barrier)
     {
         barrier.SignalAndWait(10_000);
-        var response = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenantId)}/invitations", request);
+        var response = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenantId)}/invitations", request);
         barrier.SignalAndWait(10_000);
         return response.StatusCode;
     }
@@ -59,7 +60,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        var create = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = " Teammate@Company.COM ", role = "Viewer" });
+        var create = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = " Teammate@Company.COM ", role = "Viewer" });
 
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var body = await create.Content.ReadAsStringAsync();
@@ -79,7 +80,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
             Assert.Single(await context.AuditEvents.Where(e => e.TenantId == tenant.TenantId && e.Action == "Invitation.Created").ToListAsync());
         }
 
-        var list = await client.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations");
+        var list = await client.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations");
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         Assert.DoesNotContain("token", await list.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
@@ -95,9 +96,9 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         Authorize(secondClient, second.OwnerAccountId);
         var request = new { email = "duplicate@company.com", role = "Viewer" };
 
-        Assert.Equal(HttpStatusCode.Created, (await firstClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(first.TenantId)}/invitations", request)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await firstClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(first.TenantId)}/invitations", request)).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await secondClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(second.TenantId)}/invitations", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await firstClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/invitations", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await firstClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/invitations", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await secondClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(second.TenantId)}/invitations", request)).StatusCode);
     }
 
     [Fact]
@@ -107,8 +108,8 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "  Case@Test.COM ", role = "Viewer" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "case@test.com ", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "  Case@Test.COM ", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "case@test.com ", role = "Viewer" })).StatusCode);
 
         await using var context = db.CreateContext();
         Assert.Single(await context.TenantInvitations.Where(i => i.TenantId == tenant.TenantId && i.NormalizedEmail == "case@test.com").ToListAsync());
@@ -121,7 +122,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "expired@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "expired@company.com", role = "Viewer" })).StatusCode);
 
         await using (var context = db.CreateContext())
         {
@@ -132,7 +133,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
                 "expired@company.com");
         }
 
-        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "expired@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "expired@company.com", role = "Viewer" })).StatusCode);
         await using (var context = db.CreateContext())
         {
             Assert.Equal(1, await context.TenantInvitations.CountAsync(i => i.TenantId == tenant.TenantId && i.NormalizedEmail == "expired@company.com" && i.Status == "Pending" && i.ExpiresAtUtc > DateTimeOffset.UtcNow));
@@ -169,16 +170,16 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        var createRole = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new { name = "Finance Admin", permissionKeys = new[] { "IAM.Invitations.View" } });
+        var createRole = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new { name = "Finance Admin", permissionKeys = new[] { "IAM.Invitations.View" } });
         Assert.Equal(HttpStatusCode.Created, createRole.StatusCode);
 
-        var create = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "custom-role@company.com", role = "Finance Admin" });
+        var create = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "custom-role@company.com", role = "Finance Admin" });
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         using var document = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
         Assert.Equal("Finance Admin", document.RootElement.GetProperty("role").GetString());
         Assert.DoesNotContain("token", await create.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
 
-        var list = await client.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations");
+        var list = await client.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations");
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         var listBody = await list.Content.ReadAsStringAsync();
         using var listDocument = JsonDocument.Parse(listBody);
@@ -199,8 +200,8 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         var foreignRole = await foreignClient.PostAsJsonAsync($"/api/tenants/{foreignTenant.TenantId}/roles", new { name = "Foreign Finance Admin", permissionKeys = new[] { "IAM.Invitations.View" } });
         Assert.Equal(HttpStatusCode.Created, foreignRole.StatusCode);
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "unknown-role@company.com", role = "Unknown" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "foreign-role@company.com", role = "Foreign Finance Admin" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "unknown-role@company.com", role = "Unknown" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "foreign-role@company.com", role = "Foreign Finance Admin" })).StatusCode);
 
         await using var context = db.CreateContext();
         Assert.Equal(0, await context.TenantInvitations.CountAsync(i => i.TenantId == tenant.TenantId));
@@ -214,14 +215,14 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         using var ownerClient = CreateClient();
         Authorize(ownerClient, tenant.OwnerAccountId);
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await ownerClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "not-email", role = "Viewer" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await ownerClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "new@company.com", role = "Unknown" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ownerClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "not-email", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ownerClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "new@company.com", role = "Unknown" })).StatusCode);
 
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "member@company.com", role = "Viewer" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/audit")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "member@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/audit")).StatusCode);
     }
 
     [Fact]
@@ -234,12 +235,12 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         Authorize(firstClient, first.OwnerAccountId);
         Authorize(secondClient, second.OwnerAccountId);
 
-        await firstClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(first.TenantId)}/invitations", new { email = "first@company.com", role = "Viewer" });
+        await firstClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/invitations", new { email = "first@company.com", role = "Viewer" });
         var cutoff = DateTimeOffset.UtcNow.AddSeconds(-1).UtcDateTime.ToString("O");
-        await firstClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(first.TenantId)}/invitations", new { email = "latest@company.com", role = "Viewer" });
-        await secondClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(second.TenantId)}/invitations", new { email = "other@company.com", role = "Viewer" });
+        await firstClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/invitations", new { email = "latest@company.com", role = "Viewer" });
+        await secondClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(second.TenantId)}/invitations", new { email = "other@company.com", role = "Viewer" });
 
-        var response = await firstClient.GetAsync($"/api/tenants/{IamId.Format(first.TenantId)}/audit?action=Invitation.Created&fromUtc={Uri.EscapeDataString(cutoff)}");
+        var response = await firstClient.GetAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/audit?action=Invitation.Created&fromUtc={Uri.EscapeDataString(cutoff)}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -253,8 +254,8 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         });
         Assert.Equal("latest@company.com", events[0].GetProperty("target").GetString());
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await firstClient.GetAsync($"/api/tenants/{IamId.Format(first.TenantId)}/audit?action=Unknown.Action")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await firstClient.GetAsync($"/api/tenants/{IamId.Format(first.TenantId)}/audit?fromUtc=not-a-date")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await firstClient.GetAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/audit?action=Unknown.Action")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await firstClient.GetAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/audit?fromUtc=not-a-date")).StatusCode);
     }
 
     [Fact]
@@ -266,7 +267,7 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
 
         async Task AssignRoleAsync(string name, string permission)
         {
-            var create = await ownerClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new { name, permissionKeys = new[] { permission } });
+            var create = await ownerClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new { name, permissionKeys = new[] { permission } });
             Assert.Equal(HttpStatusCode.Created, create.StatusCode);
             using var document = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
             var roleId = document.RootElement.GetProperty("id").GetString()!;
@@ -275,22 +276,22 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
                 .Where(m => m.TenantId == tenant.TenantId && m.AccountId == tenant.MemberAccountId)
                 .Select(m => m.Id)
                 .SingleAsync();
-            Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/members/{membershipId}/roles/{roleId}", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/members/{membershipId}/roles/{roleId}", null)).StatusCode);
         }
 
         await AssignRoleAsync("Invitation Viewer", "IAM.Invitations.View");
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "viewer@company.com", role = "Viewer" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/audit")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "viewer@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/audit")).StatusCode);
 
         await AssignRoleAsync("Invitation Creator", "IAM.Invitations.Create");
-        Assert.Equal(HttpStatusCode.Created, (await memberClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations", new { email = "creator@company.com", role = "Viewer" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/audit")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await memberClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations", new { email = "creator@company.com", role = "Viewer" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/audit")).StatusCode);
 
         await AssignRoleAsync("Audit Reader", "IAM.Audit.View");
-        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/audit")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/audit")).StatusCode);
     }
 
     [Fact]
@@ -300,20 +301,20 @@ public class InvitationAuditIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        var create = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new { name = "Audited Role", permissionKeys = new[] { "IAM.Invitations.View" } });
+        var create = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new { name = "Audited Role", permissionKeys = new[] { "IAM.Invitations.View" } });
         using var createDocument = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
         var roleId = createDocument.RootElement.GetProperty("id").GetString()!;
-        var roles = await client.GetFromJsonAsync<JsonElement>($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles");
+        var roles = await client.GetFromJsonAsync<JsonElement>($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles");
         var memberId = roles.GetProperty("roles").EnumerateArray().Single(role => role.GetProperty("id").GetString() == roleId).GetProperty("memberIds").EnumerateArray().ToList();
         Assert.Empty(memberId);
 
-        await client.PutAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles/{roleId}", new { permissionKeys = new[] { "IAM.Invitations.View", "IAM.Invitations.Create" } });
+        await client.PutAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles/{roleId}", new { permissionKeys = new[] { "IAM.Invitations.View", "IAM.Invitations.Create" } });
         await using var context = db.CreateContext();
         var membershipId = await context.TenantMemberships.Where(m => m.TenantId == tenant.TenantId && m.AccountId == tenant.MemberAccountId).Select(m => m.Id).SingleAsync();
-        await client.PutAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/members/{membershipId}/roles/{roleId}", null);
-        await client.DeleteAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/members/{membershipId}/roles/{roleId}");
+        await client.PutAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/members/{membershipId}/roles/{roleId}", null);
+        await client.DeleteAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/members/{membershipId}/roles/{roleId}");
 
-        var audit = await client.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/audit");
+        var audit = await client.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/audit");
         Assert.Equal(HttpStatusCode.OK, audit.StatusCode);
         using var auditDocument = JsonDocument.Parse(await audit.Content.ReadAsStringAsync());
         var actions = auditDocument.RootElement.GetProperty("events").EnumerateArray().Select(evt => evt.GetProperty("action").GetString()).ToList();

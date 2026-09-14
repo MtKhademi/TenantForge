@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
@@ -89,7 +90,7 @@ internal static class RolesFeature
                 return DuplicateRoleProblem();
             }
 
-            var response = (await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == IamId.Format(role.Id));
+            var response = (await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == TsidId.Format(role.Id));
             return Results.Created($"/api/tenants/{access.TenantId}/roles/{role.Id}", response);
         }).RequireAuthorization();
 
@@ -134,7 +135,7 @@ internal static class RolesFeature
             db.AuditEvents.Add(AuditEvent.Create(access.TenantId, access.AccountId, access.Actor, access.ActorEmail, "Role.Updated", role.Name, $"مجوزهای نقش {role.Name} به‌روزرسانی شد.", now));
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
-            return Results.Ok((await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == IamId.Format(role.Id)));
+            return Results.Ok((await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == TsidId.Format(role.Id)));
         }).RequireAuthorization();
 
         endpoints.MapPut("/api/tenants/{tenantId}/members/{memberId}/roles/{roleId}", async (string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db) =>
@@ -277,12 +278,12 @@ internal static class RolesFeature
             .ToListAsync();
 
         return roles.Select(role => new TenantRoleResponse(
-            IamId.Format(role.Id),
+            TsidId.Format(role.Id),
             role.Name,
             role.Description,
             role.Kind,
             role.PermissionKeys,
-            assignments.Where(a => a.TenantRoleId == role.Id).Select(a => IamId.Format(a.MemberId)).OrderBy(id => id, StringComparer.Ordinal).ToList(),
+            assignments.Where(a => a.TenantRoleId == role.Id).Select(a => TsidId.Format(a.MemberId)).OrderBy(id => id, StringComparer.Ordinal).ToList(),
             role.CreatedAtUtc.UtcDateTime.ToString("O"),
             role.UpdatedAtUtc.UtcDateTime.ToString("O"))).ToList();
     }
@@ -364,7 +365,7 @@ internal static class RolesFeature
     private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTenantMutationAsync(IamDbContext db, Tsid tenantId)
     {
         var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({IamId.Format(tenantId)}, 0))");
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({TsidId.Format(tenantId)}, 0))");
         return transaction;
     }
 
@@ -390,14 +391,14 @@ internal static class RolesFeature
         return errors;
     }
 
-    private static Tsid? ParseTenantId(string value) => IamId.TryParseNullable(value);
+    private static Tsid? ParseTenantId(string value) => TsidId.TryParseNullable(value);
 
     private static Tsid? GetAuthenticatedAccountId(ClaimsPrincipal principal)
     {
         if (principal.Identity is not { IsAuthenticated: true }) return null;
         // B017/S19: subject must be a canonical TSID string; a legacy
         // GUID-subject token is denied (403 here) instead of crashing.
-        return IamId.TryParseNullable(principal.FindFirstValue("sub"));
+        return TsidId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) => exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };

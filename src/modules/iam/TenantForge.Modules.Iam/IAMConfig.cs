@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using TenantForge.BuildingBlocks.Modules;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Login;
 using TenantForge.Modules.Iam.Infrastructure;

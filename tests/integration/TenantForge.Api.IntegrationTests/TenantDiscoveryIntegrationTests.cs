@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -31,7 +32,7 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
 
     private static void Authorize(HttpClient client, Tsid accountId, bool isPlatformAdmin = false)
     {
-        var accountIdText = IamId.Format(accountId);
+        var accountIdText = TsidId.Format(accountId);
         var token = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: isPlatformAdmin,
@@ -93,11 +94,11 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
 
         // Ordered by tenant name, then id: "Alpha ..." sorts before "Zeta ...".
         Assert.Equal(fixture.AlphaName, tenants[0].GetProperty("name").GetString());
-        Assert.Equal(IamId.Format(fixture.AlphaId), tenants[0].GetProperty("id").GetString());
+        Assert.Equal(TsidId.Format(fixture.AlphaId), tenants[0].GetProperty("id").GetString());
         Assert.Equal("Member", tenants[0].GetProperty("membershipRole").GetString());
 
         Assert.Equal(fixture.ZetaName, tenants[1].GetProperty("name").GetString());
-        Assert.Equal(IamId.Format(fixture.ZetaId), tenants[1].GetProperty("id").GetString());
+        Assert.Equal(TsidId.Format(fixture.ZetaId), tenants[1].GetProperty("id").GetString());
         Assert.Equal("Owner", tenants[1].GetProperty("membershipRole").GetString());
 
         // The discovery DTO stays minimal: id, name, slug, status,
@@ -160,9 +161,9 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
         // The admin sees only their one membership — no bypass enumerates the
         // caller's other tenants or the suspended/stranger tenants.
         Assert.Single(ids);
-        Assert.Equal(IamId.Format(fixture.AlphaId), ids[0]);
-        Assert.DoesNotContain(IamId.Format(fixture.StrangerId), ids);
-        Assert.DoesNotContain(IamId.Format(fixture.SuspendedId), ids);
+        Assert.Equal(TsidId.Format(fixture.AlphaId), ids[0]);
+        Assert.DoesNotContain(TsidId.Format(fixture.StrangerId), ids);
+        Assert.DoesNotContain(TsidId.Format(fixture.SuspendedId), ids);
     }
 
     [Fact]
@@ -195,7 +196,7 @@ public class TenantDiscoveryIntegrationTests(TenantDiscoveryDbFixture db) : IDis
         // Valid signature and claims, but the sub points at an account that
         // does not exist in iam_accounts.
         using var client = CreateClient();
-        Authorize(client, IamId.NewId());
+        Authorize(client, TsidId.NewId());
 
         var response = await client.GetAsync("/api/auth/me/tenants");
 

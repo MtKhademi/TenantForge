@@ -1,10 +1,11 @@
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class Account
 {
-    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid Id { get; private set; } = TsidId.NewId();
     public string Email { get; private set; } = string.Empty;
     public string NormalizedEmail { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
@@ -45,7 +46,7 @@ internal sealed class Account
 
         return new Account
         {
-            Id = IamId.NewId(),
+            Id = TsidId.NewId(),
             Email = trimmedEmail,
             NormalizedEmail = NormalizeEmail(trimmedEmail),
             DisplayName = trimmedDisplayName,
@@ -84,7 +85,7 @@ internal sealed class Account
 
         return new Account
         {
-            Id = IamId.NewId(),
+            Id = TsidId.NewId(),
             Email = trimmedEmail,
             NormalizedEmail = NormalizeEmail(trimmedEmail),
             DisplayName = trimmedDisplayName,

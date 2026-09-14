@@ -77,7 +77,7 @@ one valid Spec link.
 | B015 | S15 | Add consistent pagination to collection APIs and query filters | done | B014, F021 | — |
 | B016 | S18 | Collapse IAM startup behind one registration and one activation seam | done | B015 | — |
 | B017 | S19 | Replace persisted IAM GUID identifiers with TSIDs | done | B016 | — |
-| B018 | S20 | Extract stable cross-module building blocks | planned | B017 | [Spec](backend/B018-building-blocks.md) |
+| B018 | S20 | Extract stable cross-module building blocks | done | B017 | — |
 | B019 | S21 | Create a living IAM knowledge base and update gate | planned | B018 | [Spec](backend/B019-iam-knowledge-base.md) |
 | B020 | S22 | Create a living BuildingBlocks knowledge and admission guide | planned | B019 | [Spec](backend/B020-building-blocks-knowledge.md) |
 

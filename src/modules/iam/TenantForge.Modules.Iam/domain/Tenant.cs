@@ -1,9 +1,10 @@
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 namespace TenantForge.Modules.Iam.Domain;
 
 internal sealed class Tenant
 {
-    public Tsid Id { get; private set; } = IamId.NewId();
+    public Tsid Id { get; private set; } = TsidId.NewId();
     public string Name { get; private set; } = string.Empty;
     public string Slug { get; private set; } = string.Empty;
     public string NormalizedSlug { get; private set; } = string.Empty;
@@ -31,7 +32,7 @@ internal sealed class Tenant
         var now = nowUtc.ToUniversalTime();
         return new Tenant
         {
-            Id = IamId.NewId(),
+            Id = TsidId.NewId(),
             Name = name.Trim(),
             Slug = normalizedSlug,
             NormalizedSlug = normalizedSlug,

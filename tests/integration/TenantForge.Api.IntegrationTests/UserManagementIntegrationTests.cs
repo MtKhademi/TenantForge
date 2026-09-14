@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -35,7 +36,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
     private static void Authorize(HttpClient client, Tsid accountId)
     {
-        var accountIdText = IamId.Format(accountId);
+        var accountIdText = TsidId.Format(accountId);
         var token = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: false,
@@ -82,7 +83,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
         var seededAdmin = users.EnumerateArray().Single(user =>
             user.GetProperty("email").GetString() == ApiFactory.Email);
 
-        Assert.True(IamId.TryParse(seededAdmin.GetProperty("id").GetString(), out _));
+        Assert.True(TsidId.TryParse(seededAdmin.GetProperty("id").GetString(), out _));
         Assert.Equal(ApiFactory.DisplayName, seededAdmin.GetProperty("displayName").GetString());
         Assert.Equal("Active", seededAdmin.GetProperty("status").GetString());
         Assert.True(seededAdmin.GetProperty("isPlatformAdmin").GetBoolean());
@@ -113,7 +114,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
         using var createDocument = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
         var created = createDocument.RootElement;
-        Assert.True(IamId.TryParse(created.GetProperty("id").GetString(), out _));
+        Assert.True(TsidId.TryParse(created.GetProperty("id").GetString(), out _));
         Assert.Equal(email, created.GetProperty("email").GetString());
         Assert.Equal("New Team Member", created.GetProperty("displayName").GetString());
         Assert.Equal("Active", created.GetProperty("status").GetString());
@@ -252,9 +253,9 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
             // Own tenantId.
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.GetAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}")).StatusCode);
+                (await client.GetAsync($"/api/platform/users?tenantId={TsidId.Format(tenant.TenantId)}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}", new
+                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={TsidId.Format(tenant.TenantId)}", new
                 {
                     email,
                     displayName = "Denied",
@@ -263,9 +264,9 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
 
             // Foreign tenantId.
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.GetAsync($"/api/platform/users?tenantId={IamId.Format(foreignTenant.TenantId)}")).StatusCode);
+                (await client.GetAsync($"/api/platform/users?tenantId={TsidId.Format(foreignTenant.TenantId)}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={IamId.Format(foreignTenant.TenantId)}", new
+                (await client.PostAsJsonAsync($"/api/platform/users?tenantId={TsidId.Format(foreignTenant.TenantId)}", new
                 {
                     email,
                     displayName = "Denied",
@@ -290,7 +291,7 @@ public class UserManagementIntegrationTests(IamDbFixture db) : IDisposable
         using var client = CreateClient();
         Authorize(client, tenant.MemberAccountId);
 
-        var response = await client.GetAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}");
+        var response = await client.GetAsync($"/api/platform/users?tenantId={TsidId.Format(tenant.TenantId)}");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();

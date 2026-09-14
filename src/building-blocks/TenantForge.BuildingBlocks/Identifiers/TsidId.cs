@@ -1,24 +1,24 @@
 using TSID.Creator.NET;
 
-namespace TenantForge.Modules.Iam.Domain;
+namespace TenantForge.BuildingBlocks.Identifiers;
 
 /// <summary>
-/// The single, module-owned seam for IAM identifiers (B017/S19). Every place in
-/// IAM that generates, validates, or formats an entity identity goes through
-/// this one static class instead of calling the <c>TSID.Creator.NET</c>
-/// package directly, so the representation rules live in one reviewable place:
+/// The system-wide seam for TenantForge public identifiers. Module code that
+/// generates, validates, or formats a TSID goes through this class instead of
+/// calling the <c>TSID.Creator.NET</c> package directly, so the representation
+/// rules live in one reviewable place:
 ///
-/// - the database stores the identifier's signed 64-bit value (<c>long</c> /
+/// - databases store the identifier's signed 64-bit value (<c>long</c> /
 ///   PostgreSQL <c>bigint</c>);
-/// - the domain and persistence code work with the <see cref="Tsid"/> struct;
-/// - every HTTP request/response and the JWT <c>sub</c> carry only the
-///   canonical 13-character Crockford-base32 string.
+/// - domain and persistence code work with the <see cref="Tsid"/> struct;
+/// - HTTP requests/responses and JWT <c>sub</c> claims carry only the canonical
+///   13-character Crockford-base32 string.
 ///
 /// Public callers therefore never see the backing integer, and malformed,
 /// GUID-shaped or decimal input can never escape as an unhandled
 /// <see cref="ArgumentException"/>.
 /// </summary>
-internal static class IamId
+public static class TsidId
 {
     /// <summary>
     /// The length of the canonical TSID string. The Crockford-base32 encoding
@@ -33,8 +33,8 @@ internal static class IamId
 
     /// <summary>
     /// True when <paramref name="id"/> is the struct's default (all-zero)
-    /// value. The domain uses this in place of the old <c>Guid.Empty</c>
-    /// "unset" check.
+    /// value. Modules use this in place of <c>Guid.Empty</c> style "unset"
+    /// checks.
     /// </summary>
     public static bool IsDefault(Tsid id) => id.ToLong() == 0L;
 
@@ -117,8 +117,8 @@ internal static class IamId
     /// <summary>
     /// Parses an optional public identifier string, returning null (instead of
     /// the struct default) when <paramref name="value"/> is missing or invalid.
-    /// This is the form endpoint handlers use for "required but optional on the
-    /// wire" values such as route parameters.
+    /// Endpoint handlers use this for values such as optional route/query
+    /// parameters.
     /// </summary>
     public static Tsid? TryParseNullable(string? value)
         => TryParse(value, out var id) ? id : null;

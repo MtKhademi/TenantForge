@@ -77,10 +77,13 @@ Building-block convention:
 
 - B018/S20 introduces `TenantForge.BuildingBlocks`. Dependency direction is
   API → module → BuildingBlocks; BuildingBlocks never references the API or a
-  module. Move only stable cross-module contracts or accepted system-wide
-  primitives there. New code starts in its owning module; never treat the
-  project as a `Common`, `Utils` or speculative-reuse bucket. Follow B018's
-  live Spec until delivery.
+  module. Its first admitted types are `IModuleConfig` and `TsidId`. Move only
+  stable cross-module contracts or accepted system-wide primitives there. New
+  code starts in its owning module; never treat the project as a `Common`,
+  `Utils` or speculative-reuse bucket. Keep EF converters, pagination helpers,
+  auth/JWT, seeding, permission catalogs, entities, DTOs, migrations and feature
+  handlers in their owning module until a later visible slice proves a neutral
+  contract. Follow B018's live Spec until delivery.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow

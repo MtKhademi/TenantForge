@@ -18,10 +18,10 @@
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.*" />
-    <!-- Pinned exact version (B017/S19): the IAM identifier seam depends on this
-         package's stable Tsid struct API. Do not float to 10.0.* like the other
-         references; the identifier representation is a breaking boundary. -->
-    <PackageReference Include="TSID.Creator.NET" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\building-blocks\TenantForge.BuildingBlocks\TenantForge.BuildingBlocks.csproj" />
   </ItemGroup>
 
 </Project>

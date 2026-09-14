@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 
 namespace TenantForge.Modules.Iam.Features.Account;
@@ -34,7 +35,7 @@ internal static class CurrentAccountFeature
             // identity representation stops being accepted: the token still
             // validates cryptographically, but its subject no longer names a
             // live account shape, so the caller must sign in again.
-            if (!IamId.TryParse(id, out var accountId))
+            if (!TsidId.TryParse(id, out var accountId))
             {
                 return Results.Unauthorized();
             }
@@ -47,7 +48,7 @@ internal static class CurrentAccountFeature
 
             // Re-emit in canonical form: even a lower-case subject is accepted
             // (Crockford base32 is case-insensitive) but always normalized.
-            return Results.Ok(new CurrentAccountResponse(IamId.Format(accountId), email, displayName, isPlatformAdmin));
+            return Results.Ok(new CurrentAccountResponse(TsidId.Format(accountId), email, displayName, isPlatformAdmin));
         })
         .RequireAuthorization();
 

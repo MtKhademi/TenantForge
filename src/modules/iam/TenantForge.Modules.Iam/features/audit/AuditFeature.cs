@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Features.Roles;
@@ -56,7 +57,7 @@ internal static class AuditFeature
                 .ThenByDescending(evt => evt.Id);
             var (eventRows, pagination) = await PaginationSupport.PageAsync(orderedQuery, page);
             var events = eventRows
-                .Select(evt => new AuditEventResponse(IamId.Format(evt.Id), evt.Actor, evt.ActorEmail, evt.Action, evt.Target, evt.Details, evt.CreatedAtUtc.UtcDateTime.ToString("O")))
+                .Select(evt => new AuditEventResponse(TsidId.Format(evt.Id), evt.Actor, evt.ActorEmail, evt.Action, evt.Target, evt.Details, evt.CreatedAtUtc.UtcDateTime.ToString("O")))
                 .ToList();
 
             return Results.Ok(new AuditListResponse(events, pagination));

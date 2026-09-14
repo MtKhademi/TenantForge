@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
 using Xunit;
 
@@ -36,7 +37,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
 
     private static void Authorize(HttpClient client, Tsid accountId, bool isPlatformAdmin = false)
     {
-        var accountIdText = IamId.Format(accountId);
+        var accountIdText = TsidId.Format(accountId);
         var token = TestJwtFactory.Issue(
             signingKey: ApiFactory.SigningKey,
             isPlatformAdmin: isPlatformAdmin,
@@ -50,7 +51,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
     public async Task Catalog_ReturnsS12PermissionKeysOnly()
     {
         using var client = CreateClient();
-        Authorize(client, IamId.NewId());
+        Authorize(client, TsidId.NewId());
 
         var response = await client.GetAsync("/api/permissions/catalog");
 
@@ -78,7 +79,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        var create = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new
+        var create = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new
         {
             name = "Invitation Viewer",
             permissionKeys = new[] { "IAM.Invitations.View" }
@@ -89,22 +90,22 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         var roleId = createDocument.RootElement.GetProperty("id").GetString()!;
         Assert.Equal("custom", createDocument.RootElement.GetProperty("kind").GetString());
 
-        var assign = await client.PutAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/members/{IamId.Format(tenant.MemberMembershipId)}/roles/{roleId}", null);
+        var assign = await client.PutAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/members/{TsidId.Format(tenant.MemberMembershipId)}/roles/{roleId}", null);
         Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
 
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        var resolved = await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/me/permissions");
+        var resolved = await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/me/permissions");
         Assert.Equal(HttpStatusCode.OK, resolved.StatusCode);
         using var permissionsDocument = JsonDocument.Parse(await resolved.Content.ReadAsStringAsync());
         var permissions = permissionsDocument.RootElement.GetProperty("permissions").EnumerateArray().Select(item => item.GetString()).ToList();
         Assert.Equal(["IAM.Invitations.View"], permissions);
 
-        var reload = await client.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles");
+        var reload = await client.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles");
         Assert.Equal(HttpStatusCode.OK, reload.StatusCode);
         using var reloadDocument = JsonDocument.Parse(await reload.Content.ReadAsStringAsync());
         var reloadedRole = reloadDocument.RootElement.GetProperty("roles").EnumerateArray().Single(role => role.GetProperty("id").GetString() == roleId);
-        Assert.Contains(IamId.Format(tenant.MemberMembershipId), reloadedRole.GetProperty("memberIds").EnumerateArray().Select(item => item.GetString()));
+        Assert.Contains(TsidId.Format(tenant.MemberMembershipId), reloadedRole.GetProperty("memberIds").EnumerateArray().Select(item => item.GetString()));
     }
 
     [Fact]
@@ -117,12 +118,12 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         Authorize(firstClient, first.OwnerAccountId);
         Authorize(secondClient, second.OwnerAccountId);
 
-        Assert.Equal(HttpStatusCode.Created, (await firstClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(first.TenantId)}/roles", new
+        Assert.Equal(HttpStatusCode.Created, (await firstClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(first.TenantId)}/roles", new
         {
             name = "Invitation Viewer",
             permissionKeys = new[] { "IAM.Invitations.View" }
         })).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await secondClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(second.TenantId)}/roles", new
+        Assert.Equal(HttpStatusCode.Created, (await secondClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(second.TenantId)}/roles", new
         {
             name = "Invitation Viewer",
             permissionKeys = new[] { "IAM.Audit.View" }
@@ -136,7 +137,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         using var client = CreateClient();
         Authorize(client, tenant.OwnerAccountId);
 
-        var invalid = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new
+        var invalid = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new
         {
             name = "",
             permissionKeys = new[] { "IAM.Unknown" }
@@ -147,7 +148,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
             Assert.True(doc.RootElement.GetProperty("errors").TryGetProperty("permissionKeys", out _));
         }
 
-        var obsolete = await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new
+        var obsolete = await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new
         {
             name = "Old Permission",
             permissionKeys = new[] { "IAM.Users.View" }
@@ -159,8 +160,8 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         }
 
         var request = new { name = "Invitation Viewer", permissionKeys = new[] { "IAM.Invitations.View" } };
-        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", request)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", request)).StatusCode);
     }
 
     [Fact]
@@ -170,11 +171,11 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         var outsider = await CreateTenantWithOwnerAndMemberAsync();
         using var outsiderClient = CreateClient();
         Authorize(outsiderClient, outsider.MemberAccountId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await outsiderClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsiderClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles")).StatusCode);
 
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new
         {
             name = "Denied",
             permissionKeys = new[] { "IAM.Invitations.View" }
@@ -188,7 +189,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         using var ownerClient = CreateClient();
         Authorize(ownerClient, tenant.OwnerAccountId);
 
-        var createManager = await ownerClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new
+        var createManager = await ownerClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new
         {
             name = "Role Manager",
             permissionKeys = new[] { "IAM.Roles.Manage" }
@@ -196,20 +197,20 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         Assert.Equal(HttpStatusCode.Created, createManager.StatusCode);
         using var managerDoc = JsonDocument.Parse(await createManager.Content.ReadAsStringAsync());
         var managerRoleId = managerDoc.RootElement.GetProperty("id").GetString()!;
-        Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/members/{IamId.Format(tenant.MemberMembershipId)}/roles/{managerRoleId}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ownerClient.PutAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/members/{TsidId.Format(tenant.MemberMembershipId)}/roles/{managerRoleId}", null)).StatusCode);
 
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
-        var createManaged = await memberClient.PostAsJsonAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles", new
+        var createManaged = await memberClient.PostAsJsonAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles", new
         {
             name = "Audit Reader",
             permissionKeys = new[] { "IAM.Audit.View" }
         });
         Assert.Equal(HttpStatusCode.Created, createManaged.StatusCode);
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/platform/users?tenantId={IamId.Format(tenant.TenantId)}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/audit")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/platform/users?tenantId={TsidId.Format(tenant.TenantId)}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/audit")).StatusCode);
     }
 
     [Fact]
@@ -221,7 +222,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         using var memberClient = CreateClient();
         Authorize(memberClient, tenant.MemberAccountId);
 
-        var ownerPermissions = await ownerClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{IamId.Format(tenant.TenantId)}/me/permissions");
+        var ownerPermissions = await ownerClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{TsidId.Format(tenant.TenantId)}/me/permissions");
         Assert.Equal([
             "IAM.Audit.View",
             "IAM.Invitations.Create",
@@ -229,9 +230,9 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
             "IAM.Roles.Manage"
         ], ownerPermissions.GetProperty("permissions").EnumerateArray().Select(item => item.GetString()).OrderBy(item => item).ToList());
 
-        var memberPermissions = await memberClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{IamId.Format(tenant.TenantId)}/me/permissions");
+        var memberPermissions = await memberClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{TsidId.Format(tenant.TenantId)}/me/permissions");
         Assert.Empty(memberPermissions.GetProperty("permissions").EnumerateArray());
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/invitations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/invitations")).StatusCode);
     }
 
     [Fact]
@@ -247,7 +248,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
             context.TenantMemberships.Remove(membership);
             await context.SaveChangesAsync();
         }
-        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{IamId.Format(tenant.TenantId)}/roles")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync($"/api/tenants/{TsidId.Format(tenant.TenantId)}/roles")).StatusCode);
 
         var suspended = await CreateTenantWithOwnerAndMemberAsync();
         using var suspendedClient = CreateClient();
@@ -258,7 +259,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
             SetStatus(tenantEntity, TenantStatus.Suspended);
             await context.SaveChangesAsync();
         }
-        Assert.Equal(HttpStatusCode.Forbidden, (await suspendedClient.GetAsync($"/api/tenants/{IamId.Format(suspended.TenantId)}/roles")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await suspendedClient.GetAsync($"/api/tenants/{TsidId.Format(suspended.TenantId)}/roles")).StatusCode);
 
         var disabled = await CreateTenantWithOwnerAndMemberAsync();
         using var disabledClient = CreateClient();
@@ -269,7 +270,7 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
             SetStatus(account, AccountStatus.Disabled);
             await context.SaveChangesAsync();
         }
-        Assert.Equal(HttpStatusCode.Forbidden, (await disabledClient.GetAsync($"/api/tenants/{IamId.Format(disabled.TenantId)}/roles")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await disabledClient.GetAsync($"/api/tenants/{TsidId.Format(disabled.TenantId)}/roles")).StatusCode);
     }
 
     [Fact]
@@ -299,10 +300,10 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         // Two admin role assignments on the same account still count as one
         // distinct administrator account. Removing one duplicate assignment is
         // safe because the same account still holds the second manager role.
-        var tenantId = IamId.Format(tenantEntity.Id);
-        var adminMembershipId = IamId.Format(adminMembership.Id);
-        var adminRoleId = IamId.Format(adminRole.Id);
-        var duplicateAdminRoleId = IamId.Format(duplicateAdminRole.Id);
+        var tenantId = TsidId.Format(tenantEntity.Id);
+        var adminMembershipId = TsidId.Format(adminMembership.Id);
+        var adminRoleId = TsidId.Format(adminRole.Id);
+        var duplicateAdminRoleId = TsidId.Format(duplicateAdminRole.Id);
 
         Assert.Equal(HttpStatusCode.OK, (await adminClient.DeleteAsync($"/api/tenants/{tenantId}/members/{adminMembershipId}/roles/{adminRoleId}")).StatusCode);
 
@@ -341,10 +342,10 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         using var adminClient = CreateClient();
         Authorize(adminClient, admin.Id);
 
-        var tenantId = IamId.Format(tenantEntity.Id);
-        var membershipId = IamId.Format(membership.Id);
-        var firstRoleId = IamId.Format(firstRole.Id);
-        var secondRoleId = IamId.Format(secondRole.Id);
+        var tenantId = TsidId.Format(tenantEntity.Id);
+        var membershipId = TsidId.Format(membership.Id);
+        var firstRoleId = TsidId.Format(firstRole.Id);
+        var secondRoleId = TsidId.Format(secondRole.Id);
         var removeA = adminClient.DeleteAsync($"/api/tenants/{tenantId}/members/{membershipId}/roles/{firstRoleId}");
         var updateB = adminClient.PutAsJsonAsync($"/api/tenants/{tenantId}/roles/{secondRoleId}", new { permissionKeys = new[] { "IAM.Audit.View" } });
         var results = await Task.WhenAll(removeA, updateB);
