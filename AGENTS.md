@@ -131,6 +131,30 @@ Write concise notes that explain:
 
 Do not turn the learning note into framework documentation. Explain only the code introduced in the slice.
 
+## Living module knowledge
+
+- `docs/modules/IAM.md` is the current, searchable handbook for the IAM
+  module. Any task that reads or changes `src/modules/iam/**`, or changes an
+  IAM contract living in `TenantForge.BuildingBlocks`/the API host, reads
+  `docs/modules/IAM.md` first during discovery, then verifies the relevant
+  facts against current code — the handbook summarizes code, it does not
+  replace it.
+- Before moving to review, classify the actual diff against `IAM.md`'s
+  change-impact checklist (its final section). When a documented fact
+  changed (routes, request/response shapes, configuration, composition, IDs,
+  domain invariants, persistence, auth, permissions, tenancy, startup, tests
+  or limitations), update `IAM.md` in the same task and validate it against
+  code.
+- Otherwise state the exact declaration in self-review and the PR body:
+  `IAM.md impact: none — <specific reason>`. A vague "docs not needed" is not
+  accepted; review blocks a production IAM diff that has neither an `IAM.md`
+  edit nor a defensible no-impact statement.
+- Historical learning notes and source slices explain why a past change
+  happened; they never override the current handbook or current code when
+  the two disagree.
+- Future modules that gain the same kind of living handbook follow this same
+  read-first/impact-gate shape.
+
 ## Git safety
 
 - Use three ordinary clones named `main`, `front` and `backend`. Never create or

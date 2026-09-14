@@ -6,6 +6,8 @@ The project grows through small, visible vertical slices. Each delivered capabil
 
 **راهنمای استفاده از برنامه:** اگر می‌خواهید با مسیرهای واقعی ادمین پلتفرم یا کار داخل یک مستأجر شروع کنید، [راهنمای فارسی کار با TenantForge](docs/user-guide/README.md) را باز کنید.
 
+Working on the IAM module? Read the [IAM module handbook](docs/modules/IAM.md) first — it is the current, searchable source for IAM routes, configuration, identifiers, permissions and tests.
+
 ## What works today
 
 The current milestone includes:
