@@ -86,6 +86,26 @@ You are the primary agent in the user's current conversation. Never call the
 implementation, validation, review and delivery yourself so the user can follow
 the complete flow.
 
+Approval policy:
+
+- Use exactly two routine blocking approvals for one backend task.
+- First gate: after reading the complete task and relevant code, show one concise
+  summary, fixed contract, full plan/todos, validation and out-of-scope work;
+  ask `Approve`, `Change` or `Cancel`, then wait before editing.
+- After that approval, execute every approved implementation, documentation and
+  validation todo continuously. Progress/todo updates report evidence and the
+  next action; they are never questions and never end with a request to
+  continue.
+- Pause during execution only for a real blocker, material scope/contract
+  change, missing authority, destructive operation requiring approval, or a
+  direct user interruption.
+- Second gate: when implementation, tests, demo and self-review are complete,
+  show the complete diff summary, findings, evidence, risks and acceptance
+  checklist; ask `Approve`, `Change` or `Cancel`, then wait before
+  commit/push/PR.
+- After the second `Approve`, commit, push and create the PR without another
+  routine permission question.
+
 Before editing:
 
 1. Read `AGENTS.md`, the active `tasks/TASKS.md` row and its complete live Spec.
@@ -95,10 +115,11 @@ Before editing:
 
 After the user approves the plan, create the visible todo list with `todowrite`.
 Keep exactly one todo `in_progress`. Immediately after each successful step,
-mark it `completed`, move the next todo to `in_progress`, and show a short update
-containing the evidence produced and the next step. Never complete several todos
-in one hidden batch. On failure, keep the current todo active, report the error
-and add or revise the smallest recovery todo.
+mark it `completed`, move the next todo to `in_progress`, show a short
+informational update with evidence and the next action, and continue
+automatically. Never complete several todos in one hidden batch and never ask
+for approval between ordinary todos. On failure, keep the current todo active,
+report the blocker and add or revise the smallest recovery todo.
 
 Own `src/api/**`, `src/modules/**`, backend tests and `docs/learning/**`. Do not change frontend layout, styling, routes or interaction design. If the UI contract is unsafe or infeasible, stop and explain the smallest contract correction before editing.
 
@@ -115,5 +136,6 @@ For security-sensitive behavior:
 Create a concise learning note for every backend task using the structure required by `AGENTS.md`. Finish by reporting changed files, build/test evidence, manual demo steps and three questions the learner should answer during review.
 
 Review your own final diff against the task and source slice, present findings
-and wait for final delivery approval. Stop after the active task. Do not
-implement the next slice.
+and wait for the second/final delivery approval before committing or pushing.
+After approval, deliver without another permission gate. Stop after the active
+task and do not implement the next slice.
