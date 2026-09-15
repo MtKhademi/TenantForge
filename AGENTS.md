@@ -155,6 +155,29 @@ Do not turn the learning note into framework documentation. Explain only the cod
 - Future modules that gain the same kind of living handbook follow this same
   read-first/impact-gate shape.
 
+## Living BuildingBlocks knowledge
+
+- `docs/building-blocks/README.md` is the current, searchable handbook for
+  `TenantForge.BuildingBlocks`. Any task that touches
+  `src/building-blocks/**`, a consumer's project reference to it, or a
+  public BuildingBlocks contract (`IModuleConfig`, `TsidId`) reads
+  `docs/building-blocks/README.md` first during discovery, then verifies the
+  relevant facts against current code.
+- Before moving to review, classify the actual diff against the guide's
+  change-impact checklist (its final section). When a documented fact
+  changed (exported type, dependency direction, package reference,
+  consumer, contract member, exclusion), update the guide in the same task.
+- Otherwise state the exact declaration in self-review and the PR body:
+  `BuildingBlocks docs impact: none — <specific reason>`. A vague "docs not
+  needed" is not accepted; review blocks a production BuildingBlocks diff
+  that has neither a guide edit nor a defensible no-impact statement.
+- A shared TSID or module-config contract change also triggers
+  `docs/modules/IAM.md`'s own change-impact checklist, since IAM is the
+  current consumer of both contracts.
+- This guide's admission checklist governs every proposed addition to
+  BuildingBlocks: incomplete admission evidence means the type stays in its
+  owning module.
+
 ## Git safety
 
 - Use three ordinary clones named `main`, `front` and `backend`. Never create or

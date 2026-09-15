@@ -97,6 +97,22 @@ Living module knowledge:
   PR body. A vague "docs not needed" is not accepted.
 - Historical learning notes and source slices explain why a past change
   happened; they never override the current handbook or current code.
+
+Living BuildingBlocks knowledge:
+
+- `docs/building-blocks/README.md` is the current, searchable BuildingBlocks
+  handbook. Read it first during discovery whenever a task touches
+  `src/building-blocks/**`, a consumer's project reference to it, or a
+  public BuildingBlocks contract (`IModuleConfig`, `TsidId`), then verify the
+  relevant facts against current code.
+- Before review, classify the diff against the guide's change-impact
+  checklist: update the affected sections in the same task, or record the
+  exact declaration `BuildingBlocks docs impact: none — <specific reason>`
+  in self-review and the PR body. A vague "docs not needed" is not accepted.
+- The guide's admission checklist governs every proposed addition to
+  BuildingBlocks; incomplete evidence means the type stays module-local. A
+  shared TSID/module-config change also triggers `docs/modules/IAM.md`'s own
+  checklist.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow

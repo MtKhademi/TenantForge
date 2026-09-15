@@ -26,6 +26,14 @@ Check:
   Reject a vague reason. Spot-check edited or existing `IAM.md` claims
   (routes, config keys, permissions, entities) against current code and
   report any stale or missing documentation as a finding.
+- BuildingBlocks documentation gate: block review when the diff changed a
+  public BuildingBlocks type/member, a package/framework reference, a
+  project reference direction, or consumer/compatibility impact but
+  `docs/building-blocks/README.md` was not updated and no exact
+  `BuildingBlocks docs impact: none — <specific reason>` declaration is
+  present; also block when a proposed BuildingBlocks addition lacks
+  completed admission evidence or the dependency graph reverses. Cross-check
+  a shared TSID/module-config change against `docs/modules/IAM.md` as well.
 
 Return findings ordered by severity. Do not modify files or inspect sibling
 clones.

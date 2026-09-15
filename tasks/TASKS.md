@@ -79,7 +79,7 @@ one valid Spec link.
 | B017 | S19 | Replace persisted IAM GUID identifiers with TSIDs | done | B016 | — |
 | B018 | S20 | Extract stable cross-module building blocks | done | B017 | — |
 | B019 | S21 | Create a living IAM knowledge base and update gate | done | B018 | — |
-| B020 | S22 | Create a living BuildingBlocks knowledge and admission guide | planned | B019 | [Spec](backend/B020-building-blocks-knowledge.md) |
+| B020 | S22 | Create a living BuildingBlocks knowledge and admission guide | done | B019 | — |
 
 ## Cleanup batch: S11–S14
 

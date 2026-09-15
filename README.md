@@ -8,6 +8,8 @@ The project grows through small, visible vertical slices. Each delivered capabil
 
 Working on the IAM module? Read the [IAM module handbook](docs/modules/IAM.md) first — it is the current, searchable source for IAM routes, configuration, identifiers, permissions and tests.
 
+Working on `TenantForge.BuildingBlocks`? Read the [BuildingBlocks handbook](docs/building-blocks/README.md) first — it is the current, searchable source for its exported types, dependency direction and admission rule.
+
 ## What works today
 
 The current milestone includes:
