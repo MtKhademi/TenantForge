@@ -40,6 +40,12 @@ Rules:
 
 ### BuildingBlocks admission rule
 
+For current BuildingBlocks behavior — the exported-type catalog, dependency
+direction, `IModuleConfig`/`TsidId` contracts, admission checklist, exclusions
+and tests — read the [BuildingBlocks handbook](building-blocks/README.md)
+instead of this document; it is the current-state source and is kept in sync
+by every BuildingBlocks-touching task.
+
 `TenantForge.BuildingBlocks` is the only shared backend project. It is deliberately
 not named `Common`, `Shared`, `Utils` or `Helpers`: a semantic name plus an
 admission rule keeps it from becoming an ownerless bucket for speculative reuse.

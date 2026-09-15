@@ -86,6 +86,12 @@ The Git preflight is a short routing step, not a diagnostic task.
    `src/modules/iam/**`, or the task changes an IAM contract living in
    `TenantForge.BuildingBlocks` or the API host. When detected, read the
    complete `docs/modules/IAM.md` handbook now, as part of discovery.
+10. Detect BuildingBlocks ownership: the task's expected files include
+    `src/building-blocks/**`, a consumer's `ProjectReference` to it, or a
+    public BuildingBlocks contract (`IModuleConfig`, `TsidId`). When
+    detected, read the complete `docs/building-blocks/README.md` handbook now,
+    list the expected affected sections, and enumerate every current
+    consumer (from the guide's exported-type catalog) as part of discovery.
 
 ## Plan gate
 
@@ -95,7 +101,10 @@ The Git preflight is a short routing step, not a diagnostic task.
    expected files, integration tests, validation, branch
    `backend/<id-lowercase>-<slug>` and explicit out-of-scope work. When IAM
    ownership was detected in Select, include the expected `IAM.md` sections
-   the plan will update (or the exact reason none apply).
+   the plan will update (or the exact reason none apply). When BuildingBlocks
+   ownership was detected in Select, include the expected
+   `docs/building-blocks/README.md` sections and affected consumers the plan
+   will update (or the exact reason none apply).
 3. This is the first routine approval gate. Present the complete todos once,
    ask `Approve`, `Change` or `Cancel`, then stop and wait.
 4. Before approval, do not edit product or task files, install packages or run
@@ -137,7 +146,14 @@ The Git preflight is a short routing step, not a diagnostic task.
    checklist as its own visible todo: update the affected `IAM.md` sections in
    this same task, or record the exact declaration
    `IAM.md impact: none — <specific reason>` in self-review and the PR body.
-   A vague "docs not needed" does not satisfy this gate.
+   A vague "docs not needed" does not satisfy this gate. If the diff touches
+   `src/building-blocks/**`, a consumer's project reference to it, or a
+   public BuildingBlocks contract, classify it against
+   `docs/building-blocks/README.md`'s change-impact checklist the same way:
+   update the affected sections in this same task, or record the exact
+   declaration `BuildingBlocks docs impact: none — <specific reason>` in
+   self-review and the PR body. Cross-check a shared TSID or module-config
+   change against `docs/modules/IAM.md` too.
 3. This is the second and final routine approval gate. Present findings,
    complete diff/evidence, checked acceptance criteria, remaining risks and the
    final todo state. Ask the user to choose `Approve`, `Change` or `Cancel`,

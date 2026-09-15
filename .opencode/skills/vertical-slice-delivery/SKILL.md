@@ -129,7 +129,11 @@ through uncommitted sibling files.
   EF converters, pagination helpers, auth/JWT, seeding, permission catalogs,
   entities, DTOs, migrations and feature handlers in their owning module until
   a later visible slice proves a neutral contract. Follow B018's live Spec until
-  delivery.
+  delivery. `docs/building-blocks/README.md` (B020/S22) is the current,
+  searchable handbook for this project — read it first for any BuildingBlocks
+  question, and classify a BuildingBlocks-touching diff against its
+  change-impact checklist before review (update the guide, or record
+  `BuildingBlocks docs impact: none — <specific reason>`).
 
 See `docs/architecture.md` ("Local development environment") and the
 `backend-mentor` agent for the full detail.
