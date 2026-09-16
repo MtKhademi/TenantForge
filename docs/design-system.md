@@ -53,6 +53,18 @@ All interactive components require:
 - error and success feedback when relevant;
 - reduced-motion support for non-essential animation.
 
+Two additional component rules:
+
+- **One brand mark per screen.** A screen shows the TenantForge mark (icon
+  + wordmark) exactly once. A secondary header caption never repeats the
+  wordmark; it carries scope/context information only (for example, the
+  active tenant name).
+- **Icon-only header controls share one primitive.** Every icon-only
+  header/utility button (menu, sidebar collapse, theme toggle, sign-out,
+  drawer close) renders through the existing `SecondaryButton` (or
+  `Button`) component, never a bespoke `<button>` with its own sizing
+  classes.
+
 ## Required states
 
 Every data-driven screen considers:

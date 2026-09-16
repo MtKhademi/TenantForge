@@ -55,7 +55,7 @@ one valid Spec link.
 | F021 | S14 | Polish Persian product copy and current documentation | done | F020 | — |
 | F022 | S15 | Connect server pagination to tables and selectors | done | F021, B015 | — |
 | F024 | S17 | Write a practical Persian user-guide README | done | F022 | — |
-| F025 | S25 | Fix duplicated branding and inconsistent header controls in the shared shell | planned | F024 | [tasks/front/F025-shell-and-brand-foundations.md](front/F025-shell-and-brand-foundations.md) |
+| F025 | S25 | Fix duplicated branding and inconsistent header controls in the shared shell | done | F024 | — |
 | F026 | S25 | Extract a shared state panel and give dashboard cards semantic weight | planned | F025 | [tasks/front/F026-shared-state-panels-and-dashboard-density.md](front/F026-shared-state-panels-and-dashboard-density.md) |
 | F027 | S25 | Put the sign-in form before the hero on mobile and de-emphasize the dev-credentials box | planned | F025 | [tasks/front/F027-login-mobile-priority.md](front/F027-login-mobile-priority.md) |
 

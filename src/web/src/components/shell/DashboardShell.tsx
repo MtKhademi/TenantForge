@@ -151,15 +151,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 )}
               </SecondaryButton>
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground">
-                  TenantForge
-                  {(activeTenant || inTenantScope) && (
+                {(activeTenant || inTenantScope) && (
+                  <p className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-muted-foreground">
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                       <Building2 aria-hidden="true" className="size-3" />
                       {activeTenant ? <bdi>{activeTenant.name}</bdi> : 'مستأجر'}
                     </span>
-                  )}
-                </p>
+                  </p>
+                )}
                 <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
                   {inTenantScope ? <bdi>{pageTitle}</bdi> : pageTitle}
                 </h1>
@@ -167,15 +166,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <TenantSwitcher />
-              <button
+              <SecondaryButton
                 type="button"
                 aria-label={theme === 'dark' ? 'تغییر به پوسته روشن' : 'تغییر به پوسته تیره'}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-muted"
+                className="px-3"
                 onClick={toggleTheme}
               >
                 {theme === 'dark' ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}
-                <span className="hidden sm:inline">{theme === 'dark' ? 'روشن' : 'تیره'}</span>
-              </button>
+              </SecondaryButton>
               <div className="hidden text-end sm:block">
                 <p className="text-sm font-semibold"><bdi>{session?.user.displayName}</bdi></p>
                 <p className="text-xs text-muted-foreground"><bdi>{session?.user.email}</bdi></p>
@@ -209,8 +207,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             onClick={closeDrawer}
           />
           <div className="relative h-full w-[min(22rem,86vw)] border-e border-border bg-sidebar text-sidebar-foreground shadow-raised">
-            <div className="flex items-center justify-between border-b border-border p-4">
-              <span className="text-sm font-semibold tracking-[0.08em]">TenantForge</span>
+            <div className="flex items-center justify-end border-b border-border p-4">
               <SecondaryButton
                 type="button"
                 aria-label="بستن ناوبری"
