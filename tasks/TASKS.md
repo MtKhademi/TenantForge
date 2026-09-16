@@ -80,6 +80,10 @@ one valid Spec link.
 | B018 | S20 | Extract stable cross-module building blocks | done | B017 | — |
 | B019 | S21 | Create a living IAM knowledge base and update gate | done | B018 | — |
 | B020 | S22 | Create a living BuildingBlocks knowledge and admission guide | done | B019 | — |
+| B021 | S23 | Create the IAM Contract project and move its pagination, login, account and dashboard types | planned | B020 | [tasks/backend/B021-iam-contract-foundation.md](backend/B021-iam-contract-foundation.md) |
+| B022 | S23 | Move users, tenants and tenant-member contract types into the IAM Contract project | planned | B021 | [tasks/backend/B022-iam-contract-directory-features.md](backend/B022-iam-contract-directory-features.md) |
+| B023 | S23 | Move roles, invitations and audit contract types, then lock the IAM Contract project's exported surface | planned | B022 | [tasks/backend/B023-iam-contract-roles-invitations-audit.md](backend/B023-iam-contract-roles-invitations-audit.md) |
+| B024 | S24 | Create a living IAM Contract knowledge and admission guide | planned | B023 | [tasks/backend/B024-iam-contract-knowledge-base.md](backend/B024-iam-contract-knowledge-base.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -191,3 +195,41 @@ exact command. Never bypass a dependency merely to keep an agent busy.
 - Future BuildingBlocks changes must update the guide or state
   `BuildingBlocks docs impact: none — <specific reason>`; review blocks vague
   or missing impact decisions.
+
+
+## IAM contract separation: S23
+
+- [S23 — Separate IAM's public contract from its implementation](slices/023-iam-contract-separation.md)
+- B021 follows the completed BuildingBlocks knowledge base because it is the
+  next architecture task on `src/modules/iam/**`. It creates
+  `TenantForge.Modules.Iam.Contract` and moves the pagination, login,
+  account and dashboard request/response types into it.
+- B022 and B023 continue the same mechanical move in two more batches
+  (users/tenants/tenant-members, then roles/invitations/audit), strictly in
+  that order — each depends on the previous one because they share the same
+  new project and namespace convention. B023 also adds
+  `IamContractArchitectureTests`, locking the project's exact 32-type
+  exported surface and its zero-outgoing-reference rule.
+- This is a pure architecture refactor: no route, JSON shape, status code or
+  persisted schema changes across any of the three tasks. The full
+  integration suite passing unmodified after each task is the acceptance
+  proof, not a new contract.
+- Do not run B021/B022/B023 in parallel and do not start implementation as
+  part of registering these Specs. B021 is the first candidate once these
+  planned rows and Specs are delivered to main.
+
+
+## Living IAM Contract knowledge base: S24
+
+- [S24 — Give the IAM Contract project one living ownership guide](slices/024-iam-contract-knowledge-base.md)
+- B024 follows B023 so `docs/contracts/iam.md` documents the final,
+  delivered namespace layout and 32-type roster rather than an in-flight
+  one — the same ordering B020 used after B018.
+- This task changes documentation and agent workflow only (a new
+  `docs/contracts/iam.md`, an `AGENTS.md` "Living IAM Contract knowledge"
+  section, and a cross-link from `docs/modules/IAM.md`). Runtime behavior,
+  database schema, endpoints and frontend remain unchanged.
+- Future changes to `TenantForge.Modules.Iam.Contract` must update the
+  guide or state `IAM Contract docs impact: none — <specific reason>`;
+  review blocks vague or missing impact decisions, the same rule already in
+  force for `docs/modules/IAM.md` and `docs/building-blocks/README.md`.
