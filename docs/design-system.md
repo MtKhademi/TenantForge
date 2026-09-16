@@ -102,7 +102,12 @@ Avoid:
 - random spacing values;
 - animation that delays routine administration;
 - copied dashboard-template sections unrelated to the active task;
-- visible task IDs, backend slice IDs or fake implementation affordances in product screens.
+- visible task IDs, backend slice IDs or fake implementation affordances in product screens;
+- **Inventing content to fill sparse pages.** The fix for a page whose real
+  content is light is giving that content more visual weight (semantic
+  tinting, firmer card padding/min-height, a subtle top accent)—never
+  adding a metric, card, section or placeholder widget the API does not
+  provide.
 
 ## Visual verification
 

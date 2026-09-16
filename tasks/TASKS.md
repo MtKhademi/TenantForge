@@ -56,7 +56,7 @@ one valid Spec link.
 | F022 | S15 | Connect server pagination to tables and selectors | done | F021, B015 | — |
 | F024 | S17 | Write a practical Persian user-guide README | done | F022 | — |
 | F025 | S25 | Fix duplicated branding and inconsistent header controls in the shared shell | done | F024 | — |
-| F026 | S25 | Extract a shared state panel and give dashboard cards semantic weight | planned | F025 | [tasks/front/F026-shared-state-panels-and-dashboard-density.md](front/F026-shared-state-panels-and-dashboard-density.md) |
+| F026 | S25 | Extract a shared state panel and give dashboard cards semantic weight | done | F025 | — |
 | F027 | S25 | Put the sign-in form before the hero on mobile and de-emphasize the dev-credentials box | planned | F025 | [tasks/front/F027-login-mobile-priority.md](front/F027-login-mobile-priority.md) |
 | F028 | S26 | Admin catalog management mock | planned | F025 | [tasks/front/F028-admin-catalog-management-mock.md](front/F028-admin-catalog-management-mock.md) |
 | F029 | S26 | Connect admin catalog management to the real API | planned | F028, B026 | [tasks/front/F029-connect-admin-catalog-management.md](front/F029-connect-admin-catalog-management.md) |

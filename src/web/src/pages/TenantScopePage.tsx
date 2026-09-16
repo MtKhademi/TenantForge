@@ -15,6 +15,7 @@ import { Link, useParams } from 'react-router-dom'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { PaginationControls } from '@/components/ui/PaginationControls'
 import { SecondaryButton } from '@/components/ui/Button'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { SessionExpiredError } from '@/features/auth/authTypes'
 import { recoveryPageNumber } from '@/features/pagination/paginationTypes'
@@ -350,46 +351,42 @@ function ForbiddenTenant({
   isPlatformAdmin: boolean
 }) {
   return (
-    <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-6 shadow-soft" role="alert">
-      <div className="flex items-start gap-4">
+    <StatePanel
+      density="prominent"
+      icon={
         <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
           <Lock aria-hidden="true" className="size-6" />
         </span>
-        <div className="space-y-1.5">
-          <p className="text-sm font-semibold">دسترسی به این مستأجر مجاز نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            حساب فعلی عضویت فعال در این مستأجر ندارد. دسترسی به دادهٔ اعضا فقط توسط سرور و بر
-            اساس عضویت شما کنترل می‌شود؛ تغییر آدرس مرورگر این محدودیت را دور نمی‌زند.
-          </p>
-          <SecondaryButton type="button" className="mt-4" onClick={onRecover}>
-            {isPlatformAdmin ? 'بازگشت به فهرست مستأجران' : 'بازگشت به مستأجران من'}
-          </SecondaryButton>
-        </div>
-      </div>
-    </div>
+      }
+      title="دسترسی به این مستأجر مجاز نیست"
+      description="حساب فعلی عضویت فعال در این مستأجر ندارد. دسترسی به دادهٔ اعضا فقط توسط سرور و بر اساس عضویت شما کنترل می‌شود؛ تغییر آدرس مرورگر این محدودیت را دور نمی‌زند."
+      action={
+        <SecondaryButton type="button" className="mt-4" onClick={onRecover}>
+          {isPlatformAdmin ? 'بازگشت به فهرست مستأجران' : 'بازگشت به مستأجران من'}
+        </SecondaryButton>
+      }
+    />
   )
 }
 
 function Unavailable({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-6 shadow-soft" role="alert">
-      <div className="flex items-start gap-4">
+    <StatePanel
+      density="prominent"
+      icon={
         <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
           <RefreshCw aria-hidden="true" className="size-6" />
         </span>
-        <div className="space-y-1.5">
-          <p className="text-sm font-semibold">اعضای مستأجر در دسترس نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            هم‌اکنون نمی‌توانیم دادهٔ این محدوده را بارگذاری کنیم. اتصال را بررسی کنید و دوباره
-            تلاش کنید.
-          </p>
-          <SecondaryButton type="button" className="mt-4" onClick={onRetry}>
-            <RefreshCw aria-hidden="true" className="me-2 size-4" />
-            تلاش دوباره
-          </SecondaryButton>
-        </div>
-      </div>
-    </div>
+      }
+      title="اعضای مستأجر در دسترس نیست"
+      description="هم‌اکنون نمی‌توانیم دادهٔ این محدوده را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید."
+      action={
+        <SecondaryButton type="button" className="mt-4" onClick={onRetry}>
+          <RefreshCw aria-hidden="true" className="me-2 size-4" />
+          تلاش دوباره
+        </SecondaryButton>
+      }
+    />
   )
 }
 
