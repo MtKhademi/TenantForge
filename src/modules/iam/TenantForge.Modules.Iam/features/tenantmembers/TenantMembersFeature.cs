@@ -119,22 +119,3 @@ internal static class TenantMembersFeature
         return TsidId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 }
-
-internal sealed record TenantMembersResponse(
-    TenantContextResponse Tenant,
-    IReadOnlyList<TenantMemberResponse> Members,
-    PaginationMetadata Pagination);
-
-internal sealed record TenantContextResponse(
-    string Id,
-    string Name,
-    string Slug,
-    string Status);
-
-internal sealed record TenantMemberResponse(
-    string Id,
-    string UserId,
-    string Email,
-    string DisplayName,
-    string Role,
-    string CreatedAtUtc);
