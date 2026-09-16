@@ -1,6 +1,6 @@
-namespace TenantForge.Modules.Iam.Features.Dashboard;
+namespace TenantForge.Modules.Iam.Contract.Responses;
 
-public record DashboardSummaryResponse(
+public sealed record DashboardSummaryResponse(
     string Environment,
     string ApiStatus,
     int PlatformAdminCount,
