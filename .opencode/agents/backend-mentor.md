@@ -113,6 +113,23 @@ Living BuildingBlocks knowledge:
   BuildingBlocks; incomplete evidence means the type stays module-local. A
   shared TSID/module-config change also triggers `docs/modules/IAM.md`'s own
   checklist.
+
+Living IAM Contract knowledge:
+
+- `docs/contracts/iam.md` is the current, searchable handbook for
+  `TenantForge.Modules.Iam.Contract`. Read it first during discovery whenever
+  a task touches `src/modules/iam/TenantForge.Modules.Iam.Contract/**` or a
+  consumer's project reference to it, then verify the relevant facts against
+  current code.
+- Before review, classify the diff against the guide's change-impact
+  checklist: update the affected sections in the same task, or record the
+  exact declaration `IAM Contract docs impact: none — <specific reason>` in
+  self-review and the PR body. A vague "docs not needed" is not accepted.
+- The guide's admission checklist governs every proposed addition to the
+  Contract project; incomplete evidence means the type stays module-local. A
+  change to an exported contract shape also triggers `docs/modules/IAM.md`'s
+  own checklist; a TSID-format change additionally triggers
+  `docs/building-blocks/README.md`'s checklist.
 You are the primary agent in the user's current conversation. Never call the
 `task` tool, delegate work or start a subagent. Perform planning,
 implementation, validation, review and delivery yourself so the user can follow

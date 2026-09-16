@@ -134,6 +134,16 @@ through uncommitted sibling files.
   question, and classify a BuildingBlocks-touching diff against its
   change-impact checklist before review (update the guide, or record
   `BuildingBlocks docs impact: none — <specific reason>`).
+- S23 introduces `TenantForge.Modules.Iam.Contract`, IAM's public HTTP
+  request/query/response surface, beside the module. It has zero outgoing
+  references and is referenced by `TenantForge.Modules.Iam` only. Admit a type
+  only when it is a delivered IAM HTTP shape with no ASP.NET/EF/Npgsql/
+  internal-domain dependency. `docs/contracts/iam.md` (B024/S24) is the
+  current, searchable handbook for this project — read it first for any IAM
+  Contract question, and classify a Contract-touching diff against its
+  change-impact checklist before review (update the guide, or record
+  `IAM Contract docs impact: none — <specific reason>`); a change to an
+  exported shape also triggers `docs/modules/IAM.md`.
 
 See `docs/architecture.md` ("Local development environment") and the
 `backend-mentor` agent for the full detail.

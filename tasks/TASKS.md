@@ -86,7 +86,7 @@ one valid Spec link.
 | B021 | S23 | Create the IAM Contract project and move its pagination, login, account and dashboard types | done | B020 | — |
 | B022 | S23 | Move users, tenants and tenant-member contract types into the IAM Contract project | done | B021 | — |
 | B023 | S23 | Move roles, invitations and audit contract types, then lock the IAM Contract project's exported surface | done | B022 | — |
-| B024 | S24 | Create a living IAM Contract knowledge and admission guide | planned | B023 | [tasks/backend/B024-iam-contract-knowledge-base.md](backend/B024-iam-contract-knowledge-base.md) |
+| B024 | S24 | Create a living IAM Contract knowledge and admission guide | done | B023 | — |
 
 ## Cleanup batch: S11–S14
 
