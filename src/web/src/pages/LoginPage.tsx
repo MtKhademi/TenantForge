@@ -86,7 +86,6 @@ export function LoginPage() {
               <p className="text-sm text-muted-foreground">مدیریت هویت چندمستاجری، شفاف و قابل فهم</p>
             </div>
           </div>
-          <p className="mb-4 text-sm font-semibold tracking-[0.08em] text-primary">TenantForge</p>
           <h1 className="max-w-xl text-4xl font-semibold tracking-[-0.02em] text-foreground md:text-6xl">
             مدیریت هویت چندمستاجری، روشن و قابل اتکا.
           </h1>
