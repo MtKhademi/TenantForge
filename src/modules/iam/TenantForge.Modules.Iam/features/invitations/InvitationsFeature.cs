@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Iam.Contract.Requests;
 using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
@@ -105,7 +106,3 @@ internal static class InvitationsFeature
         return errors;
     }
 }
-
-internal sealed record CreateInvitationRequest(string? Email, string? Role);
-internal sealed record InvitationListResponse(IReadOnlyList<InvitationResponse> Invitations, PaginationMetadata Pagination);
-internal sealed record InvitationResponse(string Id, string Email, string Role, string Status, string ExpiresAtUtc, string CreatedAtUtc);

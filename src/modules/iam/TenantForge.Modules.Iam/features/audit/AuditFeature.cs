@@ -67,6 +67,3 @@ internal static class AuditFeature
         return endpoints;
     }
 }
-
-internal sealed record AuditListResponse(IReadOnlyList<AuditEventResponse> Events, PaginationMetadata Pagination);
-internal sealed record AuditEventResponse(string Id, string Actor, string ActorEmail, string Action, string Target, string Details, string CreatedAtUtc);
