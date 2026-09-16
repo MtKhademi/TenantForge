@@ -55,6 +55,9 @@ one valid Spec link.
 | F021 | S14 | Polish Persian product copy and current documentation | done | F020 | — |
 | F022 | S15 | Connect server pagination to tables and selectors | done | F021, B015 | — |
 | F024 | S17 | Write a practical Persian user-guide README | done | F022 | — |
+| F025 | S25 | Fix duplicated branding and inconsistent header controls in the shared shell | planned | F024 | [tasks/front/F025-shell-and-brand-foundations.md](front/F025-shell-and-brand-foundations.md) |
+| F026 | S25 | Extract a shared state panel and give dashboard cards semantic weight | planned | F025 | [tasks/front/F026-shared-state-panels-and-dashboard-density.md](front/F026-shared-state-panels-and-dashboard-density.md) |
+| F027 | S25 | Put the sign-in form before the hero on mobile and de-emphasize the dev-credentials box | planned | F025 | [tasks/front/F027-login-mobile-priority.md](front/F027-login-mobile-priority.md) |
 
 ## Backend queue
 
@@ -233,3 +236,25 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   guide or state `IAM Contract docs impact: none — <specific reason>`;
   review blocks vague or missing impact decisions, the same rule already in
   force for `docs/modules/IAM.md` and `docs/building-blocks/README.md`.
+  
+## Visual polish pass: S25
+
+- [S25 — Visual polish pass: brand rhythm, semantic weight, shared states](slices/025-visual-polish-pass.md)
+- Diagnosed by running the real application in a browser and screenshotting
+  the login, dashboard, users and tenant-scoped pages: a redundant
+  "TenantForge" wordmark repeated across the header/sidebar/login hero, one
+  flat neutral treatment for every dashboard summary card, the same
+  error/empty panel markup duplicated across eight page files, and a
+  mobile login layout that scrolls past the full hero before reaching the
+  form.
+- F025 goes first (shared shell/brand fix; every other page renders through
+  the same shell). F026 (shared `StatePanel` + dashboard card tinting) and
+  F027 (login mobile reorder) both depend only on F025 and have no file
+  overlap with each other, so they may proceed in parallel once F025 is
+  `done`.
+- This is a presentation-only pass: no new design token, no invented
+  metric or content, no API contract change, `docs/design-system.md` is
+  extended in place (not replaced), and the existing
+  `tenantforge-ui-system` skill still governs every visual decision.
+  Registering these Specs does not implement them or change any other
+  task's status or dependencies.
