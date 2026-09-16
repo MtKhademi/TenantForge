@@ -60,8 +60,14 @@ Current dependency direction is one-way:
 ```text
 TenantForge.Api
   → TenantForge.Modules.Iam
-  → TenantForge.BuildingBlocks
+    → TenantForge.Modules.Iam.Contract
+    → TenantForge.BuildingBlocks
 ```
+
+`TenantForge.Modules.Iam.Contract` holds IAM's public HTTP request/query/
+response records. It has no outgoing references and is referenced only by
+`TenantForge.Modules.Iam`; a future module may reference the Contract project
+directly (never the module itself) to consume an IAM request/response shape.
 
 BuildingBlocks must not reference the API host, IAM, another module, EF Core,
 Npgsql, feature handlers or module-specific options. Its first admitted types are

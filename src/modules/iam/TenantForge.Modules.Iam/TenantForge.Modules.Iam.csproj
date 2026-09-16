@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\TenantForge.Modules.Iam.Contract\TenantForge.Modules.Iam.Contract.csproj" />
     <ProjectReference Include="..\..\..\building-blocks\TenantForge.BuildingBlocks\TenantForge.BuildingBlocks.csproj" />
   </ItemGroup>
 

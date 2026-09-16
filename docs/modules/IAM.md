@@ -67,13 +67,21 @@ IAM explicitly does **not** own:
 
 ## 3. Dependency and composition boundary
 
-Current dependency direction (post-B018):
+Current dependency direction (post-B021):
 
 ```text
 TenantForge.Api
     -> TenantForge.Modules.Iam
+        -> TenantForge.Modules.Iam.Contract
         -> TenantForge.BuildingBlocks
 ```
+
+`TenantForge.Modules.Iam.Contract` holds IAM's HTTP-facing
+request/query/response records (`public sealed`, one sub-namespace per kind:
+`Requests`, `Queries`, `Responses`). It has **zero** outgoing references —
+no `ProjectReference`, `PackageReference` or `FrameworkReference` — and is
+referenced by `TenantForge.Modules.Iam` only. It is the only place a future
+module may reference to consume an IAM request/response shape.
 
 The API host composes IAM through exactly two calls
 (`src/api/TenantForge.Api/Program.cs`):
@@ -121,6 +129,7 @@ details — it only calls the two `IamModule` methods above.
 | BuildingBlocks module contract | `src/building-blocks/TenantForge.BuildingBlocks/Modules/IModuleConfig.cs` | The registration/validation contract every module implements |
 | BuildingBlocks TSID seam | `src/building-blocks/TenantForge.BuildingBlocks/Identifiers/TsidId.cs` | `NewId`, `Format`, `TryParse`, `TryParseNullable`, `IsDefault` |
 | IAM composition seam | `src/modules/iam/TenantForge.Modules.Iam/IamModule.cs` | The two public calls and activation order |
+| IAM HTTP contract | `src/modules/iam/TenantForge.Modules.Iam.Contract/` | The `public sealed` request/query/response records (`Requests/`, `Queries/`, `Responses/`) — zero outgoing references, referenced by the IAM module only |
 | IAM configuration | `src/modules/iam/TenantForge.Modules.Iam/IAMConfig.cs` | Config keys, DI registrations, fail-closed validation |
 | Authorization policy names | `src/modules/iam/TenantForge.Modules.Iam/AuthorizationPolicyNames.cs` | `PlatformAdmin` claim policy name |
 | Domain entities | `src/modules/iam/TenantForge.Modules.Iam/domain/` | `Account`, `Tenant`, `TenantMembership`, `TenantRole`, `TenantMemberRoleAssignment`, `TenantInvitation`, `AuditEvent` and their enums |
@@ -133,7 +142,7 @@ details — it only calls the two `IamModule` methods above.
 | Roles/permissions | `src/modules/iam/TenantForge.Modules.Iam/features/roles/` | `RolesFeature` (catalog, CRUD, assignment, resolved permissions, `AuthorizeTenantAccessAsync`) |
 | Invitations | `src/modules/iam/TenantForge.Modules.Iam/features/invitations/` | `InvitationsFeature` |
 | Audit | `src/modules/iam/TenantForge.Modules.Iam/features/audit/` | `AuditFeature` |
-| Pagination | `src/modules/iam/TenantForge.Modules.Iam/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` |
+| Pagination | `src/modules/iam/TenantForge.Modules.Iam/features/pagination/` | `PaginationSupport` (binding/execution); the `PaginationQuery`/`PaginationMetadata` records now live in `TenantForge.Modules.Iam.Contract` |
 | Persistence context/maps | `src/modules/iam/TenantForge.Modules.Iam/infrastructure/` | `IamDbContext`, `*Map.cs`, `TsidValueConverter` |
 | Migrations | `src/modules/iam/TenantForge.Modules.Iam/infrastructure/Migrations/` | Chronological schema history, including the irreversible `20260914120008_TsidIdentifiers` |
 | Integration test fixtures | `tests/integration/TenantForge.Api.IntegrationTests/ApiFactory.cs`, `IamDbFixture.cs` | `WebApplicationFactory` setup, `IamSeedMode`, per-suite Postgres fixtures |

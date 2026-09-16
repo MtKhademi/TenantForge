@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 
 namespace TenantForge.Modules.Iam.Features.Account;

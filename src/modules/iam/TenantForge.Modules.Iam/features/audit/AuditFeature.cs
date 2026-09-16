@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Features.Roles;

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
 using TenantForge.Modules.Iam.Infrastructure;
@@ -106,12 +107,3 @@ internal static class TenantDiscoveryFeature
         return TsidId.TryParseNullable(principal.FindFirstValue("sub"));
     }
 }
-
-internal sealed record TenantDiscoveryResponse(IReadOnlyList<DiscoveredTenantResponse> Tenants, PaginationMetadata Pagination);
-
-internal sealed record DiscoveredTenantResponse(
-    string Id,
-    string Name,
-    string Slug,
-    string Status,
-    string MembershipRole);
