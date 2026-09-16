@@ -139,9 +139,9 @@ details — it only calls the two `IamModule` methods above.
 | Platform users | `src/modules/iam/TenantForge.Modules.Iam/features/users/` | `UsersFeature` (the `CreateUserRequest`/`UsersListResponse`/`UserResponse` records now live in `TenantForge.Modules.Iam.Contract`; `UserResponse.FromAccount` stays here as a module-owned mapper because it references the internal `Account` entity) |
 | Platform tenants | `src/modules/iam/TenantForge.Modules.Iam/features/tenants/` | `TenantsFeature` (the `CreateTenantRequest`/`TenantListResponse`/`TenantSummaryResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
 | Tenant members | `src/modules/iam/TenantForge.Modules.Iam/features/tenantmembers/` | `TenantMembersFeature` (the `TenantMembersResponse`/`TenantContextResponse`/`TenantMemberResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
-| Roles/permissions | `src/modules/iam/TenantForge.Modules.Iam/features/roles/` | `RolesFeature` (catalog, CRUD, assignment, resolved permissions, `AuthorizeTenantAccessAsync`) |
-| Invitations | `src/modules/iam/TenantForge.Modules.Iam/features/invitations/` | `InvitationsFeature` |
-| Audit | `src/modules/iam/TenantForge.Modules.Iam/features/audit/` | `AuditFeature` |
+ | Roles/permissions | `src/modules/iam/TenantForge.Modules.Iam/features/roles/` | `RolesFeature` (catalog data, CRUD, assignment, resolved permissions, `AuthorizeTenantAccessAsync`; the handler-only records `TenantAccess`/`ActorSnapshot`/`AssignmentValidation`/`RemovedAssignment` stay here). The nine contract records (`CreateRoleRequest`/`UpdateRoleRequest`/`PermissionCatalogResponse`/`PermissionGroupResponse`/`PermissionResponse`/`TenantRolesResponse`/`PagedTenantRolesResponse`/`TenantRoleResponse`/`ResolvedPermissionsResponse`) now live in `TenantForge.Modules.Iam.Contract` |
+ | Invitations | `src/modules/iam/TenantForge.Modules.Iam/features/invitations/` | `InvitationsFeature` (the `CreateInvitationRequest`/`InvitationListResponse`/`InvitationResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
+ | Audit | `src/modules/iam/TenantForge.Modules.Iam/features/audit/` | `AuditFeature` (the `AuditListResponse`/`AuditEventResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
 | Pagination | `src/modules/iam/TenantForge.Modules.Iam/features/pagination/` | `PaginationSupport` (binding/execution); the `PaginationQuery`/`PaginationMetadata` records now live in `TenantForge.Modules.Iam.Contract` |
 | Persistence context/maps | `src/modules/iam/TenantForge.Modules.Iam/infrastructure/` | `IamDbContext`, `*Map.cs`, `TsidValueConverter` |
 | Migrations | `src/modules/iam/TenantForge.Modules.Iam/infrastructure/Migrations/` | Chronological schema history, including the irreversible `20260914120008_TsidIdentifiers` |
@@ -518,6 +518,7 @@ seeding is idempotent by the unique-email check above).
 | `InvitationAuditIntegrationTests.cs` | Invitation creation/duplicate/concurrency/expiry, custom-role acceptance, audit query scoping/ordering |
 | `PaginationIntegrationTests.cs` | Pagination metadata, security-safe denial pages, stable ordering across pages |
 | `BuildingBlocksArchitectureTests.cs` | The BuildingBlocks admission rule and dependency-direction enforcement |
+| `IamContractArchitectureTests.cs` | The IAM Contract project boundary: zero outgoing `ProjectReference`s, the compiled assembly-reference denylist (no `TenantForge.Modules.*`/`TenantForge.Api`/ASP.NET/EF Core/Npgsql), exactly one incoming reference from `TenantForge.Modules.Iam`, and the exact 32-type exported-surface roster |
 
 Commands:
 

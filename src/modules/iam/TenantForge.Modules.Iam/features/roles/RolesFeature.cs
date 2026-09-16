@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Contract.Queries;
+using TenantForge.Modules.Iam.Contract.Requests;
 using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
@@ -408,6 +409,8 @@ internal static class RolesFeature
     private static IResult DuplicateRoleProblem() => Results.Problem(title: "Duplicate tenant role", detail: "A role with this name already exists in this tenant.", statusCode: StatusCodes.Status409Conflict);
 }
 
+// B023/S23: the nine contract records that lived below moved to
+// TenantForge.Modules.Iam.Contract; only the handler-only records remain here.
 internal sealed record TenantAccess(Tsid TenantId, Tsid AccountId, Tsid MembershipId, TenantMembershipRole MembershipRole, string Actor, string ActorEmail, IResult? Result)
 {
     public bool IsOwner => MembershipRole == TenantMembershipRole.Owner;
@@ -415,15 +418,6 @@ internal sealed record TenantAccess(Tsid TenantId, Tsid AccountId, Tsid Membersh
 }
 
 internal sealed record ActorSnapshot(string DisplayName, string Email);
-internal sealed record PermissionCatalogResponse(IReadOnlyList<PermissionGroupResponse> Groups);
-internal sealed record PermissionGroupResponse(string Id, string Label, string Description, IReadOnlyList<PermissionResponse> Permissions);
-internal sealed record PermissionResponse(string Key, string Label, string Description, string Kind);
-internal sealed record TenantRolesResponse(IReadOnlyList<TenantRoleResponse> Roles);
-internal sealed record PagedTenantRolesResponse(IReadOnlyList<TenantRoleResponse> Roles, PaginationMetadata Pagination);
-internal sealed record TenantRoleResponse(string Id, string Name, string Description, string Kind, IReadOnlyList<string> PermissionKeys, IReadOnlyList<string> MemberIds, string CreatedAtUtc, string UpdatedAtUtc);
-internal sealed record CreateRoleRequest(string? Name, IReadOnlyList<string>? PermissionKeys);
-internal sealed record UpdateRoleRequest(IReadOnlyList<string>? PermissionKeys);
-internal sealed record ResolvedPermissionsResponse(IReadOnlyList<string> Permissions);
 internal sealed record AssignmentValidation(Tsid TenantId, Tsid MemberId, Tsid RoleId, Tsid AccountId, string Actor, string ActorEmail, IResult? Result)
 {
     public static AssignmentValidation Forbidden { get; } = new(default, default, default, default, string.Empty, string.Empty, Results.Forbid());
