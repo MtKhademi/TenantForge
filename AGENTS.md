@@ -178,6 +178,31 @@ Do not turn the learning note into framework documentation. Explain only the cod
   BuildingBlocks: incomplete admission evidence means the type stays in its
   owning module.
 
+## Living IAM Contract knowledge
+
+- `docs/contracts/iam.md` is the current, searchable handbook for
+  `TenantForge.Modules.Iam.Contract`. Any task that touches
+  `src/modules/iam/TenantForge.Modules.Iam.Contract/**` or a consumer's
+  project reference to it reads `docs/contracts/iam.md` first during
+  discovery, then verifies the relevant facts against current code.
+- Before moving to review, classify the actual diff against the guide's
+  change-impact checklist (its final section). When a documented fact
+  changed (exported type, member, dependency direction, incoming reference,
+  exclusion, or the hand-enumerated roster in `IamContractArchitectureTests`),
+  update the guide in the same task.
+- Otherwise state the exact declaration in self-review and the PR body:
+  `IAM Contract docs impact: none — <specific reason>`. A vague "docs not
+  needed" is not accepted; review blocks a production IAM Contract diff that
+  has neither a guide edit nor a defensible no-impact statement.
+- A change to an exported contract shape also triggers
+  `docs/modules/IAM.md`'s own change-impact checklist (its endpoint catalog
+  documents the same shapes); a TSID-format change additionally triggers
+  `docs/building-blocks/README.md`'s checklist, since the identifier seam the
+  contract strings are formatted through lives there.
+- This guide's admission checklist governs every proposed addition to the
+  Contract project: incomplete admission evidence means the type stays in its
+  owning module.
+
 ## Git safety
 
 - Use three ordinary clones named `main`, `front` and `backend`. Never create or

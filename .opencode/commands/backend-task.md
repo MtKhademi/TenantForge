@@ -92,6 +92,12 @@ The Git preflight is a short routing step, not a diagnostic task.
     detected, read the complete `docs/building-blocks/README.md` handbook now,
     list the expected affected sections, and enumerate every current
     consumer (from the guide's exported-type catalog) as part of discovery.
+11. Detect IAM Contract ownership: the task's expected files include
+    `src/modules/iam/TenantForge.Modules.Iam.Contract/**` or a consumer's
+    `ProjectReference` to it. When detected, read the complete
+    `docs/contracts/iam.md` handbook now, list the expected affected
+    sections, and enumerate every current consumer (from the guide's
+    exported-type catalog) as part of discovery.
 
 ## Plan gate
 
@@ -104,7 +110,9 @@ The Git preflight is a short routing step, not a diagnostic task.
    the plan will update (or the exact reason none apply). When BuildingBlocks
    ownership was detected in Select, include the expected
    `docs/building-blocks/README.md` sections and affected consumers the plan
-   will update (or the exact reason none apply).
+   will update (or the exact reason none apply). When IAM Contract ownership
+   was detected in Select, include the expected `docs/contracts/iam.md`
+   sections the plan will update (or the exact reason none apply).
 3. This is the first routine approval gate. Present the complete todos once,
    ask `Approve`, `Change` or `Cancel`, then stop and wait.
 4. Before approval, do not edit product or task files, install packages or run
@@ -153,7 +161,14 @@ The Git preflight is a short routing step, not a diagnostic task.
    update the affected sections in this same task, or record the exact
    declaration `BuildingBlocks docs impact: none — <specific reason>` in
    self-review and the PR body. Cross-check a shared TSID or module-config
-   change against `docs/modules/IAM.md` too.
+   change against `docs/modules/IAM.md` too. If the diff touches
+   `src/modules/iam/TenantForge.Modules.Iam.Contract/**` or a consumer's
+   reference to it, classify it against `docs/contracts/iam.md`'s
+   change-impact checklist the same way: update the affected sections in this
+   same task, or record the exact declaration
+   `IAM Contract docs impact: none — <specific reason>` in self-review and
+   the PR body; a change to an exported contract shape also triggers
+   `docs/modules/IAM.md`'s checklist.
 3. This is the second and final routine approval gate. Present findings,
    complete diff/evidence, checked acceptance criteria, remaining risks and the
    final todo state. Ask the user to choose `Approve`, `Change` or `Cancel`,

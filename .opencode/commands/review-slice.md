@@ -34,6 +34,16 @@ Check:
   present; also block when a proposed BuildingBlocks addition lacks
   completed admission evidence or the dependency graph reverses. Cross-check
   a shared TSID/module-config change against `docs/modules/IAM.md` as well.
+- IAM Contract documentation gate: block review when the diff changed a
+  public IAM Contract type/member, a package/framework/project reference,
+  an incoming reference, or an exclusion, but `docs/contracts/iam.md` was
+  not updated and no exact
+  `IAM Contract docs impact: none — <specific reason>` declaration is
+  present; also block when a proposed Contract addition lacks completed
+  admission evidence, when the hand-enumerated roster in
+  `IamContractArchitectureTests` was not updated alongside a surface change,
+  or when the project gains any outgoing reference. Cross-check an exported
+  contract shape change against `docs/modules/IAM.md` as well.
 
 Return findings ordered by severity. Do not modify files or inspect sibling
 clones.

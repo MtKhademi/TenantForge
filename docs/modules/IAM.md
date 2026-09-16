@@ -129,7 +129,7 @@ details — it only calls the two `IamModule` methods above.
 | BuildingBlocks module contract | `src/building-blocks/TenantForge.BuildingBlocks/Modules/IModuleConfig.cs` | The registration/validation contract every module implements |
 | BuildingBlocks TSID seam | `src/building-blocks/TenantForge.BuildingBlocks/Identifiers/TsidId.cs` | `NewId`, `Format`, `TryParse`, `TryParseNullable`, `IsDefault` |
 | IAM composition seam | `src/modules/iam/TenantForge.Modules.Iam/IamModule.cs` | The two public calls and activation order |
-| IAM HTTP contract | `src/modules/iam/TenantForge.Modules.Iam.Contract/` | The `public sealed` request/query/response records (`Requests/`, `Queries/`, `Responses/`) — zero outgoing references, referenced by the IAM module only |
+| IAM HTTP contract | `src/modules/iam/TenantForge.Modules.Iam.Contract/` | The `public sealed` request/query/response records (`Requests/`, `Queries/`, `Responses/`) — zero outgoing references, referenced by the IAM module only; the detailed per-type handbook is [`docs/contracts/iam.md`](../contracts/iam.md) |
 | IAM configuration | `src/modules/iam/TenantForge.Modules.Iam/IAMConfig.cs` | Config keys, DI registrations, fail-closed validation |
 | Authorization policy names | `src/modules/iam/TenantForge.Modules.Iam/AuthorizationPolicyNames.cs` | `PlatformAdmin` claim policy name |
 | Domain entities | `src/modules/iam/TenantForge.Modules.Iam/domain/` | `Account`, `Tenant`, `TenantMembership`, `TenantRole`, `TenantMemberRoleAssignment`, `TenantInvitation`, `AuditEvent` and their enums |
