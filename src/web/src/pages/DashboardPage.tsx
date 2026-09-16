@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { SessionExpiredError } from '@/features/auth/authTypes'
 import { httpDashboardAdapter } from '@/features/dashboard/dashboardAdapter'
@@ -140,26 +141,22 @@ export function DashboardPage() {
         {isLoading && <SummarySkeleton />}
 
         {isError && (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-5" role="alert">
-            <div className="flex items-start gap-3">
-              <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold">خلاصه داشبورد در دسترس نیست</p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  هم‌اکنون نمی‌توانیم خلاصه داشبورد را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.
-                </p>
-                <Button
-                  type="button"
-                  className="mt-3 min-w-32"
-                  disabled={isBusy}
-                  onClick={() => void refresh()}
-                >
-                  <RefreshCw aria-hidden="true" className="me-2 size-4" />
-                  تلاش دوباره
-                </Button>
-              </div>
-            </div>
-          </div>
+          <StatePanel
+            icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
+            title="خلاصه داشبورد در دسترس نیست"
+            description="هم‌اکنون نمی‌توانیم خلاصه داشبورد را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید."
+            action={
+              <Button
+                type="button"
+                className="mt-3 min-w-32"
+                disabled={isBusy}
+                onClick={() => void refresh()}
+              >
+                <RefreshCw aria-hidden="true" className="me-2 size-4" />
+                تلاش دوباره
+              </Button>
+            }
+          />
         )}
 
         {summary && (
@@ -177,6 +174,9 @@ export function DashboardPage() {
               <SummaryCard
                 icon={<Activity aria-hidden="true" className="size-5" />}
                 label="وضعیت API"
+                iconWellClassName={
+                  summary.apiStatus === 'Healthy' ? 'bg-success/10 text-success' : undefined
+                }
               >
                 <span className="flex items-center gap-2.5">
                   <span
@@ -195,6 +195,7 @@ export function DashboardPage() {
               <SummaryCard
                 icon={<Users aria-hidden="true" className="size-5" />}
                 label="مدیران پلتفرم"
+                iconWellClassName="bg-primary/10 text-primary"
               >
                 <span className="text-2xl font-semibold tracking-tight">
                   {formatCount(summary.platformAdminCount)}
@@ -240,14 +241,25 @@ type SummaryCardProps = {
   icon: ReactNode
   label: string
   children: ReactNode
+  /**
+   * Semantic icon-well tint for the card's meaning. Defaults to the neutral
+   * `bg-muted text-muted-foreground` (purely informational cards); a card whose
+   * value carries status/headline meaning passes the matching token tint.
+   */
+  iconWellClassName?: string
 }
 
 /** One contract value: icon + label (dt) and the value (dd). */
-function SummaryCard({ icon, label, children }: SummaryCardProps) {
+function SummaryCard({ icon, label, children, iconWellClassName }: SummaryCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 shadow-soft">
+    <div className="rounded-xl border border-border bg-surface p-6 shadow-soft">
       <div className="flex items-center gap-3">
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <span
+          className={cn(
+            'inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground',
+            iconWellClassName,
+          )}
+        >
           {icon}
         </span>
         <dt className="text-sm font-semibold">{label}</dt>
@@ -270,7 +282,7 @@ function SummarySkeleton() {
       </p>
       <div className="grid gap-4 md:grid-cols-3">
         {[0, 1, 2].map((index) => (
-          <div key={index} className="rounded-xl border border-border bg-surface p-5 shadow-soft">
+          <div key={index} className="rounded-xl border border-border bg-surface p-6 shadow-soft">
             <div className="flex items-center gap-3">
               <div className="size-10 shrink-0 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
               <div className="h-4 w-24 animate-pulse rounded bg-muted motion-reduce:animate-none" />

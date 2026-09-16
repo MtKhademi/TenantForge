@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { SecondaryButton } from '@/components/ui/Button'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { useTenantScope, type ScopeEntry } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 
@@ -63,22 +64,17 @@ export function TenantHome() {
         {isLoading && <ScopeListSkeleton />}
 
         {isError && (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-5" role="alert">
-            <div className="flex items-start gap-3">
-              <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold">فهرست مستأجران شما در دسترس نیست</p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  هم‌اکنون نمی‌توانیم مستأجرانی که عضو آن‌ها هستید را بارگذاری کنیم. اتصال را
-                  بررسی کنید و دوباره تلاش کنید.
-                </p>
-                <SecondaryButton type="button" className="mt-3" onClick={() => void refresh()}>
-                  <RefreshCw aria-hidden="true" className="me-2 size-4" />
-                  تلاش دوباره
-                </SecondaryButton>
-              </div>
-            </div>
-          </div>
+          <StatePanel
+            icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
+            title="فهرست مستأجران شما در دسترس نیست"
+            description="هم‌اکنون نمی‌توانیم مستأجرانی که عضو آن‌ها هستید را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید."
+            action={
+              <SecondaryButton type="button" className="mt-3" onClick={() => void refresh()}>
+                <RefreshCw aria-hidden="true" className="me-2 size-4" />
+                تلاش دوباره
+              </SecondaryButton>
+            }
+          />
         )}
 
         {isEmpty && (

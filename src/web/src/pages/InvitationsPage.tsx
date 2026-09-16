@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { PaginationControls } from '@/components/ui/PaginationControls'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -611,39 +612,33 @@ function RoleBadge({ role }: { role: InvitationRole }) {
 
 function ForbiddenInvitations() {
   return (
-    <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-6 shadow-soft" role="alert">
-      <div className="flex items-start gap-4">
+    <StatePanel
+      density="prominent"
+      icon={
         <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
           <Lock aria-hidden="true" className="size-6" />
         </span>
-        <div className="space-y-1.5">
-          <p className="text-sm font-semibold">مدیریت دعوت‌ها مجاز نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            حساب فعلی مجوز مشاهدهٔ دعوت‌های این مستأجر را ندارد. سرور این درخواست را بدون افشای فهرست دعوت‌ها رد کرده است.
-          </p>
-        </div>
-      </div>
-    </div>
+      }
+      title="مدیریت دعوت‌ها مجاز نیست"
+      description="حساب فعلی مجوز مشاهدهٔ دعوت‌های این مستأجر را ندارد. سرور این درخواست را بدون افشای فهرست دعوت‌ها رد کرده است."
+    />
   )
 }
 
 function UnavailableInvitations({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-6 shadow-soft" role="alert">
-      <div className="flex items-start gap-4">
-        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
-        <div className="space-y-1.5">
-          <p className="text-sm font-semibold">دعوت‌ها در دسترس نیست</p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            هم‌اکنون نمی‌توانیم دعوت‌ها را بارگذاری کنیم.
-          </p>
-          <Button type="button" className="mt-3" onClick={onRetry}>
-            <RefreshCw aria-hidden="true" className="me-2 size-4" />
-            تلاش دوباره
-          </Button>
-        </div>
-      </div>
-    </div>
+    <StatePanel
+      density="prominent"
+      icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
+      title="دعوت‌ها در دسترس نیست"
+      description="هم‌اکنون نمی‌توانیم دعوت‌ها را بارگذاری کنیم."
+      action={
+        <Button type="button" className="mt-3" onClick={onRetry}>
+          <RefreshCw aria-hidden="true" className="me-2 size-4" />
+          تلاش دوباره
+        </Button>
+      }
+    />
   )
 }
 

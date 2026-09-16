@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { PaginationControls } from '@/components/ui/PaginationControls'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
 import { useAuth } from '@/features/auth/AuthContext'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
@@ -359,25 +360,21 @@ export function UsersPage() {
         {isLoading && <UsersSkeleton />}
 
         {listError && (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-5" role="alert">
-            <div className="flex items-start gap-3">
-              <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold">
-                  {listFailure === 'forbidden' ? 'دسترسی مدیریت کاربران مجاز نیست' : 'فهرست کاربران در دسترس نیست'}
-                </p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {listFailure === 'forbidden'
-                    ? 'حساب فعلی مجوز مدیریت کاربران پلتفرم را ندارد.'
-                    : 'هم‌اکنون نمی‌توانیم کاربران را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'}
-                </p>
-                <Button type="button" className="mt-3 min-w-32" onClick={() => void loadUsers(pageNumber, pageSize)}>
-                  <RefreshCw aria-hidden="true" className="me-2 size-4" />
-                  تلاش دوباره
-                </Button>
-              </div>
-            </div>
-          </div>
+          <StatePanel
+            icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
+            title={listFailure === 'forbidden' ? 'دسترسی مدیریت کاربران مجاز نیست' : 'فهرست کاربران در دسترس نیست'}
+            description={
+              listFailure === 'forbidden'
+                ? 'حساب فعلی مجوز مدیریت کاربران پلتفرم را ندارد.'
+                : 'هم‌اکنون نمی‌توانیم کاربران را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'
+            }
+            action={
+              <Button type="button" className="mt-3 min-w-32" onClick={() => void loadUsers(pageNumber, pageSize)}>
+                <RefreshCw aria-hidden="true" className="me-2 size-4" />
+                تلاش دوباره
+              </Button>
+            }
+          />
         )}
 
         {isEmpty && (
