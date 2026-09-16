@@ -136,9 +136,9 @@ details — it only calls the two `IamModule` methods above.
 | Login/JWT feature | `src/modules/iam/TenantForge.Modules.Iam/features/login/` | `LoginFeature`, `JwtIssuer`, `JwtConstants`, `AccountCredentialChecker`, `AuthOptions`, `JwtBearerSigningKeyOptions`, `PlatformAdminSeeder`, `SeedAdminOptions` |
 | Current account / tenant discovery | `src/modules/iam/TenantForge.Modules.Iam/features/account/` | `CurrentAccountFeature`, `TenantDiscoveryFeature` |
 | Dashboard summary | `src/modules/iam/TenantForge.Modules.Iam/features/dashboard/` | `DashboardSummaryFeature` |
-| Platform users | `src/modules/iam/TenantForge.Modules.Iam/features/users/` | `UsersFeature` |
-| Platform tenants | `src/modules/iam/TenantForge.Modules.Iam/features/tenants/` | `TenantsFeature` |
-| Tenant members | `src/modules/iam/TenantForge.Modules.Iam/features/tenantmembers/` | `TenantMembersFeature` |
+| Platform users | `src/modules/iam/TenantForge.Modules.Iam/features/users/` | `UsersFeature` (the `CreateUserRequest`/`UsersListResponse`/`UserResponse` records now live in `TenantForge.Modules.Iam.Contract`; `UserResponse.FromAccount` stays here as a module-owned mapper because it references the internal `Account` entity) |
+| Platform tenants | `src/modules/iam/TenantForge.Modules.Iam/features/tenants/` | `TenantsFeature` (the `CreateTenantRequest`/`TenantListResponse`/`TenantSummaryResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
+| Tenant members | `src/modules/iam/TenantForge.Modules.Iam/features/tenantmembers/` | `TenantMembersFeature` (the `TenantMembersResponse`/`TenantContextResponse`/`TenantMemberResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
 | Roles/permissions | `src/modules/iam/TenantForge.Modules.Iam/features/roles/` | `RolesFeature` (catalog, CRUD, assignment, resolved permissions, `AuthorizeTenantAccessAsync`) |
 | Invitations | `src/modules/iam/TenantForge.Modules.Iam/features/invitations/` | `InvitationsFeature` |
 | Audit | `src/modules/iam/TenantForge.Modules.Iam/features/audit/` | `AuditFeature` |

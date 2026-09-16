@@ -81,7 +81,7 @@ one valid Spec link.
 | B019 | S21 | Create a living IAM knowledge base and update gate | done | B018 | — |
 | B020 | S22 | Create a living BuildingBlocks knowledge and admission guide | done | B019 | — |
 | B021 | S23 | Create the IAM Contract project and move its pagination, login, account and dashboard types | done | B020 | — |
-| B022 | S23 | Move users, tenants and tenant-member contract types into the IAM Contract project | planned | B021 | [tasks/backend/B022-iam-contract-directory-features.md](backend/B022-iam-contract-directory-features.md) |
+| B022 | S23 | Move users, tenants and tenant-member contract types into the IAM Contract project | done | B021 | — |
 | B023 | S23 | Move roles, invitations and audit contract types, then lock the IAM Contract project's exported surface | planned | B022 | [tasks/backend/B023-iam-contract-roles-invitations-audit.md](backend/B023-iam-contract-roles-invitations-audit.md) |
 | B024 | S24 | Create a living IAM Contract knowledge and admission guide | planned | B023 | [tasks/backend/B024-iam-contract-knowledge-base.md](backend/B024-iam-contract-knowledge-base.md) |
 

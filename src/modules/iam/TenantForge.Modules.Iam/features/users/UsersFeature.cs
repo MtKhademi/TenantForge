@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Iam.Contract.Requests;
 using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
@@ -32,7 +33,7 @@ internal static class UsersFeature
                 .ThenBy(account => account.Id);
 
             var (accounts, pagination) = await PaginationSupport.PageAsync(query, page);
-            var users = accounts.Select(UserResponse.FromAccount).ToList();
+            var users = accounts.Select(FromAccount).ToList();
             return Results.Ok(new UsersListResponse(users, pagination));
         })
         // S11: the global account directory belongs exclusively to a platform
@@ -80,7 +81,7 @@ internal static class UsersFeature
                 return DuplicateEmailProblem();
             }
 
-            var response = UserResponse.FromAccount(account);
+            var response = FromAccount(account);
             return Results.Created($"/api/platform/users/{TsidId.Format(account.Id)}", response);
         })
         .RequireAuthorization(AuthorizationPolicyNames.PlatformAdmin);
@@ -129,21 +130,11 @@ internal static class UsersFeature
         title: "Duplicate email",
         detail: "An account with this email already exists.",
         statusCode: StatusCodes.Status409Conflict);
-}
 
-internal sealed record CreateUserRequest(string? Email, string? DisplayName, string? Password);
-
-internal sealed record UsersListResponse(IReadOnlyList<UserResponse> Users, PaginationMetadata Pagination);
-
-internal sealed record UserResponse(
-    string Id,
-    string Email,
-    string DisplayName,
-    string Status,
-    bool IsPlatformAdmin,
-    string CreatedAtUtc)
-{
-    public static UserResponse FromAccount(global::TenantForge.Modules.Iam.Domain.Account account) => new(
+    // B022/S23: UserResponse moved to TenantForge.Modules.Iam.Contract as a
+    // data-only record. This mapper stays module-owned because it references
+    // the internal domain entity Account — a contract type may never do that.
+    private static UserResponse FromAccount(global::TenantForge.Modules.Iam.Domain.Account account) => new(
         TsidId.Format(account.Id),
         account.Email,
         account.DisplayName,

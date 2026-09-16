@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Iam.Contract.Requests;
 using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
@@ -188,15 +189,3 @@ internal static partial class TenantsFeature
     [GeneratedRegex("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")]
     private static partial Regex SlugPattern();
 }
-
-internal sealed record CreateTenantRequest(string? Name, string? Slug, string? OwnerUserId);
-
-internal sealed record TenantListResponse(IReadOnlyList<TenantSummaryResponse> Tenants, PaginationMetadata Pagination);
-
-internal sealed record TenantSummaryResponse(
-    string Id,
-    string Name,
-    string Slug,
-    string Status,
-    int MemberCount,
-    string CreatedAtUtc);
