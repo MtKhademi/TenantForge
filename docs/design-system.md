@@ -35,6 +35,7 @@ Start with a neutral slate foundation and one restrained indigo/blue brand accen
 - Desktop uses a right sidebar because the interface is RTL.
 - The desktop sidebar can collapse to an icon rail; accessible names and tooltips must remain available.
 - Mobile uses a drawer navigation and preserves access to the primary page action.
+- **On an auth-style split screen, the form is reachable without scrolling on a mobile viewport.** Below the desktop breakpoint, the interactive form takes visual priority over the brand hero; the hero may still appear, but reordered/condensed so it does not push the form below the fold on a 390×844 viewport.
 - Page titles, descriptions and actions share a repeatable header pattern.
 - Tables and forms should not be wrapped in unnecessary nested cards.
 - Empty space should clarify grouping, not inflate page height.
