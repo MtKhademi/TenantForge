@@ -108,6 +108,22 @@ export type ProductFormValues = {
   sizeGuideRows: SizeGuideRowInput[]
 }
 
+/**
+ * The catalog data-source contract. F028 satisfied it with an in-memory mock;
+ * F029 satisfies it with `createShopCatalogAdapter` (real B026 calls). The two
+ * pages depend only on this shape, so the data source can be swapped without
+ * touching their call sites.
+ */
+export type ShopCatalogAdapter = {
+  listCategories(tenantId: string): Promise<ShopCategory[]>
+  createCategory(tenantId: string, request: CreateCategoryRequest): Promise<ShopCategory>
+  updateCategory(tenantId: string, categoryId: string, request: UpdateCategoryRequest): Promise<ShopCategory>
+  listProducts(tenantId: string): Promise<ShopProductSummary[]>
+  getProduct(tenantId: string, productId: string): Promise<ShopProduct>
+  createProduct(tenantId: string, values: ProductFormValues): Promise<ShopProduct>
+  updateProduct(tenantId: string, productId: string, values: ProductFormValues): Promise<ShopProduct>
+}
+
 export class CategoryConflictError extends Error {
   constructor(message = 'دسته‌بندی دیگری با این نامک از قبل وجود دارد.') {
     super(message)
