@@ -246,3 +246,25 @@ public sealed class ShopCheckoutDbFixture : IamDbFixtureBase
 public sealed class ShopCheckoutIsolatedCollection : ICollectionFixture<ShopCheckoutDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B031's anonymous order-creation tests. Kept off
+/// the shared main database (so IAM row-count assumptions stay stable) and off
+/// the B026 admin / B027 storefront / B028 cart / B029 shipping-coupon / B030
+/// checkout databases (so their row-count and catalog assertions stay stable).
+/// The tests author catalog, shipping-rate and coupon data through
+/// B026/B029's authenticated admin APIs, build a cart through B028's
+/// anonymous API, then drive the order-creation endpoint with a bare client
+/// that sends no Authorization header.
+/// </summary>
+public sealed class ShopOrderDbFixture : IamDbFixtureBase
+{
+    public ShopOrderDbFixture() : base("tenantforge_shop_order_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopOrderIsolatedCollection))]
+public sealed class ShopOrderIsolatedCollection : ICollectionFixture<ShopOrderDbFixture>
+{
+}
