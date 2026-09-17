@@ -104,7 +104,7 @@ one valid Spec link.
 | B025 | S26 | Shop module persistence and skeleton | done | — | — |
 | B026 | S26 | Category and product admin API | done | B025 | — |
 | B027 | S26 | Public storefront catalog read API | done | B026 | — |
-| B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
+| B028 | S27 | Cart persistence and API | done | B027 | — |
 | B029 | S28 | Shipping-rate and coupon admin API | planned | B026 | [tasks/backend/B029-shipping-rate-and-coupon-admin-api.md](backend/B029-shipping-rate-and-coupon-admin-api.md) |
 | B030 | S28 | Checkout API | planned | B028, B029 | [tasks/backend/B030-checkout-summary-api.md](backend/B030-checkout-summary-api.md) |
 | B031 | S29 | Order creation API | planned | B030 | [tasks/backend/B031-order-creation-api.md](backend/B031-order-creation-api.md) |
