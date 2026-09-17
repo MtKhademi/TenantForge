@@ -11,6 +11,8 @@ import { DashboardPage } from './pages/DashboardPage'
 import { InvitationsPage } from './pages/InvitationsPage'
 import { LoginPage } from './pages/LoginPage'
 import { RolesPage } from './pages/RolesPage'
+import { CategoriesPage } from './pages/shop/admin/CategoriesPage'
+import { ProductsPage } from './pages/shop/admin/ProductsPage'
 import { TenantHome } from './pages/TenantHome'
 import { TenantScopePage } from './pages/TenantScopePage'
 import { TenantsPage } from './pages/TenantsPage'
@@ -133,6 +135,8 @@ export default function App() {
         <Route path="/t/:tenantId/roles" element={<RolesPage />} />
         <Route path="/t/:tenantId/invitations" element={<InvitationsPage />} />
         <Route path="/t/:tenantId/audit" element={<AuditLogPage />} />
+        <Route path="/t/:tenantId/shop/categories" element={<CategoriesPage />} />
+        <Route path="/t/:tenantId/shop/products" element={<ProductsPage />} />
       </Route>
       <Route path="*" element={<RedirectHome />} />
     </Routes>
