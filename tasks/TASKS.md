@@ -58,6 +58,20 @@ one valid Spec link.
 | F025 | S25 | Fix duplicated branding and inconsistent header controls in the shared shell | done | F024 | — |
 | F026 | S25 | Extract a shared state panel and give dashboard cards semantic weight | planned | F025 | [tasks/front/F026-shared-state-panels-and-dashboard-density.md](front/F026-shared-state-panels-and-dashboard-density.md) |
 | F027 | S25 | Put the sign-in form before the hero on mobile and de-emphasize the dev-credentials box | planned | F025 | [tasks/front/F027-login-mobile-priority.md](front/F027-login-mobile-priority.md) |
+| F028 | S26 | Admin catalog management mock | planned | F025 | [tasks/front/F028-admin-catalog-management-mock.md](front/F028-admin-catalog-management-mock.md) |
+| F029 | S26 | Connect admin catalog management to the real API | planned | F028, B026 | [tasks/front/F029-connect-admin-catalog-management.md](front/F029-connect-admin-catalog-management.md) |
+| F030 | S26 | Storefront catalog browsing and product detail mock | planned | F025 | [tasks/front/F030-storefront-catalog-browsing-mock.md](front/F030-storefront-catalog-browsing-mock.md) |
+| F031 | S26 | Connect storefront browsing and detail to the real API | planned | F030, B027 | [tasks/front/F031-connect-storefront-catalog-browsing.md](front/F031-connect-storefront-catalog-browsing.md) |
+| F032 | S27 | Cart page mock | planned | F030 | [tasks/front/F032-cart-page-mock.md](front/F032-cart-page-mock.md) |
+| F033 | S27 | Connect cart page to the real API | planned | F032, B028 | [tasks/front/F033-connect-cart-page.md](front/F033-connect-cart-page.md) |
+| F034 | S28 | Admin shipping-rate and coupon management mock | planned | F029 | [tasks/front/F034-admin-shipping-and-coupon-mock.md](front/F034-admin-shipping-and-coupon-mock.md) |
+| F035 | S28 | Connect admin shipping-rate and coupon management to the real API | planned | F034, B029 | [tasks/front/F035-connect-admin-shipping-and-coupon.md](front/F035-connect-admin-shipping-and-coupon.md) |
+| F036 | S28 | Checkout page mock | planned | F033 | [tasks/front/F036-checkout-page-mock.md](front/F036-checkout-page-mock.md) |
+| F037 | S28 | Connect checkout page to the real API | planned | F036, B030 | [tasks/front/F037-connect-checkout-page.md](front/F037-connect-checkout-page.md) |
+| F038 | S29 | Order review and sandbox payment mock | planned | F037 | [tasks/front/F038-order-review-and-sandbox-payment-mock.md](front/F038-order-review-and-sandbox-payment-mock.md) |
+| F039 | S29 | Connect order review and payment to the real API | planned | F038, B031, B032 | [tasks/front/F039-connect-order-review-and-payment.md](front/F039-connect-order-review-and-payment.md) |
+| F040 | S30 | Order tracking page mock | planned | F039 | [tasks/front/F040-order-tracking-mock.md](front/F040-order-tracking-mock.md) |
+| F041 | S30 | Connect order tracking page to the real API | planned | F040, B033 | [tasks/front/F041-connect-order-tracking.md](front/F041-connect-order-tracking.md) |
 
 ## Backend queue
 
@@ -87,6 +101,15 @@ one valid Spec link.
 | B022 | S23 | Move users, tenants and tenant-member contract types into the IAM Contract project | done | B021 | — |
 | B023 | S23 | Move roles, invitations and audit contract types, then lock the IAM Contract project's exported surface | done | B022 | — |
 | B024 | S24 | Create a living IAM Contract knowledge and admission guide | done | B023 | — |
+| B025 | S26 | Shop module persistence and skeleton | planned | — | [tasks/backend/B025-shop-module-persistence-and-skeleton.md](backend/B025-shop-module-persistence-and-skeleton.md) |
+| B026 | S26 | Category and product admin API | planned | B025 | [tasks/backend/B026-category-and-product-admin-api.md](backend/B026-category-and-product-admin-api.md) |
+| B027 | S26 | Public storefront catalog read API | planned | B026 | [tasks/backend/B027-public-storefront-catalog-api.md](backend/B027-public-storefront-catalog-api.md) |
+| B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
+| B029 | S28 | Shipping-rate and coupon admin API | planned | B026 | [tasks/backend/B029-shipping-rate-and-coupon-admin-api.md](backend/B029-shipping-rate-and-coupon-admin-api.md) |
+| B030 | S28 | Checkout API | planned | B028, B029 | [tasks/backend/B030-checkout-summary-api.md](backend/B030-checkout-summary-api.md) |
+| B031 | S29 | Order creation API | planned | B030 | [tasks/backend/B031-order-creation-api.md](backend/B031-order-creation-api.md) |
+| B032 | S29 | Sandbox payment API | planned | B031 | [tasks/backend/B032-sandbox-payment-api.md](backend/B032-sandbox-payment-api.md) |
+| B033 | S30 | Order lookup API | planned | B032 | [tasks/backend/B033-guest-order-lookup-api.md](backend/B033-guest-order-lookup-api.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -258,3 +281,112 @@ exact command. Never bypass a dependency merely to keep an agent busy.
   `tenantforge-ui-system` skill still governs every visual decision.
   Registering these Specs does not implement them or change any other
   task's status or dependencies.
+
+## Shop catalog: S26
+
+- [S26 — Shop catalog: persistence, admin authoring, storefront browsing](slices/026-shop-catalog.md)
+- TenantForge's first new business module, `TenantForge.Modules.Shop`,
+  starts here, mirroring IAM's real structure and its two-method
+  composition seam (`AddShopModule`/`UseShopModuleAsync`) from the start,
+  since that convention is now established (B016/S18). B025 creates the
+  module skeleton and the catalog persistence (categories, products,
+  variants, size guide) with no endpoint of its own. B026 adds
+  authenticated, tenant-scoped admin authoring endpoints (category CRUD;
+  one combined product+variants+size-guide authoring payload). B027 adds
+  the first anonymous endpoints TenantForge has ever had — a public,
+  unauthenticated storefront catalog read API — introducing the
+  `/api/shop/{tenantId}/...` route prefix that every later Shop task
+  reuses, distinct from the authenticated `/api/tenants/{tenantId}/shop/...`
+  admin prefix.
+- F028/F029 build and connect the admin catalog screens inside the
+  existing authenticated `DashboardShell`. F030/F031 build and connect the
+  public storefront browsing/product-detail pages in a new, separate,
+  unauthenticated layout — grounded in the darnoshop.com screenshots
+  already reviewed for which UI elements exist (color/size selectors, a
+  size-guide table, an image gallery, a quantity stepper), while every
+  actual visual decision still follows `docs/design-system.md`.
+- No `TenantForge.Modules.Shop.Contract` project exists yet (per the
+  `module-contract-project` Skill's admission rule) and no
+  `docs/modules/Shop.md` living handbook exists yet (per `AGENTS.md`'s
+  "Living module knowledge" precedent — IAM only got its handbook after
+  several delivered slices). Both remain future tasks, not part of this
+  registration.
+- Execution order: B025 → B026 → B027, with F028 → F029 and F030 → F031
+  each depending on their own backend counterpart; F028 and F030 both
+  depend only on the already-`done` F025 and may proceed in parallel with
+  each other. All rows are registered as `planned`; registering them does
+  not implement or run any of B025–B027/F028–F031.
+
+## Shop cart: S27
+
+- [S27 — Shop cart](slices/027-shop-cart.md)
+- B028 adds `ShopCart`/`ShopCartItem` persistence and the anonymous cart
+  API (create, add item with live-stock validation, update quantity,
+  remove, fetch with a computed subtotal). Cart ownership is by opaque
+  cart id alone — every Shop endpoint from B025 onward is deliberately
+  anonymous, matching darnoshop's own guest-first flow; this is a
+  reviewed, named scope decision, not a placeholder for "add customer
+  accounts later."
+- F032 builds the cart page against mocked data; F033 connects it to
+  B028 and introduces the cart-id's client-side storage, deliberately
+  using `localStorage` (not the `sessionStorage` the existing auth
+  adapter uses) because a cart, unlike a login session, should survive a
+  closed tab.
+- Execution order: B028 depends on B027; F032 depends on F030; F033
+  depends on F032 and B028. All rows are registered as `planned`;
+  registering them does not implement or run any of B028/F032/F033.
+
+## Shop checkout: S28
+
+- [S28 — Shop checkout: shipping, coupons, address](slices/028-shop-checkout.md)
+- B029 adds tenant-scoped admin endpoints for per-province shipping rates
+  and coupons, reusing B026's authorization pattern. B030 adds a
+  read/compute-only checkout-summary endpoint that prices a cart against
+  a shipping address and an optional coupon, and requires an unshippable
+  province to say so plainly rather than silently charging zero shipping.
+- F034/F035 build and connect the admin shipping-rate/coupon screens.
+  F036/F037 build and connect the checkout page (address form, coupon
+  field, live summary).
+- Execution order: B029 depends on B026; B030 depends on B028 and B029;
+  F034 depends on F029; F035 depends on F034 and B029; F036 depends on
+  F033; F037 depends on F036 and B030. All rows are registered as
+  `planned`; registering them does not implement or run any of
+  B029/B030/F034–F037.
+
+## Shop order and sandbox payment: S29
+
+- [S29 — Shop order creation and sandbox payment](slices/029-shop-order-and-sandbox-payment.md)
+- B031 turns a validated checkout summary into a real, persisted order
+  inside one transaction — snapshotting the cart, decrementing variant
+  stock, generating an `OrderNumber` and a `TrackingCode`, and clearing
+  the cart — so a stock race under concurrent checkouts can never
+  oversell. B032 adds the `IShopPaymentGateway` abstraction and its one
+  real implementation, `SandboxPaymentGateway`: an in-app fake "bank page"
+  the frontend renders, with an initiate endpoint and a callback endpoint
+  that moves the order to `Paid` or leaves it `PendingPayment`/`Failed`.
+- This slice's explicit, named non-goal: no real ZarinPal integration, no
+  stored card data, and no webhook signature scheme beyond what the
+  Sandbox provider needs to demonstrate the `IShopPaymentGateway` seam is
+  real — a later task swaps in a real provider behind the same interface,
+  and that task is not registered here.
+- F038/F039 build and connect the order-review screen, the fake bank
+  page, and the payment-result screen.
+- Execution order: B031 depends on B030; B032 depends on B031; F038
+  depends on F037; F039 depends on F038, B031 and B032. All rows are
+  registered as `planned`; registering them does not implement or run any
+  of B031/B032/F038/F039.
+
+## Guest order tracking: S30
+
+- [S30 — Guest order tracking](slices/030-guest-order-tracking.md)
+- B033 adds an anonymous order-lookup endpoint requiring a tracking code
+  and a phone number together (never the tracking code alone, to close an
+  enumeration path a short human-typed code alone would otherwise open)
+  and returns one identical, generic not-found response whether the
+  tracking code is unknown or the phone number simply does not match it —
+  never a response that reveals which half was wrong.
+- F040/F041 build and connect the guest order-tracking page (a
+  tracking-code + phone form and a status result view).
+- Execution order: B033 depends on B032; F040 depends on F039; F041
+  depends on F040 and B033. All rows are registered as `planned`;
+  registering them does not implement or run any of B033/F040/F041.
