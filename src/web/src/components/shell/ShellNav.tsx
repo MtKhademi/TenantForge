@@ -1,4 +1,4 @@
-import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, Users, UsersRound } from 'lucide-react'
+import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, ShoppingBag, Users, UsersRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link, useLocation, useMatch } from 'react-router-dom'
@@ -53,6 +53,8 @@ const navItems: ShellNavItem[] = [
   { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', platform: true },
   { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', platform: true },
   { id: 'members', label: 'اعضای مستأجر', icon: UsersRound, href: '/t/', tenantScopedSuffix: '' },
+  { id: 'shop-categories', label: 'دسته‌بندی‌های فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/categories' },
+  { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products' },
   { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', tenantScopedSuffix: '/roles' },
   { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations', requires: [INVITATIONS_VIEW_KEY] },
   { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit', requires: [AUDIT_VIEW_KEY] },
