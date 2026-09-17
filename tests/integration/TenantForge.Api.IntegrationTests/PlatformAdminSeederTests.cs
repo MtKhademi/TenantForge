@@ -204,7 +204,10 @@ internal sealed class DisabledAccountApiFactory(string connectionString, string 
         var values = new Dictionary<string, string?>
         {
             ["IAM:IamDb"] = connectionString,
-            ["IAM:Auth:SigningKey"] = "dev-only-tenantforge-signing-key-do-not-use-32b"
+            ["IAM:Auth:SigningKey"] = "dev-only-tenantforge-signing-key-do-not-use-32b",
+            // Shop shares the same database as IAM and its activation runs on
+            // every host startup, so the value must be present here too.
+            ["Shop:ShopDb"] = connectionString
             // No IAM:SeedAdmin: the account under test was inserted directly,
             // so seeding must stay disabled to avoid seeding an unrelated admin.
         };

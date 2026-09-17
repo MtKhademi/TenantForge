@@ -43,8 +43,9 @@ IAM owns:
 IAM explicitly does **not** own:
 
 - frontend presentation, routing or visual design;
-- any non-IAM business module (none exists yet; IAM is currently the only
-  module);
+- any non-IAM business module (Shop now exists as a separate module; IAM
+  neither references it nor is referenced by it — see
+  [Section 3](#3-dependency-and-composition-boundary));
 - deployment secret storage/rotation (it only reads configuration values —
   see [Section 5](#5-configuration-and-secrets));
 - email delivery or invitation-acceptance workflow;
@@ -67,14 +68,20 @@ IAM explicitly does **not** own:
 
 ## 3. Dependency and composition boundary
 
-Current dependency direction (post-B021):
+Current dependency direction (post-B025):
 
 ```text
 TenantForge.Api
     -> TenantForge.Modules.Iam
         -> TenantForge.Modules.Iam.Contract
         -> TenantForge.BuildingBlocks
+    -> TenantForge.Modules.Shop
+        -> TenantForge.BuildingBlocks
 ```
+
+Shop is a separate module that never references IAM (or its Contract) — the
+two business modules share only `TenantForge.BuildingBlocks`. This is what
+the dependency-direction rule exists to prevent.
 
 `TenantForge.Modules.Iam.Contract` holds IAM's HTTP-facing
 request/query/response records (`public sealed`, one sub-namespace per kind:
@@ -84,14 +91,17 @@ referenced by `TenantForge.Modules.Iam` only. It is the only place a future
 module may reference to consume an IAM request/response shape.
 
 The API host composes IAM through exactly two calls
-(`src/api/TenantForge.Api/Program.cs`):
+(`src/api/TenantForge.Api/Program.cs`); Shop is composed the same way, in the
+same registration-before-`Build` / activation-after-`Build` order:
 
 ```csharp
 builder.Services.AddIamModule(builder.Environment);
+builder.Services.AddShopModule(builder.Environment);
 
 var app = builder.Build();
 
 await app.UseIamModuleAsync();
+await app.UseShopModuleAsync();
 ```
 
 - **`AddIamModule`** (registration, before `Build`) — adds every IAM-owned
@@ -544,10 +554,13 @@ Verified against current code (not aspirational):
 - **Refresh-token/session hardening** — not implemented. `JwtIssuer` mints a
   single 30-minute access token per login; there is no refresh token,
   rotation or revocation list.
-- **Multi-module limitations** — IAM is currently the only backend module;
-  the dependency-direction rule ([Section 3](#3-dependency-and-composition-boundary))
-  is enforced by `BuildingBlocksArchitectureTests` but has only one module to
-  prove it against so far.
+- **Multi-module limitations** — a second business module (Shop) now exists
+  beside IAM. The dependency-direction rule
+  ([Section 3](#3-dependency-and-composition-boundary)) is enforced by
+  `BuildingBlocksArchitectureTests` and is now proven live against two
+  modules: Shop references `TenantForge.BuildingBlocks` only, never IAM or
+  its Contract. Shop still has no endpoints of its own (B025 shipped
+  persistence only), so it consumes no IAM request/response shape yet.
 
 ## 16. Change-impact checklist
 

@@ -130,3 +130,21 @@ public sealed class PaginationIsolatedCollection : ICollectionFixture<Pagination
 public sealed class CompositionSeamIsolatedCollection : ICollectionFixture<CompositionSeamDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for the Shop composition-seam tests, which boot two
+/// independent hosts back-to-back against the same database to observe
+/// restart idempotency. Kept off the shared main database so its shop tables
+/// never affect other classes' assumptions.
+/// </summary>
+public sealed class ShopDbFixture : IamDbFixtureBase
+{
+    public ShopDbFixture() : base("tenantforge_shop_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopIsolatedCollection))]
+public sealed class ShopIsolatedCollection : ICollectionFixture<ShopDbFixture>
+{
+}

@@ -57,7 +57,7 @@ not a preference for central placement.
 | Allowed project-reference direction | A module may reference BuildingBlocks; BuildingBlocks references no TenantForge project — see [Section 3](#3-dependency-rule) |
 | Direct framework/package dependencies | `FrameworkReference Microsoft.AspNetCore.App`; `PackageReference TSID.Creator.NET` (pinned `1.0.0`) |
 | Exported public production type count | 2 — verified by `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` |
-| Current consuming projects | `TenantForge.Modules.Iam` only (via one `ProjectReference`) |
+| Current consuming projects | `TenantForge.Modules.Iam` and `TenantForge.Modules.Shop` (one `ProjectReference` each) |
 | Architecture test location | `tests/integration/TenantForge.Api.IntegrationTests/BuildingBlocksArchitectureTests.cs` |
 | Handbook update declarations | `BuildingBlocks docs impact: updated — <sections/types>` / `BuildingBlocks docs impact: none — <specific reason>` — see [Section 12](#12-change-impact-checklist) |
 
@@ -67,6 +67,8 @@ not a preference for central placement.
 TenantForge.Api
     -> TenantForge.Modules.Iam
         -> TenantForge.BuildingBlocks
+    -> TenantForge.Modules.Shop
+        -> TenantForge.BuildingBlocks
 ```
 
 Verified against the real project files
@@ -74,8 +76,11 @@ Verified against the real project files
 every test run):
 
 - `src/api/TenantForge.Api/TenantForge.Api.csproj` references
-  `TenantForge.Modules.Iam.csproj`, **not** BuildingBlocks directly;
+  `TenantForge.Modules.Iam.csproj` and
+  `TenantForge.Modules.Shop.csproj`, **not** BuildingBlocks directly;
 - `src/modules/iam/TenantForge.Modules.Iam/TenantForge.Modules.Iam.csproj`
+  references `TenantForge.BuildingBlocks.csproj`;
+- `src/modules/shop/TenantForge.Modules.Shop/TenantForge.Modules.Shop.csproj`
   references `TenantForge.BuildingBlocks.csproj`;
 - `src/building-blocks/TenantForge.BuildingBlocks/TenantForge.BuildingBlocks.csproj`
   has **zero** `ProjectReference` entries.
@@ -89,8 +94,10 @@ Rules:
   also asserts the compiled assembly references no `TenantForge.Modules.*`,
   `TenantForge.Api`, `Microsoft.EntityFrameworkCore.*` or `Npgsql.*` assembly;
 - one business module must not reference another module to obtain a shared
-  primitive — with a single module (IAM) today, this rule has no live
-  counter-example yet, but it governs any second module;
+  primitive — now proven live: `TenantForge.Modules.Shop` references
+  BuildingBlocks (never the IAM module) for `IModuleConfig`/`TsidId`, and
+  keeps its own EF `TsidValueConverter` copy instead of importing IAM's
+  `internal` one;
 - a direct API → BuildingBlocks reference requires a real host-owned consumer
   and explicit architecture review; it is not added for convenience. No such
   reference exists today.
@@ -116,8 +123,8 @@ One row per public production type exported by the compiled assembly
 
 | Type | Namespace/path | Purpose | Current consumers | Dependencies | Contract tests | Change risk |
 | --- | --- | --- | --- | --- | --- | --- |
-| `IModuleConfig` | `TenantForge.BuildingBlocks.Modules.IModuleConfig` (`src/building-blocks/TenantForge.BuildingBlocks/Modules/IModuleConfig.cs`) | Module registration/validation contract composed by the API host | `IAMConfig : IModuleConfig` (`src/modules/iam/TenantForge.Modules.Iam/IAMConfig.cs`), consumed through `IamModule.AddIamModule`/`UseIamModuleAsync` | `Microsoft.Extensions.Configuration`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting` (framework abstractions only) | `BuildingBlocksArchitectureTests.MovedContracts_LiveInBuildingBlocksAssembly`, `IamModuleCompositionSurfaceTests.*` | High — every module implementation and the API composition call depend on the exact three members |
-| `TsidId` | `TenantForge.BuildingBlocks.Identifiers.TsidId` (`src/building-blocks/TenantForge.BuildingBlocks/Identifiers/TsidId.cs`) | System-wide public identifier seam: generate/format/parse the canonical 13-character TSID string | Every IAM entity/feature that generates or parses a public identifier (`src/modules/iam/TenantForge.Modules.Iam/**`); every integration test that asserts identifier shape | `TSID.Creator.NET` (`Tsid`, `TsidCreator`) | `TsidIdTests.cs` (13 tests), `BuildingBlocksArchitectureTests.MovedContracts_LiveInBuildingBlocksAssembly` | High — HTTP/JWT identifier shape and PostgreSQL `bigint` round-trip both depend on this exact format/parse behavior |
+| `IModuleConfig` | `TenantForge.BuildingBlocks.Modules.IModuleConfig` (`src/building-blocks/TenantForge.BuildingBlocks/Modules/IModuleConfig.cs`) | Module registration/validation contract composed by the API host | `IAMConfig : IModuleConfig` (`src/modules/iam/TenantForge.Modules.Iam/IAMConfig.cs`) consumed through `IamModule.AddIamModule`/`UseIamModuleAsync`, and `ShopConfig : IModuleConfig` (`src/modules/shop/TenantForge.Modules.Shop/ShopConfig.cs`) consumed through `ShopModule.AddShopModule`/`UseShopModuleAsync` | `Microsoft.Extensions.Configuration`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting` (framework abstractions only) | `BuildingBlocksArchitectureTests.MovedContracts_LiveInBuildingBlocksAssembly`, `IamModuleCompositionSurfaceTests.*` | High — every module implementation and the API composition call depend on the exact three members |
+| `TsidId` | `TenantForge.BuildingBlocks.Identifiers.TsidId` (`src/building-blocks/TenantForge.BuildingBlocks/Identifiers/TsidId.cs`) | System-wide public identifier seam: generate/format/parse the canonical 13-character TSID string | Every IAM entity/feature that generates or parses a public identifier (`src/modules/iam/TenantForge.Modules.Iam/**`), every Shop domain entity (`src/modules/shop/TenantForge.Modules.Shop/domain/**`), and every integration test that asserts identifier shape | `TSID.Creator.NET` (`Tsid`, `TsidCreator`) | `TsidIdTests.cs` (13 tests), `BuildingBlocksArchitectureTests.MovedContracts_LiveInBuildingBlocksAssembly` | High — HTTP/JWT identifier shape and PostgreSQL `bigint` round-trip both depend on this exact format/parse behavior |
 
 No other public production type is exported. If delivered code ever adds a
 third exported type without updating this table, that is a documentation
@@ -166,8 +173,8 @@ Ownership and lifecycle rules:
   module-composition-seam concerns (see `IamModule.UseIamModuleAsync`), not
   part of the shared contract;
 - adding or changing a member is a breaking cross-module review item: every
-  current `IModuleConfig` implementation (today, only `IAMConfig`) and the
-  API composition call must be re-verified.
+  current `IModuleConfig` implementation (today: `IAMConfig` and `ShopConfig`)
+  and the API composition call must be re-verified.
 
 Exact references:
 
@@ -178,9 +185,17 @@ Exact references:
   (`AddIamModule` calls `RegisterServices`; `UseIamModuleAsync` calls
   `ValidateConfiguration` first, then installs authentication/authorization
   middleware, migrates, seeds, and maps endpoints);
+- Shop implementation: `src/modules/shop/TenantForge.Modules.Shop/ShopConfig.cs`;
+- Shop module seam that calls it:
+  `src/modules/shop/TenantForge.Modules.Shop/ShopModule.cs`
+  (`AddShopModule` calls `RegisterServices`; `UseShopModuleAsync` calls
+  `ValidateConfiguration` first, then applies pending migrations; it maps no
+  endpoint yet);
 - API composition call: `src/api/TenantForge.Api/Program.cs`
-  (`builder.Services.AddIamModule(builder.Environment)` before `Build`,
-  `await app.UseIamModuleAsync()` after `Build`);
+  (`builder.Services.AddIamModule(builder.Environment)` and
+  `builder.Services.AddShopModule(builder.Environment)` before `Build`,
+  `await app.UseIamModuleAsync()` then `await app.UseShopModuleAsync()` after
+  `Build`);
 - composition tests:
   `tests/integration/TenantForge.Api.IntegrationTests/IamModuleCompositionTests.cs`
   (`IamModuleCompositionSurfaceTests` — exactly two public static methods
@@ -243,7 +258,9 @@ formatting, case normalization, and every rejection case above).
 
 Current consumers: every IAM entity and feature that generates or parses a
 public identifier, and the login/JWT issuer for the `sub` claim
-(`src/modules/iam/TenantForge.Modules.Iam/**`).
+(`src/modules/iam/TenantForge.Modules.Iam/**`); and every Shop domain entity
+(`src/modules/shop/TenantForge.Modules.Shop/domain/**`), which generate `Tsid`
+identifiers through `TsidId.NewId()` in their `Create` factories.
 
 Operational rule (no environment value recorded here): a deployment running
 more than one writer process must assign each process a unique
@@ -269,11 +286,12 @@ its owning module.
 | Alternatives | Why keeping it module-local is insufficient |
 
 "Cleaner", "reusable", "future modules may need it" and "best practice" are
-**not** sufficient evidence for any row. With exactly one business module
-(IAM) currently in the system, the "two real module consumers" bar for a
-brand-new business-type extraction cannot yet be met; only an accepted
-system-wide primitive (like `TsidId`) or the module contract itself
-(`IModuleConfig`) can satisfy admission today.
+**not** sufficient evidence for any row. With two business modules now in the
+system (IAM and Shop), the "two real module consumers" bar for a brand-new
+business-type extraction is in principle meetable — but it is still only met
+by a type that both modules actually use today, not by a third module that
+"might" adopt it. A type that only one module consumes today stays in that
+module (as Shop's own `TsidValueConverter` does, mirroring IAM's).
 
 ## 8. Explicit exclusions
 
@@ -306,10 +324,12 @@ follow the required review for that class:
 | Identifier/serialization/storage change | Any change to the canonical string shape, `bigint` mapping, or default-value semantics of `TsidId` | Update [Section 6](#6-tsidid-contract) and every owning module's handbook that persists or transports the identifier — for IAM, that is `docs/modules/IAM.md` |
 
 A BuildingBlocks public API change must enumerate every current consumer
-(today: `TenantForge.Modules.Iam` and its test suite) before implementation,
-not after. Transport or persistence changes require their owning module's
-docs review too; for example, a `TsidId` semantic change also triggers
-`docs/modules/IAM.md`'s change-impact checklist.
+(today: `TenantForge.Modules.Iam` and `TenantForge.Modules.Shop`, plus the
+shared integration test suite) before implementation, not after. Transport or
+persistence changes require the owning module's docs review too; for example,
+a `TsidId` semantic change triggers `docs/modules/IAM.md`'s change-impact
+checklist, and a persisted-identifier change touching Shop triggers the Shop
+module's own handbook when one exists.
 
 No semantic-versioning or package-publication system is introduced here;
 this is an internal project-reference library consumed only through
@@ -349,7 +369,7 @@ decision is replaced here, not appended alongside the old one.
 | --- | --- | --- |
 | Name the project `BuildingBlocks`, not `Common` | The name plus an admission rule (Section 1/7) keeps it from becoming an ownerless dumping ground | Never for convenience |
 | One small project today, two admitted types | Only two stable shared concepts exist: the module contract and the identifier seam | A third type completes the admission checklist with real evidence |
-| `TsidValueConverter` remains module-owned | Persistence-specific (EF `ValueConverter`), one consumer (IAM), and BuildingBlocks must not reference EF Core | A second real module needs the identical `Tsid`↔`bigint` mapping and the admission checklist is completed |
+| `TsidValueConverter` remains module-owned | Persistence-specific (EF `ValueConverter`); each module keeps its own `internal` copy (IAM's and Shop's) because a module cannot reference another module's `internal` type, and BuildingBlocks must not reference EF Core | A shared `Tsid`↔`bigint` mapping is admitted only after the admission checklist is completed with both modules' real evidence |
 | Pagination remains module-owned | Couples HTTP query binding, validation text, `IQueryable` and EF execution — not boundary-neutral | A stable, infrastructure-neutral pagination contract has multiple real consumers |
 
 ## 12. Change-impact checklist

@@ -92,7 +92,11 @@ internal sealed class UnsafeSeedApiFactory(IamDbFixture db) : Microsoft.AspNetCo
             ["IAM:Auth:SigningKey"] = "some-signing-key-long-enough-32bytes!!",
             ["IAM:SeedAdmin:Email"] = "unsafe-admin@tenantforge.local",
             ["IAM:SeedAdmin:Password"] = "short",
-            ["IAM:SeedAdmin:DisplayName"] = "Unsafe Admin"
+            ["IAM:SeedAdmin:DisplayName"] = "Unsafe Admin",
+            // Shop shares the same database as IAM; the host now runs
+            // UseShopModuleAsync, so the connection value must be present even
+            // though this test's failure is raised earlier by IAM validation.
+            ["Shop:ShopDb"] = db.ConnectionString
         };
 
         builder.ConfigureAppConfiguration((_, configuration) =>
