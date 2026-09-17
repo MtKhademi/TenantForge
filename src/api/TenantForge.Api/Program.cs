@@ -1,5 +1,6 @@
 using TenantForge.Api;
 using TenantForge.Modules.Iam;
+using TenantForge.Modules.Shop;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddIamModule(builder.Environment);
+builder.Services.AddShopModule(builder.Environment);
 
 var app = builder.Build();
 
@@ -27,6 +29,10 @@ app.UseCors();
 // pending migrations, idempotent platform-administrator seeding, and mapping
 // every IAM endpoint. The host does not call any of those steps separately.
 await app.UseIamModuleAsync();
+
+// Shop activation owns: configuration validation (fail closed) and pending
+// migrations. It maps no endpoint yet (B025 has none).
+await app.UseShopModuleAsync();
 
 app.MapHealth();
 

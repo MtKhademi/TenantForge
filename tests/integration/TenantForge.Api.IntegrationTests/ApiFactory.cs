@@ -52,7 +52,11 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
             // Real PostgreSQL from the shared fixture: login is now
             // database-backed, so the test host must point at a real, migrated
             // database (an in-memory or absent database is not representative).
-            ["IAM:IamDb"] = db.ConnectionString
+            ["IAM:IamDb"] = db.ConnectionString,
+            // Shop shares the same physical database as IAM (a named B025
+            // decision): every API-level host now runs UseShopModuleAsync,
+            // which fail-closes on a missing Shop:ShopDb.
+            ["Shop:ShopDb"] = db.ConnectionString
         };
 
         switch (seedMode)

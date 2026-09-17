@@ -101,7 +101,7 @@ one valid Spec link.
 | B022 | S23 | Move users, tenants and tenant-member contract types into the IAM Contract project | done | B021 | — |
 | B023 | S23 | Move roles, invitations and audit contract types, then lock the IAM Contract project's exported surface | done | B022 | — |
 | B024 | S24 | Create a living IAM Contract knowledge and admission guide | done | B023 | — |
-| B025 | S26 | Shop module persistence and skeleton | planned | — | [tasks/backend/B025-shop-module-persistence-and-skeleton.md](backend/B025-shop-module-persistence-and-skeleton.md) |
+| B025 | S26 | Shop module persistence and skeleton | done | — | — |
 | B026 | S26 | Category and product admin API | planned | B025 | [tasks/backend/B026-category-and-product-admin-api.md](backend/B026-category-and-product-admin-api.md) |
 | B027 | S26 | Public storefront catalog read API | planned | B026 | [tasks/backend/B027-public-storefront-catalog-api.md](backend/B027-public-storefront-catalog-api.md) |
 | B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
