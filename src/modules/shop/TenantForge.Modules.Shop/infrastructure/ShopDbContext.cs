@@ -15,6 +15,8 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
     internal DbSet<ShopCoupon> Coupons => Set<ShopCoupon>();
     internal DbSet<ShopCart> Carts => Set<ShopCart>();
     internal DbSet<ShopCartItem> CartItems => Set<ShopCartItem>();
+    internal DbSet<ShopOrder> Orders => Set<ShopOrder>();
+    internal DbSet<ShopOrderItem> OrderItems => Set<ShopOrderItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,5 +30,7 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
         modelBuilder.ApplyConfiguration(new ShopCouponMap());
         modelBuilder.ApplyConfiguration(new ShopCartMap());
         modelBuilder.ApplyConfiguration(new ShopCartItemMap());
+        modelBuilder.ApplyConfiguration(new ShopOrderMap());
+        modelBuilder.ApplyConfiguration(new ShopOrderItemMap());
     }
 }

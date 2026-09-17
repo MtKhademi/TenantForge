@@ -14,14 +14,10 @@ namespace TenantForge.Api.IntegrationTests;
 /// Shop:ShopDb fails closed, a set Shop:ShopDb applies exactly the Shop-owned
 /// tables plus a Shop-owned migration history table, and a restart against the
 /// same database is a no-op. ExpectedShopTables is the complete, exact set of
-/// Shop tables currently on main: every task that adds a Shop table must add
-/// it here in the same change (B025: the six catalog tables; B029:
-/// shop_shipping_rates and shop_coupons).
-/// tables (the six B025 catalog tables plus the two B028 cart tables) and a
-/// Shop-owned migration history table, and a restart against the same
-/// database is a no-op. ExpectedShopTables is the complete, exact set of
 /// Shop tables: every task that adds a Shop table must add it here in the
-/// same change.
+/// same change (B025: the six catalog tables; B028: the two cart tables;
+/// B029: shop_shipping_rates and shop_coupons; B031: shop_orders and
+/// shop_order_items).
 ///
 /// Shop:ShopDb deliberately points at the SAME physical database as IAM:IamDb
 /// (a named B025 decision — later Shop admin tasks read IAM membership with
@@ -42,8 +38,10 @@ public sealed class ShopModuleIntegrationTests(ShopDbFixture db)
         "shop_size_guide_rows",
         "shop_shipping_rates",
         "shop_coupons",
-                "shop_carts",
-        "shop_cart_items"
+        "shop_carts",
+        "shop_cart_items",
+        "shop_orders",
+        "shop_order_items"
     ];
 
     [Fact]
