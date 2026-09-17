@@ -166,3 +166,22 @@ public sealed class ShopAdminDbFixture : IamDbFixtureBase
 public sealed class ShopAdminIsolatedCollection : ICollectionFixture<ShopAdminDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B027's anonymous storefront read tests. Kept off the
+/// shared main database (so IAM row-count assumptions stay stable) and off the
+/// B026 catalog-admin database (so those row-count/pagination assertions stay
+/// stable). The tests author data through B026's authenticated admin API and
+/// read it back through the new anonymous storefront endpoints.
+/// </summary>
+public sealed class ShopStorefrontDbFixture : IamDbFixtureBase
+{
+    public ShopStorefrontDbFixture() : base("tenantforge_shop_storefront_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopStorefrontIsolatedCollection))]
+public sealed class ShopStorefrontIsolatedCollection : ICollectionFixture<ShopStorefrontDbFixture>
+{
+}

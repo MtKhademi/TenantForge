@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using TenantForge.BuildingBlocks.Modules;
 using TenantForge.Modules.Shop.Features.Categories;
 using TenantForge.Modules.Shop.Features.Products;
+using TenantForge.Modules.Shop.Features.Storefront;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop;
@@ -47,6 +48,7 @@ public static class ShopModule
     {
         endpoints.MapCategoriesFeature();
         endpoints.MapProductsFeature();
+        endpoints.MapStorefrontCatalogFeature();
     }
 
     private static void ValidateShopModuleConfiguration(IHostEnvironment environment, IConfiguration configuration)

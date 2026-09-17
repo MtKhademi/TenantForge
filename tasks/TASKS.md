@@ -103,7 +103,7 @@ one valid Spec link.
 | B024 | S24 | Create a living IAM Contract knowledge and admission guide | done | B023 | — |
 | B025 | S26 | Shop module persistence and skeleton | done | — | — |
 | B026 | S26 | Category and product admin API | done | B025 | — |
-| B027 | S26 | Public storefront catalog read API | planned | B026 | [tasks/backend/B027-public-storefront-catalog-api.md](backend/B027-public-storefront-catalog-api.md) |
+| B027 | S26 | Public storefront catalog read API | done | B026 | — |
 | B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
 | B029 | S28 | Shipping-rate and coupon admin API | planned | B026 | [tasks/backend/B029-shipping-rate-and-coupon-admin-api.md](backend/B029-shipping-rate-and-coupon-admin-api.md) |
 | B030 | S28 | Checkout API | planned | B028, B029 | [tasks/backend/B030-checkout-summary-api.md](backend/B030-checkout-summary-api.md) |
