@@ -8,28 +8,35 @@ import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
-import { mockCatalogAdapter } from '@/features/shop/mockCatalogAdapter'
+import {
+  createShopCatalogAdapter,
+  ShopForbiddenError,
+  ShopValidationError,
+} from '@/features/shop/shopCatalogAdapter'
 import {
   ProductConflictError,
   type ShopCategory,
   type ShopProductSummary,
 } from '@/features/shop/shopCatalogTypes'
+import { useAuth } from '@/features/auth/AuthContext'
+import { SessionExpiredError } from '@/features/auth/authTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S26 admin catalog management — products (F028: mocked data).
+ * S26 admin catalog management — products (F029: connected to the real B026 API).
  *
  * A tenant member lists, creates and edits shop products, including each
  * product's color/size variants (an inline repeatable-row editor) and its
  * size-guide table (a column/row editor whose two field arrays stay in sync:
  * adding a column appends an empty value to every existing row, removing a
- * column splices that index out of every row). The data source is the
- * in-memory `mockCatalogAdapter`; F029 swaps it for `httpShopCatalogAdapter`
- * (same method names) without touching this page's structure.
+ * column splices that index out of every row). The data source is
+ * `createShopCatalogAdapter`, which calls B026's tenant-scoped admin endpoints
+ * with the current session bearer token. The page's structure is unchanged
+ * from the F028 mock.
  *
  * States:
- * - list: initial skeleton, loaded table, empty panel (the mock starts
- *   empty), retryable error panel;
+ * - list: initial skeleton, loaded table, empty panel (a fresh tenant starts
+ *   empty), retryable error panel (unavailable or forbidden);
  * - form: idle, invalid (per-field errors, including the variant/size-guide
  *   minimums), submitting, success feedback, and a duplicate-slug conflict
  *   surfaced under the slug field.
@@ -75,10 +82,11 @@ const FORM_DEFAULTS: ProductFormValuesInput = {
 }
 
 export function ProductsPage() {
+  const { session, signOut } = useAuth()
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const [products, setProducts] = useState<ShopProductSummary[] | null>(null)
   const [isBusy, setIsBusy] = useState(true)
-  const [listFailure, setListFailure] = useState<unknown>(null)
+  const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   const [categoryOptions, setCategoryOptions] = useState<ShopCategory[]>([])
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -88,6 +96,26 @@ export function ProductsPage() {
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
   const slugInputRef = useRef<HTMLInputElement | null>(null)
+  // Fresh refs so the (stable) callbacks below always read the current token
+  // and sign-out action without re-creating the data source per render.
+  const sessionRef = useRef(session)
+  const signOutRef = useRef(signOut)
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+  useEffect(() => {
+    signOutRef.current = signOut
+  }, [signOut])
+
+  // One bound data source per render, carrying the current token. Event
+  // handlers read `adapter` directly; the effect-driven callbacks read
+  // `adapterRef` so they stay referentially stable (a fresh per-render object
+  // must not land in a `useEffect` dep, or it refetches forever).
+  const adapter = createShopCatalogAdapter(session?.accessToken ?? '')
+  const adapterRef = useRef(adapter)
+  useEffect(() => {
+    adapterRef.current = adapter
+  }, [adapter])
 
   const {
     register,
@@ -123,19 +151,27 @@ export function ProductsPage() {
     remove: removeRow,
   } = useFieldArray({ control, name: 'sizeGuideRows' })
 
+  const handleListFailure = useCallback((error: unknown) => {
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    setListFailure(error instanceof ShopForbiddenError ? 'forbidden' : 'unavailable')
+  }, [])
+
   const loadProducts = useCallback(() => {
     setIsBusy(true)
     setListFailure(null)
-    return mockCatalogAdapter
+    return adapterRef.current
       .listProducts(tenantId)
       .then(setProducts)
-      .catch((error) => setListFailure(error))
+      .catch((error) => handleListFailure(error))
       .finally(() => setIsBusy(false))
-  }, [tenantId])
+  }, [tenantId, handleListFailure])
 
-  // The category picker is populated from the same (mock) catalog source.
+  // The category picker is populated from the same real catalog source.
   useEffect(() => {
-    void mockCatalogAdapter.listCategories(tenantId).then(setCategoryOptions)
+    void adapterRef.current.listCategories(tenantId).then(setCategoryOptions)
   }, [tenantId])
 
   useEffect(() => {
@@ -169,7 +205,7 @@ export function ProductsPage() {
   const startEdit = useCallback(
     async (product: ShopProductSummary) => {
       try {
-        const full = await mockCatalogAdapter.getProduct(tenantId, product.id)
+        const full = await adapter.getProduct(tenantId, product.id)
         setEditingId(full.id)
         reset({
           name: full.name,
@@ -195,11 +231,15 @@ export function ProductsPage() {
         clearErrors()
         setSuccess(null)
         setFormOpen(true)
-      } catch {
-        setListFailure(new Error('Failed to load product'))
+      } catch (error) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+        } else {
+          setListFailure(error instanceof ShopForbiddenError ? 'forbidden' : 'unavailable')
+        }
       }
     },
-    [tenantId, reset, clearErrors],
+    [adapter, tenantId, reset, clearErrors],
   )
 
   const onSubmit = useCallback(
@@ -208,10 +248,10 @@ export function ProductsPage() {
       setSuccess(null)
       try {
         if (editingId) {
-          const updated = await mockCatalogAdapter.updateProduct(tenantId, editingId, values)
+          const updated = await adapter.updateProduct(tenantId, editingId, values)
           setSuccess(`محصول ${updated.name} به‌روزرسانی شد.`)
         } else {
-          const created = await mockCatalogAdapter.createProduct(tenantId, values)
+          const created = await adapter.createProduct(tenantId, values)
           setSuccess(`محصول ${created.name} ایجاد شد.`)
         }
         reset(FORM_DEFAULTS)
@@ -219,15 +259,25 @@ export function ProductsPage() {
         setEditingId(null)
         void loadProducts()
       } catch (error) {
-        if (error instanceof ProductConflictError) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+        } else if (error instanceof ProductConflictError) {
           setError('slug', { message: error.message })
           slugInputRef.current?.focus()
+        } else if (error instanceof ShopValidationError) {
+          for (const [field, message] of Object.entries(error.fieldErrors)) {
+            setError(field as keyof ProductFormValuesInput, { message })
+          }
+          nameInputRef.current?.focus()
+        } else if (error instanceof ShopForbiddenError) {
+          setError('name', { message: error.message })
+          nameInputRef.current?.focus()
         }
       } finally {
         setIsSubmitting(false)
       }
     },
-    [editingId, tenantId, reset, setError, loadProducts],
+    [editingId, tenantId, adapter, reset, setError, loadProducts],
   )
 
   const isLoading = products === null && isBusy
@@ -606,6 +656,10 @@ export function ProductsPage() {
                 </div>
               )}
 
+              {errors.sizeGuideRows && (
+                <p className="text-sm text-destructive">{errors.sizeGuideRows.message}</p>
+              )}
+
               <div className="flex flex-wrap gap-2">
                 <SecondaryButton type="button" onClick={handleAddColumn}>
                   <Plus aria-hidden="true" className="me-2 size-4" />
@@ -643,8 +697,12 @@ export function ProductsPage() {
         {listError && (
           <StatePanel
             icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
-            title="فهرست محصولات در دسترس نیست"
-            description="هم‌اکنون نمی‌توانیم محصولات را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید."
+            title={listFailure === 'forbidden' ? 'دسترسی مدیریت فروشگاه مجاز نیست' : 'فهرست محصولات در دسترس نیست'}
+            description={
+              listFailure === 'forbidden'
+                ? 'حساب فعلی مجوز مدیریت فروشگاه این مستأجر را ندارد.'
+                : 'هم‌اکنون نمی‌توانیم محصولات را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'
+            }
             action={
               <Button type="button" className="mt-3 min-w-32" onClick={() => void loadProducts()}>
                 <RefreshCw aria-hidden="true" className="me-2 size-4" />

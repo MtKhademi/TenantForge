@@ -59,7 +59,7 @@ one valid Spec link.
 | F026 | S25 | Extract a shared state panel and give dashboard cards semantic weight | done | F025 | — |
 | F027 | S25 | Put the sign-in form before the hero on mobile and de-emphasize the dev-credentials box | done | F025 | — |
 | F028 | S26 | Admin catalog management mock | done | F025 | — |
-| F029 | S26 | Connect admin catalog management to the real API | planned | F028, B026 | [tasks/front/F029-connect-admin-catalog-management.md](front/F029-connect-admin-catalog-management.md) |
+| F029 | S26 | Connect admin catalog management to the real API | done | F028, B026 | — |
 | F030 | S26 | Storefront catalog browsing and product detail mock | planned | F025 | [tasks/front/F030-storefront-catalog-browsing-mock.md](front/F030-storefront-catalog-browsing-mock.md) |
 | F031 | S26 | Connect storefront browsing and detail to the real API | planned | F030, B027 | [tasks/front/F031-connect-storefront-catalog-browsing.md](front/F031-connect-storefront-catalog-browsing.md) |
 | F032 | S27 | Cart page mock | planned | F030 | [tasks/front/F032-cart-page-mock.md](front/F032-cart-page-mock.md) |

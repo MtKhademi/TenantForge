@@ -8,21 +8,27 @@ import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
-import { mockCatalogAdapter } from '@/features/shop/mockCatalogAdapter'
+import {
+  createShopCatalogAdapter,
+  ShopForbiddenError,
+  ShopValidationError,
+} from '@/features/shop/shopCatalogAdapter'
 import { CategoryConflictError, type ShopCategory } from '@/features/shop/shopCatalogTypes'
+import { useAuth } from '@/features/auth/AuthContext'
+import { SessionExpiredError } from '@/features/auth/authTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S26 admin catalog management — categories (F028: mocked data).
+ * S26 admin catalog management — categories (F029: connected to the real B026 API).
  *
  * A tenant member lists, creates and edits the shop's categories. The data
- * source is the in-memory `mockCatalogAdapter`; F029 swaps it for
- * `httpShopCatalogAdapter` (same method names) without touching this page's
- * structure or accepted UX.
+ * source is `createShopCatalogAdapter`, which calls B026's tenant-scoped
+ * admin endpoints with the current session bearer token. The page's
+ * structure and accepted UX are unchanged from the F028 mock.
  *
  * States:
- * - list: initial skeleton, loaded table, empty panel (the mock starts
- *   empty), retryable error panel;
+ * - list: initial skeleton, loaded table, empty panel (a fresh tenant starts
+ *   empty), retryable error panel (unavailable or forbidden);
  * - form: idle, invalid (per-field errors), submitting, success feedback, and
  *   a duplicate-slug conflict surfaced under the slug field.
  * - the form is a create form and an edit form: in edit mode an "active"
@@ -37,10 +43,11 @@ const categorySchema = z.object({
 type CategoryFormValues = z.infer<typeof categorySchema>
 
 export function CategoriesPage() {
+  const { session, signOut } = useAuth()
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const [categories, setCategories] = useState<ShopCategory[] | null>(null)
   const [isBusy, setIsBusy] = useState(true)
-  const [listFailure, setListFailure] = useState<unknown>(null)
+  const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editIsActive, setEditIsActive] = useState(true)
@@ -50,6 +57,27 @@ export function CategoriesPage() {
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
   const slugInputRef = useRef<HTMLInputElement | null>(null)
+  // Fresh refs so the (stable) callbacks below always read the current token
+  // and sign-out action without re-creating the data-source per render.
+  const sessionRef = useRef(session)
+  const signOutRef = useRef(signOut)
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+  useEffect(() => {
+    signOutRef.current = signOut
+  }, [signOut])
+
+  // One bound data-source instance per render, carrying the current token.
+  // Event handlers (submit / startEdit) read `adapter` directly; the
+  // effect-driven load callbacks read `adapterRef` so they stay referentially
+  // stable (a fresh per-render object must not land in a `useEffect` dep, or
+  // it refetches forever).
+  const adapter = createShopCatalogAdapter(session?.accessToken ?? '')
+  const adapterRef = useRef(adapter)
+  useEffect(() => {
+    adapterRef.current = adapter
+  }, [adapter])
 
   const {
     register,
@@ -63,15 +91,23 @@ export function CategoriesPage() {
     defaultValues: { name: '', slug: '', displayOrder: 0 },
   })
 
+  const handleListFailure = useCallback((error: unknown) => {
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    setListFailure(error instanceof ShopForbiddenError ? 'forbidden' : 'unavailable')
+  }, [])
+
   const loadCategories = useCallback(() => {
     setIsBusy(true)
     setListFailure(null)
-    return mockCatalogAdapter
+    return adapterRef.current
       .listCategories(tenantId)
       .then(setCategories)
-      .catch((error) => setListFailure(error))
+      .catch((error) => handleListFailure(error))
       .finally(() => setIsBusy(false))
-  }, [tenantId])
+  }, [tenantId, handleListFailure])
 
   useEffect(() => {
     void loadCategories()
@@ -120,13 +156,13 @@ export function CategoriesPage() {
       setSuccess(null)
       try {
         if (editingId) {
-          const updated = await mockCatalogAdapter.updateCategory(tenantId, editingId, {
+          const updated = await adapter.updateCategory(tenantId, editingId, {
             ...values,
             isActive: editIsActive,
           })
           setSuccess(`دسته‌بندی ${updated.name} به‌روزرسانی شد.`)
         } else {
-          const created = await mockCatalogAdapter.createCategory(tenantId, values)
+          const created = await adapter.createCategory(tenantId, values)
           setSuccess(`دسته‌بندی ${created.name} ایجاد شد.`)
         }
         reset()
@@ -134,15 +170,25 @@ export function CategoriesPage() {
         setEditingId(null)
         void loadCategories()
       } catch (error) {
-        if (error instanceof CategoryConflictError) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+        } else if (error instanceof CategoryConflictError) {
           setError('slug', { message: error.message })
           slugInputRef.current?.focus()
+        } else if (error instanceof ShopValidationError) {
+          for (const [field, message] of Object.entries(error.fieldErrors)) {
+            setError(field as keyof CategoryFormValues, { message })
+          }
+          nameInputRef.current?.focus()
+        } else if (error instanceof ShopForbiddenError) {
+          setError('name', { message: error.message })
+          nameInputRef.current?.focus()
         }
       } finally {
         setIsSubmitting(false)
       }
     },
-    [editingId, editIsActive, tenantId, reset, setError, loadCategories],
+    [editingId, editIsActive, tenantId, adapter, reset, setError, loadCategories],
   )
 
   const isLoading = categories === null && isBusy
@@ -332,8 +378,12 @@ export function CategoriesPage() {
         {listError && (
           <StatePanel
             icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
-            title="فهرست دسته‌بندی‌ها در دسترس نیست"
-            description="هم‌اکنون نمی‌توانیم دسته‌بندی‌ها را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید."
+            title={listFailure === 'forbidden' ? 'دسترسی مدیریت فروشگاه مجاز نیست' : 'فهرست دسته‌بندی‌ها در دسترس نیست'}
+            description={
+              listFailure === 'forbidden'
+                ? 'حساب فعلی مجوز مدیریت فروشگاه این مستأجر را ندارد.'
+                : 'هم‌اکنون نمی‌توانیم دسته‌بندی‌ها را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'
+            }
             action={
               <Button type="button" className="mt-3 min-w-32" onClick={() => void loadCategories()}>
                 <RefreshCw aria-hidden="true" className="me-2 size-4" />
