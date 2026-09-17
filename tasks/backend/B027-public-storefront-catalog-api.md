@@ -16,82 +16,282 @@ under the new `/api/shop/{tenantId}/...` prefix.
 
 # Context
 
-Read `tasks/slices/026-shop-catalog.md` completely, in particular "Route
-convention introduced in this slice": this task is the first to use the
-`/api/shop/{tenantId}/...` anonymous prefix, distinct from B026's
-authenticated `/api/tenants/{tenantId}/shop/...` admin prefix. IAM has no
-precedent for an anonymous, tenant-scoped route (every existing IAM route
-either requires platform-admin or an authenticated tenant member), so
-there is no `.AllowAnonymous()` call anywhere yet in
-`src/modules/iam/**` to copy — minimal APIs are anonymous by default
-unless `.RequireAuthorization()` is called, so these endpoints simply omit
-that call; do not add an explicit `.AllowAnonymous()` unless a shared
-fallback policy elsewhere in the host would otherwise require it (check
-`Program.cs`/`IAMConfig.RegisterServices` for any global
-`RequireAuthorization` default before assuming none is needed).
+Read `tasks/slices/026-shop-catalog.md` completely. Read B026's delivered
+`src/modules/shop/TenantForge.Modules.Shop/features/products/ProductsFeature.cs`
+(specifically its `LoadProductResponseAsync` helper) — this task's
+product-detail endpoint follows the same variant/size-guide-loading shape,
+just without `Sku` and using live stock instead of a saved snapshot (there
+is no snapshot in the catalog; "live" here simply means "read fresh from
+`ShopProductVariant.StockQuantity` on every request," which is already
+the only value that exists).
 
-Read `src/modules/iam/TenantForge.Modules.Iam/features/pagination/PaginationSupport.cs`
-again for the pagination-response shape this task's product-list endpoint
-reuses (via the Shop-owned equivalent B026 already created under
-`TenantForge.Modules.Shop/features/pagination/` — reuse that file, do not
-create a second copy).
+This task is the first to use the `/api/shop/{tenantId}/...` anonymous
+prefix. Minimal APIs are anonymous by default unless `.RequireAuthorization()`
+is called — do not call `.RequireAuthorization()` or `.AllowAnonymous()`
+on any endpoint in this task.
 
-This task only reads the tables B025 created and the rows B026's admin
-endpoints let a tenant owner populate; it defines no new table.
+This task only reads the tables B025 created; it defines no new table and
+adds no new file under `infrastructure/`.
 
-# Scope
+# Scope — every file, in order
 
-`features/storefront/StorefrontCatalogFeature.cs`:
+## 1. Response records
 
-1. `GET /api/shop/{tenantId}/categories` — every `ShopCategory` for the
-   tenant where `IsActive == true`, ordered by `DisplayOrder`. No
-   pagination (a boutique's category count is small; do not add pagination
-   metadata for a list that will realistically never need a second page —
-   revisit only if a real tenant's category count later proves this
-   wrong).
-2. `GET /api/shop/{tenantId}/categories/{categorySlug}/products` —
-   paginated list of `ShopProduct` rows where `IsActive == true` and
-   `CategoryId` matches the category resolved from `categorySlug` (itself
-   filtered to `IsActive == true` — an inactive category never exposes its
-   products publicly even if the product rows themselves are active).
-   Reuses the same pagination query-string convention (`pageNumber`,
-   `pageSize`) and response metadata shape as every existing paginated IAM
-   list (S15/B015).
-3. `GET /api/shop/{tenantId}/products/{productSlug}` — one active
-   product's full detail: its own fields, every variant (`Color`, `Size`,
-   `Sku` is admin-only and excluded from this public response, live
-   `StockQuantity`, effective price = `PriceOverride` if set otherwise
-   `BasePrice`), and its size-guide table (columns in `DisplayOrder`, rows
-   in `DisplayOrder` with each cell's value). A slug that does not resolve
-   to an active product for that tenant returns `404`, not an empty body.
-4. Every response type here is a new plain record inside
-   `TenantForge.Modules.Shop` (still no Contract project — same reasoning
-   as B026).
+**`src/modules/shop/TenantForge.Modules.Shop/features/storefront/StorefrontContracts.cs`:**
 
-# Non-goals
+```csharp
+namespace TenantForge.Modules.Shop.Features.Storefront;
 
-- No admin/authenticated endpoint (B026 already has those).
-- No `Sku` in the public product-detail response — it is an internal
-  inventory identifier, not customer-facing.
-- No inactive category/product/variant ever appears in any response from
-  this task, regardless of query parameters — there is no "show inactive"
-  toggle on the public API.
+public sealed record StorefrontCategoryResponse(string Id, string Name, string Slug, int DisplayOrder);
+
+public sealed record StorefrontCategoryListResponse(IReadOnlyList<StorefrontCategoryResponse> Categories);
+
+public sealed record StorefrontProductSummaryResponse(
+    string Id,
+    string Name,
+    string Slug,
+    decimal EffectivePrice,
+    decimal? CompareAtPrice);
+
+public sealed record StorefrontProductListResponse(
+    IReadOnlyList<StorefrontProductSummaryResponse> Products,
+    TenantForge.Modules.Shop.Features.Pagination.PaginationMetadata Pagination);
+
+public sealed record StorefrontVariantResponse(
+    string Id,
+    string Color,
+    string Size,
+    int StockQuantity,
+    decimal EffectivePrice);
+
+public sealed record StorefrontSizeGuideColumnResponse(string Id, string Name, int DisplayOrder);
+
+public sealed record StorefrontSizeGuideCellResponse(string ColumnId, string Value);
+
+public sealed record StorefrontSizeGuideRowResponse(
+    string SizeLabel,
+    int DisplayOrder,
+    IReadOnlyList<StorefrontSizeGuideCellResponse> Cells);
+
+public sealed record StorefrontProductDetailResponse(
+    string Id,
+    string CategoryId,
+    string Name,
+    string Slug,
+    string Description,
+    decimal BasePrice,
+    decimal? CompareAtPrice,
+    IReadOnlyList<StorefrontVariantResponse> Variants,
+    IReadOnlyList<StorefrontSizeGuideColumnResponse> SizeGuideColumns,
+    IReadOnlyList<StorefrontSizeGuideRowResponse> SizeGuideRows);
+```
+
+## 2. `src/modules/shop/TenantForge.Modules.Shop/features/storefront/StorefrontCatalogFeature.cs`
+
+```csharp
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using TSID.Creator.NET;
+using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.Pagination;
+using TenantForge.Modules.Shop.Infrastructure;
+
+namespace TenantForge.Modules.Shop.Features.Storefront;
+
+internal static class StorefrontCatalogFeature
+{
+    public static IEndpointRouteBuilder MapStorefrontCatalogFeature(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapGet("/api/shop/{tenantId}/categories", async (string tenantId, ShopDbContext db) =>
+        {
+            if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
+
+            var categories = await db.Categories.AsNoTracking()
+                .Where(category => category.TenantId == tenantTsid && category.IsActive)
+                .OrderBy(category => category.DisplayOrder)
+                .ThenBy(category => category.Id)
+                .Select(category => new StorefrontCategoryResponse(
+                    TsidId.Format(category.Id), category.Name, category.Slug, category.DisplayOrder))
+                .ToListAsync();
+
+            return Results.Ok(new StorefrontCategoryListResponse(categories));
+        });
+
+        endpoints.MapGet("/api/shop/{tenantId}/categories/{categorySlug}/products", async (
+            string tenantId,
+            string categorySlug,
+            HttpRequest request,
+            ShopDbContext db) =>
+        {
+            if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
+
+            if (!PaginationSupport.TryBind(request, out var page, out var errors))
+            {
+                return Results.ValidationProblem(errors);
+            }
+
+            var normalizedSlug = categorySlug.Trim().ToLowerInvariant();
+            var category = await db.Categories.AsNoTracking()
+                .SingleOrDefaultAsync(category =>
+                    category.TenantId == tenantTsid && category.Slug == normalizedSlug && category.IsActive);
+            if (category is null) return Results.NotFound();
+
+            var query = db.Products.AsNoTracking()
+                .Where(product => product.TenantId == tenantTsid && product.CategoryId == category.Id && product.IsActive)
+                .OrderBy(product => product.Name)
+                .ThenBy(product => product.Id);
+
+            var (products, pagination) = await PaginationSupport.PageAsync(query, page);
+            var summaries = products.Select(product => new StorefrontProductSummaryResponse(
+                TsidId.Format(product.Id),
+                product.Name,
+                product.Slug,
+                product.BasePrice,
+                product.CompareAtPrice)).ToList();
+
+            return Results.Ok(new StorefrontProductListResponse(summaries, pagination));
+        });
+
+        endpoints.MapGet("/api/shop/{tenantId}/products/{productSlug}", async (
+            string tenantId,
+            string productSlug,
+            ShopDbContext db) =>
+        {
+            if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
+
+            var normalizedSlug = productSlug.Trim().ToLowerInvariant();
+            var product = await db.Products.AsNoTracking()
+                .SingleOrDefaultAsync(product =>
+                    product.TenantId == tenantTsid && product.Slug == normalizedSlug && product.IsActive);
+            if (product is null) return Results.NotFound();
+
+            var variants = await db.ProductVariants.AsNoTracking()
+                .Where(variant => variant.ProductId == product.Id)
+                .OrderBy(variant => variant.Color).ThenBy(variant => variant.Size)
+                .Select(variant => new StorefrontVariantResponse(
+                    TsidId.Format(variant.Id),
+                    variant.Color,
+                    variant.Size,
+                    variant.StockQuantity,
+                    variant.PriceOverride ?? product.BasePrice))
+                .ToListAsync();
+
+            var columns = await db.SizeGuideColumns.AsNoTracking()
+                .Where(column => column.ProductId == product.Id)
+                .OrderBy(column => column.DisplayOrder)
+                .ToListAsync();
+
+            var rows = await db.SizeGuideRows.AsNoTracking()
+                .Where(row => row.ProductId == product.Id)
+                .OrderBy(row => row.DisplayOrder)
+                .ToListAsync();
+
+            var rowIds = rows.Select(row => row.Id).ToList();
+            var cells = await db.SizeGuideCells.AsNoTracking()
+                .Where(cell => rowIds.Contains(cell.RowId))
+                .ToListAsync();
+
+            var rowResponses = rows.Select(row => new StorefrontSizeGuideRowResponse(
+                row.SizeLabel,
+                row.DisplayOrder,
+                columns.Select(column =>
+                {
+                    var cell = cells.SingleOrDefault(c => c.RowId == row.Id && c.ColumnId == column.Id);
+                    return new StorefrontSizeGuideCellResponse(TsidId.Format(column.Id), cell?.Value ?? string.Empty);
+                }).ToList())).ToList();
+
+            var response = new StorefrontProductDetailResponse(
+                TsidId.Format(product.Id),
+                TsidId.Format(product.CategoryId),
+                product.Name,
+                product.Slug,
+                product.Description,
+                product.BasePrice,
+                product.CompareAtPrice,
+                variants,
+                columns.Select(column => new StorefrontSizeGuideColumnResponse(
+                    TsidId.Format(column.Id), column.Name, column.DisplayOrder)).ToList(),
+                rowResponses);
+
+            return Results.Ok(response);
+        });
+
+        return endpoints;
+    }
+}
+```
+
+## 3. Wire the feature into the composition seam
+
+Edit `src/modules/shop/TenantForge.Modules.Shop/ShopModule.cs`. B026 left
+`MapShopModule` as:
+
+```csharp
+    private static void MapShopModule(IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapCategoriesFeature();
+        endpoints.MapProductsFeature();
+    }
+```
+
+Change it to:
+
+```csharp
+    private static void MapShopModule(IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapCategoriesFeature();
+        endpoints.MapProductsFeature();
+        endpoints.MapStorefrontCatalogFeature();
+    }
+```
+
+Add the matching `using` at the top of the file:
+
+```csharp
+using TenantForge.Modules.Shop.Features.Storefront;
+```
+
+# If you get stuck
+
+**Confirming an endpoint is truly anonymous.** Run the same `curl`
+command with and without an `Authorization` header and confirm both get
+the same `200`/body — a real bug here would be a `401`/`403` appearing
+only because a shared host-level default policy caught the route.
+
+```bash
+curl http://localhost:5080/api/shop/<tenantId>/categories
+```
+
+Expected: `200 OK` with
+`{"categories":[{"id":"...","name":"پیراهن","slug":"shirts","displayOrder":1}]}`
+(using the category created in B026's manual test) — no `Authorization`
+header sent at all.
+
+```bash
+curl http://localhost:5080/api/shop/<tenantId>/products/classic-shirt
+```
+
+Expected: `200 OK` with the full `StorefrontProductDetailResponse` shape,
+including `variants` (each with live `stockQuantity` and `effectivePrice`)
+and the size-guide `sizeGuideRows`/`sizeGuideColumns` — no `sku` field
+anywhere in the response.
 
 # Acceptance
 
 - All three endpoints work without any `Authorization` header.
 - Inactive categories/products never appear, even when directly requested
   by slug (`404` for an inactive product's slug, exactly like a
-  nonexistent one — do not leak "it exists but is inactive" as a distinct
-  response).
-- Product detail returns live `StockQuantity` per variant (not a
-  snapshot) and the effective price (`PriceOverride` when set).
+  nonexistent one).
+- Product detail returns live `StockQuantity` per variant and the
+  effective price (`PriceOverride` when set, otherwise `BasePrice`); no
+  `Sku` field anywhere in the response.
 - Pagination on the category-products endpoint matches the existing
-  IAM pagination response shape (same field names/casing).
+  pagination response shape (same field names/casing as B026's).
 - Tenant isolation: a `{tenantId}` that does not match the product/
-  category's actual tenant never returns that product/category (proven
-  by a cross-tenant integration test, matching the isolation tests IAM's
-  own suite already has for its own resources).
+  category's actual tenant never returns that product/category.
 
 # Verification
 
@@ -108,13 +308,9 @@ slug (including size-guide table shape), 404 for an inactive/nonexistent
 slug, and cross-tenant isolation. The full existing IAM suite continues to
 pass unmodified.
 
-Manual:
-
-- With no `Authorization` header, call each of the three endpoints against
-  data created via B026's admin API in a prior manual step and confirm the
-  documented shapes.
-- Deactivate a product via B026's admin `PUT` and confirm its public
-  detail endpoint now returns `404`.
+Manual: the two `curl` calls under "If you get stuck" above, with no
+`Authorization` header; then deactivate the product via B026's admin
+`PUT` and confirm the same product-detail call now returns `404`.
 
 # Lifecycle
 

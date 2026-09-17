@@ -72,11 +72,16 @@ for S29 and is not registered here.
 - Order creation: given a cart id, address and coupon code (revalidated,
   not trusted from a client-supplied summary), atomically — inside one
   database transaction — snapshot the cart into a `ShopOrder`/
-  `ShopOrderItem` set, decrement each variant's `StockQuantity`, generate
-  `OrderNumber` and `TrackingCode`, and clear/close the cart (so it cannot
-  be checked out again). The transaction is the concurrency guard: a
-  second concurrent checkout against the same now-decremented stock must
-  fail cleanly (a clear "no longer available" response), never oversell.
+  `ShopOrderItem` set, generate `OrderNumber` and `TrackingCode`, and
+  clear/close the cart (so it cannot be checked out again). Stock is
+  **not** decremented again here: S27 already reserved it atomically at
+  add-to-cart time (each `ShopCartItem` holds a live claim on
+  `StockQuantity`), so order creation only consumes an already-reserved
+  claim. The concurrency guard this slice must still prove is a
+  double-order-creation race — two concurrent order-creation calls
+  against the *same already-closed cart* — where the transaction (closing
+  the cart is part of it) ensures exactly one succeeds and the other gets
+  a clean "already checked out" response, never a duplicate order.
 
 **B032 — depends on B031:**
 - `IShopPaymentGateway` abstraction and `SandboxPaymentGateway`.
@@ -111,8 +116,10 @@ for S29 and is not registered here.
 
 - `dotnet build TenantForge.sln --nologo` and the full integration suite
   pass after B031 and B032, including: a happy-path order creation, a
-  concurrent-checkout stock-race test (two orders racing the last unit of
-  stock — exactly one must succeed), a sandbox-approve flow reaching
+  double-order-creation race test (two concurrent order-creation calls for
+  the same cart — exactly one must succeed, the other must fail cleanly,
+  never a duplicate order or a double stock decrement), a sandbox-approve
+  flow reaching
   `Paid`, and a sandbox-decline flow leaving the order in `PendingPayment`
   with a `Failed` payment attempt.
 - `npm run build` and `npm run lint` in `src/web/` pass after F038/F039.
