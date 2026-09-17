@@ -30,8 +30,9 @@ app.UseCors();
 // every IAM endpoint. The host does not call any of those steps separately.
 await app.UseIamModuleAsync();
 
-// Shop activation owns: configuration validation (fail closed) and pending
-// migrations. It maps no endpoint yet (B025 has none).
+// Shop activation owns: configuration validation (fail closed), pending
+// migrations, and mapping every Shop endpoint (the tenant-scoped catalog
+// admin routes from B026).
 await app.UseShopModuleAsync();
 
 app.MapHealth();

@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TenantForge.BuildingBlocks.Modules;
+using TenantForge.Modules.Shop.Features.Categories;
+using TenantForge.Modules.Shop.Features.Products;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop;
@@ -24,9 +27,10 @@ public static class ShopModule
     }
 
     /// <summary>
-    /// Activation phase: mirrors IamModule.UseIamModuleAsync. This task adds
-    /// only configuration validation (fail closed) and pending migrations —
-    /// there is no endpoint to map and no seed step yet.
+    /// Activation phase: mirrors IamModule.UseIamModuleAsync. Owns, in
+    /// deterministic order: configuration validation (fail closed), pending
+    /// migrations, and mapping every Shop endpoint. There is no seed step
+    /// (B025 decided against seed data for the catalog).
     /// </summary>
     public static async Task UseShopModuleAsync(this WebApplication app)
     {
@@ -35,6 +39,14 @@ public static class ShopModule
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ShopDbContext>();
         await db.Database.MigrateAsync();
+
+        MapShopModule(app);
+    }
+
+    private static void MapShopModule(IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapCategoriesFeature();
+        endpoints.MapProductsFeature();
     }
 
     private static void ValidateShopModuleConfiguration(IHostEnvironment environment, IConfiguration configuration)
