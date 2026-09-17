@@ -106,6 +106,8 @@ one valid Spec link.
 | B027 | S26 | Public storefront catalog read API | done | B026 | — |
 | B028 | S27 | Cart persistence and API | done | B027 | — |
 | B029 | S28 | Shipping-rate and coupon admin API | planned | B026 | [tasks/backend/B029-shipping-rate-and-coupon-admin-api.md](backend/B029-shipping-rate-and-coupon-admin-api.md) |
+| B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
+| B029 | S28 | Shipping-rate and coupon admin API | done | B026 | — |
 | B030 | S28 | Checkout API | planned | B028, B029 | [tasks/backend/B030-checkout-summary-api.md](backend/B030-checkout-summary-api.md) |
 | B031 | S29 | Order creation API | planned | B030 | [tasks/backend/B031-order-creation-api.md](backend/B031-order-creation-api.md) |
 | B032 | S29 | Sandbox payment API | planned | B031 | [tasks/backend/B032-sandbox-payment-api.md](backend/B032-sandbox-payment-api.md) |

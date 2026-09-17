@@ -187,6 +187,25 @@ public sealed class ShopStorefrontIsolatedCollection : ICollectionFixture<ShopSt
 }
 
 /// <summary>
+/// A dedicated database for B029's tenant-scoped shipping-rate and coupon
+/// admin tests. Kept off the shared main database (so IAM row-count
+/// assumptions stay stable) and off the other Shop test databases (so their
+/// row-count assertions stay stable). The tests run as a real tenant owner's
+/// JWT through B026's ShopAuthorization raw-SQL membership check.
+/// </summary>
+public sealed class ShopShippingCouponDbFixture : IamDbFixtureBase
+{
+    public ShopShippingCouponDbFixture() : base("tenantforge_shop_shipping_coupon_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopShippingCouponIsolatedCollection))]
+public sealed class ShopShippingCouponIsolatedCollection : ICollectionFixture<ShopShippingCouponDbFixture>
+{
+}
+
+/// <summary>
 /// A dedicated database for B028's anonymous cart tests. Kept off the shared
 /// main database (so IAM row-count assumptions stay stable) and off the B026
 /// admin / B027 storefront databases (so their row-count and catalog
