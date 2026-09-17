@@ -102,7 +102,7 @@ one valid Spec link.
 | B023 | S23 | Move roles, invitations and audit contract types, then lock the IAM Contract project's exported surface | done | B022 | — |
 | B024 | S24 | Create a living IAM Contract knowledge and admission guide | done | B023 | — |
 | B025 | S26 | Shop module persistence and skeleton | done | — | — |
-| B026 | S26 | Category and product admin API | planned | B025 | [tasks/backend/B026-category-and-product-admin-api.md](backend/B026-category-and-product-admin-api.md) |
+| B026 | S26 | Category and product admin API | done | B025 | — |
 | B027 | S26 | Public storefront catalog read API | planned | B026 | [tasks/backend/B027-public-storefront-catalog-api.md](backend/B027-public-storefront-catalog-api.md) |
 | B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
 | B029 | S28 | Shipping-rate and coupon admin API | planned | B026 | [tasks/backend/B029-shipping-rate-and-coupon-admin-api.md](backend/B029-shipping-rate-and-coupon-admin-api.md) |

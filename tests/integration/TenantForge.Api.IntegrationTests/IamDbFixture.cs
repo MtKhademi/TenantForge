@@ -148,3 +148,21 @@ public sealed class ShopDbFixture : IamDbFixtureBase
 public sealed class ShopIsolatedCollection : ICollectionFixture<ShopDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B026's catalog-admin endpoint tests. Kept off the
+/// shared main database (so IAM row-count assumptions stay stable) and off the
+/// B025 composition-seam database (so those table/history assertions stay
+/// stable).
+/// </summary>
+public sealed class ShopAdminDbFixture : IamDbFixtureBase
+{
+    public ShopAdminDbFixture() : base("tenantforge_shop_admin_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopAdminIsolatedCollection))]
+public sealed class ShopAdminIsolatedCollection : ICollectionFixture<ShopAdminDbFixture>
+{
+}
