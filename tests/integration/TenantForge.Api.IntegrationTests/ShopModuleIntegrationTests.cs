@@ -12,6 +12,11 @@ namespace TenantForge.Api.IntegrationTests;
 /// Protects the Shop module's persistence skeleton and two-method composition
 /// seam introduced by B025. These tests prove the startup contract: a missing
 /// Shop:ShopDb fails closed, a set Shop:ShopDb applies exactly the Shop-owned
+/// tables plus a Shop-owned migration history table, and a restart against the
+/// same database is a no-op. ExpectedShopTables is the complete, exact set of
+/// Shop tables currently on main: every task that adds a Shop table must add
+/// it here in the same change (B025: the six catalog tables; B029:
+/// shop_shipping_rates and shop_coupons).
 /// tables (the six B025 catalog tables plus the two B028 cart tables) and a
 /// Shop-owned migration history table, and a restart against the same
 /// database is a no-op. ExpectedShopTables is the complete, exact set of
@@ -35,7 +40,9 @@ public sealed class ShopModuleIntegrationTests(ShopDbFixture db)
         "shop_size_guide_cells",
         "shop_size_guide_columns",
         "shop_size_guide_rows",
-        "shop_carts",
+        "shop_shipping_rates",
+        "shop_coupons",
+                "shop_carts",
         "shop_cart_items"
     ];
 

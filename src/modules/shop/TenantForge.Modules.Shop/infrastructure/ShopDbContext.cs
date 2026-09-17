@@ -11,6 +11,8 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
     internal DbSet<ShopSizeGuideColumn> SizeGuideColumns => Set<ShopSizeGuideColumn>();
     internal DbSet<ShopSizeGuideRow> SizeGuideRows => Set<ShopSizeGuideRow>();
     internal DbSet<ShopSizeGuideCell> SizeGuideCells => Set<ShopSizeGuideCell>();
+    internal DbSet<ShopShippingRate> ShippingRates => Set<ShopShippingRate>();
+    internal DbSet<ShopCoupon> Coupons => Set<ShopCoupon>();
     internal DbSet<ShopCart> Carts => Set<ShopCart>();
     internal DbSet<ShopCartItem> CartItems => Set<ShopCartItem>();
 
@@ -22,6 +24,8 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
         modelBuilder.ApplyConfiguration(new ShopSizeGuideColumnMap());
         modelBuilder.ApplyConfiguration(new ShopSizeGuideRowMap());
         modelBuilder.ApplyConfiguration(new ShopSizeGuideCellMap());
+        modelBuilder.ApplyConfiguration(new ShopShippingRateMap());
+        modelBuilder.ApplyConfiguration(new ShopCouponMap());
         modelBuilder.ApplyConfiguration(new ShopCartMap());
         modelBuilder.ApplyConfiguration(new ShopCartItemMap());
     }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TenantForge.Modules.Shop.Infrastructure;
@@ -11,9 +12,11 @@ using TenantForge.Modules.Shop.Infrastructure;
 namespace TenantForge.Modules.Shop.infrastructure.Migrations
 {
     [DbContext(typeof(ShopDbContext))]
-    partial class ShopDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260917173716_AddShopShippingRatesAndCoupons")]
+    partial class AddShopShippingRatesAndCoupons
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,62 +24,6 @@ namespace TenantForge.Modules.Shop.infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("TenantForge.Modules.Shop.Domain.ShopCart", b =>
-                {
-                    b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    b.Property<long?>("CouponId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("coupon_id");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<long>("TenantId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("shop_carts", (string)null);
-                });
-
-            modelBuilder.Entity("TenantForge.Modules.Shop.Domain.ShopCartItem", b =>
-                {
-                    b.Property<long>("Id")
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    b.Property<long>("CartId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("cart_id");
-
-                    b.Property<long>("ProductVariantId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("product_variant_id");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("quantity");
-
-                    b.Property<decimal>("UnitPriceSnapshot")
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("unit_price_snapshot");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductVariantId");
-
-                    b.HasIndex("CartId", "ProductVariantId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_shop_cart_items_cart_variant");
-
-                    b.ToTable("shop_cart_items", (string)null);
-                });
 
             modelBuilder.Entity("TenantForge.Modules.Shop.Domain.ShopCategory", b =>
                 {
@@ -381,21 +328,6 @@ namespace TenantForge.Modules.Shop.infrastructure.Migrations
                         .HasDatabaseName("ix_shop_size_guide_rows_product_id");
 
                     b.ToTable("shop_size_guide_rows", (string)null);
-                });
-
-            modelBuilder.Entity("TenantForge.Modules.Shop.Domain.ShopCartItem", b =>
-                {
-                    b.HasOne("TenantForge.Modules.Shop.Domain.ShopCart", null)
-                        .WithMany()
-                        .HasForeignKey("CartId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TenantForge.Modules.Shop.Domain.ShopProductVariant", null)
-                        .WithMany()
-                        .HasForeignKey("ProductVariantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("TenantForge.Modules.Shop.Domain.ShopProduct", b =>

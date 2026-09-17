@@ -9,6 +9,8 @@ using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Features.Categories;
 using TenantForge.Modules.Shop.Features.Products;
 using TenantForge.Modules.Shop.Features.Storefront;
+using TenantForge.Modules.Shop.Features.Coupons;
+using TenantForge.Modules.Shop.Features.Shipping;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop;
@@ -50,6 +52,8 @@ public static class ShopModule
         endpoints.MapCategoriesFeature();
         endpoints.MapProductsFeature();
         endpoints.MapStorefrontCatalogFeature();
+        endpoints.MapShippingRatesFeature();
+        endpoints.MapCouponsFeature();
         endpoints.MapCartsFeature();
     }
 
