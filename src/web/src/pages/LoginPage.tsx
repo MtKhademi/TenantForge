@@ -74,7 +74,7 @@ export function LoginPage() {
 
   return (
     <main className="grid min-h-screen bg-background text-foreground lg:grid-cols-[minmax(0,1fr)_minmax(31rem,0.78fr)]">
-      <section className="relative flex min-h-[42vh] items-center overflow-hidden border-b border-border bg-sidebar px-6 py-10 lg:min-h-screen lg:border-b-0 lg:border-e lg:px-10">
+      <section className="relative flex min-h-[42vh] order-2 items-center overflow-hidden border-b border-border bg-sidebar px-6 py-10 lg:order-1 lg:min-h-screen lg:border-b-0 lg:border-e lg:px-10">
         <div className="absolute inset-0 bg-[linear-gradient(135deg,transparent_0%,transparent_55%,color-mix(in_oklch,var(--primary)_13%,transparent)_55%,transparent_82%)]" />
         <div className="relative mx-auto w-full max-w-2xl">
           <div className="mb-10 flex items-center gap-3">
@@ -95,7 +95,7 @@ export function LoginPage() {
         </div>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-10 md:px-8">
+      <section className="order-1 flex items-center justify-center px-5 py-10 md:px-8 lg:order-2">
         <div className="w-full max-w-md">
           <div className="mb-8 flex items-center justify-between">
             <div>
@@ -170,7 +170,7 @@ export function LoginPage() {
           </form>
 
           {import.meta.env.DEV && (
-            <div className="mt-5 rounded-lg border border-border bg-surface-elevated p-4 text-sm text-muted-foreground">
+            <div className="mt-5 rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
               <p className="font-semibold text-foreground">حساب توسعه مستندشده</p>
               <p className="mt-2"><span className="font-medium text-foreground">ایمیل:</span> <bdi>{developmentAdministratorCredentials.email}</bdi></p>
               <p><span className="font-medium text-foreground">رمز عبور:</span> <bdi>{developmentAdministratorCredentials.password}</bdi></p>
