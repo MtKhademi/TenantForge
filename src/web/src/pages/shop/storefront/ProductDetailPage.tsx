@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
-import { mockStorefrontCart } from '@/features/shop/mockStorefrontCartState'
+import { cartAdapter } from '@/features/shop/cartAdapter'
 import { storefrontAdapter } from '@/features/shop/storefrontAdapter'
 import type { StorefrontProductDetail } from '@/features/shop/storefrontTypes'
 import { cn } from '@/lib/utils'
@@ -17,7 +17,8 @@ import { cn } from '@/lib/utils'
  * selectors reflect each combination's own live stock; the quantity stepper
  * never exceeds the selected variant's stock; the size-guide table renders
  * only when the product has one (absent otherwise, never an empty table);
- * add-to-cart writes to `mockStorefrontCart` (F032 builds the cart page).
+ * add-to-cart calls B028's real cart API through `cartAdapter` (F033),
+ * persisting the cart id in localStorage across page loads.
  */
 export function ProductDetailPage() {
   const { tenantId = '', productSlug = '' } = useParams<{ tenantId: string; productSlug: string }>()
@@ -125,19 +126,6 @@ export function ProductDetailPage() {
         />
       </section>
     )
-  }
-
-  function addToCart() {
-    if (!selectedVariant) return
-    mockStorefrontCart.addLine({
-      variantId: selectedVariant.id,
-      productName: product!.name,
-      variantLabel: `${selectedVariant.color} / ${selectedVariant.size}`,
-      unitPrice: selectedVariant.effectivePrice,
-      quantity,
-      imageUrl: '',
-    })
-    setAddedMessage('به سبد خرید افزوده شد.')
   }
 
   return (
@@ -279,7 +267,15 @@ export function ProductDetailPage() {
             type="button"
             className="w-full"
             disabled={!selectedVariant || soldOut}
-            onClick={addToCart}
+            onClick={async () => {
+              if (!selectedVariant) return
+              try {
+                await cartAdapter.addItem(tenantId, selectedVariant.id, quantity)
+                setAddedMessage('به سبد خرید افزوده شد.')
+              } catch (error) {
+                setAddedMessage(error instanceof Error ? error.message : 'افزودن به سبد خرید ممکن نشد.')
+              }
+            }}
           >
             <ShoppingCart aria-hidden="true" className="me-2 size-4" />
             افزودن به سبد خرید

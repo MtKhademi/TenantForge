@@ -1,7 +1,7 @@
 import { ShoppingCart } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, Outlet, useParams } from 'react-router-dom'
-import { mockStorefrontCart } from '@/features/shop/mockStorefrontCartState'
+import { Link, Outlet, useLocation, useParams } from 'react-router-dom'
+import { cartAdapter } from '@/features/shop/cartAdapter'
 
 /**
  * S26 storefront (F030): a minimal public layout, deliberately separate from
@@ -10,16 +10,33 @@ import { mockStorefrontCart } from '@/features/shop/mockStorefrontCartState'
  * `ProtectedLayout` in `App.tsx`. It reuses only the design tokens in
  * `index.css` and the shared `ui/` primitives.
  *
- * The cart control is a live count badge driven by `mockStorefrontCart` (F032
- * builds the cart page the link points to; F031 swaps the data source).
+ * The cart control is a count badge fed by the real cart API (F033). Since
+ * F033 replaced the in-memory mock store with `cartAdapter`, there is no
+ * synchronous subscription anymore: the count is re-fetched on mount and
+ * whenever the route changes (e.g. after adding to cart on the product
+ * detail page), so it is always fresh on the page the visitor lands on.
  */
 export function StorefrontLayout() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
-  const [itemCount, setItemCount] = useState(mockStorefrontCart.itemCount())
+  const location = useLocation()
+  const [itemCount, setItemCount] = useState(0)
 
   useEffect(() => {
-    return mockStorefrontCart.subscribe(() => setItemCount(mockStorefrontCart.itemCount()))
-  }, [])
+    let cancelled = false
+    void cartAdapter
+      .getCart(tenantId)
+      .then((cart) => {
+        if (!cancelled) setItemCount(cart ? cart.items.reduce((sum, item) => sum + item.quantity, 0) : 0)
+      })
+      .catch(() => {
+        // The badge is decorative weight only; an unreachable API must not
+        // break storefront navigation, so the count simply stays at 0.
+        if (!cancelled) setItemCount(0)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId, location.pathname])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
