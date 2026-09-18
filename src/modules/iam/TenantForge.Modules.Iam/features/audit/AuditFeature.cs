@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Pagination;
@@ -24,9 +25,9 @@ internal static class AuditFeature
 
     public static IEndpointRouteBuilder MapAuditFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/tenants/{tenantId}/audit", async (string tenantId, string? action, string? fromUtc, HttpRequest request, System.Security.Claims.ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/tenants/{tenantId}/audit", async (string tenantId, string? action, string? fromUtc, HttpRequest request, System.Security.Claims.ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
-            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.AuditViewPermission);
+            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, catalog, RolesFeature.AuditViewPermission);
             if (auth.Result is not null) return auth.Result;
             if (!PaginationSupport.TryBind(request, out var page, out var paginationErrors))
             {

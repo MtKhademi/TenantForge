@@ -7,8 +7,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using TenantForge.BuildingBlocks.Modules;
+using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Iam.Domain;
 using TenantForge.Modules.Iam.Features.Login;
+using TenantForge.Modules.Iam.Features.Roles;
 using TenantForge.Modules.Iam.Infrastructure;
 
 namespace TenantForge.Modules.Iam;
@@ -87,6 +89,9 @@ public sealed class IAMConfig : IModuleConfig
         // JwtIssuer only depends on the singleton AuthOptions, so it stays a
         // singleton.
         services.AddSingleton<JwtIssuer>();
+
+        // B034: IAM's own contribution to the shared permission catalog.
+        services.AddSingleton<IPermissionCatalogContributor, IamPermissionCatalogContributor>();
     }
 
     public void ValidateConfiguration(IHostEnvironment environment, IConfiguration configuration)

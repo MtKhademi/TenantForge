@@ -56,7 +56,7 @@ not a preference for central placement.
 | Target framework | `net10.0` |
 | Allowed project-reference direction | A module may reference BuildingBlocks; BuildingBlocks references no TenantForge project — see [Section 3](#3-dependency-rule) |
 | Direct framework/package dependencies | `FrameworkReference Microsoft.AspNetCore.App`; `PackageReference TSID.Creator.NET` (pinned `1.0.0`) |
-| Exported public production type count | 2 — verified by `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` |
+| Exported public production type count | 7 — verified by `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` |
 | Current consuming projects | `TenantForge.Modules.Iam` and `TenantForge.Modules.Shop` (one `ProjectReference` each) |
 | Architecture test location | `tests/integration/TenantForge.Api.IntegrationTests/BuildingBlocksArchitectureTests.cs` |
 | Handbook update declarations | `BuildingBlocks docs impact: updated — <sections/types>` / `BuildingBlocks docs impact: none — <specific reason>` — see [Section 12](#12-change-impact-checklist) |
@@ -125,6 +125,11 @@ One row per public production type exported by the compiled assembly
 | --- | --- | --- | --- | --- | --- | --- |
 | `IModuleConfig` | `TenantForge.BuildingBlocks.Modules.IModuleConfig` (`src/building-blocks/TenantForge.BuildingBlocks/Modules/IModuleConfig.cs`) | Module registration/validation contract composed by the API host | `IAMConfig : IModuleConfig` (`src/modules/iam/TenantForge.Modules.Iam/IAMConfig.cs`) consumed through `IamModule.AddIamModule`/`UseIamModuleAsync`, and `ShopConfig : IModuleConfig` (`src/modules/shop/TenantForge.Modules.Shop/ShopConfig.cs`) consumed through `ShopModule.AddShopModule`/`UseShopModuleAsync` | `Microsoft.Extensions.Configuration`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Hosting` (framework abstractions only) | `BuildingBlocksArchitectureTests.MovedContracts_LiveInBuildingBlocksAssembly`, `IamModuleCompositionSurfaceTests.*` | High — every module implementation and the API composition call depend on the exact three members |
 | `TsidId` | `TenantForge.BuildingBlocks.Identifiers.TsidId` (`src/building-blocks/TenantForge.BuildingBlocks/Identifiers/TsidId.cs`) | System-wide public identifier seam: generate/format/parse the canonical 13-character TSID string | Every IAM entity/feature that generates or parses a public identifier (`src/modules/iam/TenantForge.Modules.Iam/**`), every Shop domain entity (`src/modules/shop/TenantForge.Modules.Shop/domain/**`), and every integration test that asserts identifier shape | `TSID.Creator.NET` (`Tsid`, `TsidCreator`) | `TsidIdTests.cs` (13 tests), `BuildingBlocksArchitectureTests.MovedContracts_LiveInBuildingBlocksAssembly` | High — HTTP/JWT identifier shape and PostgreSQL `bigint` round-trip both depend on this exact format/parse behavior |
+| `PermissionDescriptor` | `TenantForge.BuildingBlocks.Permissions.PermissionDescriptor` (`src/building-blocks/TenantForge.BuildingBlocks/Permissions/PermissionDescriptor.cs`) | One permission key a module owns (key/label/description/kind) — the cross-module in-memory shape, mirroring IAM Contract's `PermissionResponse` field-for-field | `IamPermissionCatalogContributor` (`src/modules/iam/TenantForge.Modules.Iam/features/roles/IamPermissionCatalogContributor.cs`) as the sole contributor today, consumed through the `IAggregatedPermissionCatalog` injected into `RolesFeature.MapRolesFeature`; B035's `ShopPermissionCatalogContributor` is the next, already-planned second contributor | none (plain records/interfaces) | `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` | High — `RolesFeature.ToResponseGroups` maps these fields onto the IAM wire shape and the UI permission matrix renders them, so a field change ripples into the catalog contract |
+| `PermissionGroup` | `TenantForge.BuildingBlocks.Permissions.PermissionGroup` (`src/building-blocks/TenantForge.BuildingBlocks/Permissions/PermissionGroup.cs`) | One named group of `PermissionDescriptor`s a module owns, mirroring IAM Contract's `PermissionGroupResponse` field-for-field | Same consumer path as `PermissionDescriptor` (sole contributor `IamPermissionCatalogContributor`; B035's Shop contributor next) | none (plain records/interfaces) | `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` | High — the catalog endpoint's `groups` structure and the role editor's rendering depend on the exact id/label/description/permissions fields |
+| `IPermissionCatalogContributor` | `TenantForge.BuildingBlocks.Permissions.IPermissionCatalogContributor` (`src/building-blocks/TenantForge.BuildingBlocks/Permissions/IPermissionCatalogContributor.cs`) | One method, `GetPermissionGroups()`; implemented once per module that owns permission keys and registered in that module's own `RegisterServices`, so the API host discovers every contributor without any module referencing another | `IamPermissionCatalogContributor` (sole contributor today, registered in `IAMConfig.RegisterServices`); B035's `ShopPermissionCatalogContributor` (in `ShopConfig.RegisterServices`) is the next, already-planned contributor | none (plain records/interfaces) | `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` | High — the method signature is the cross-module seam; changing it breaks every module contributor implementation and the aggregator |
+| `IAggregatedPermissionCatalog` | `TenantForge.BuildingBlocks.Permissions.IAggregatedPermissionCatalog` (`src/building-blocks/TenantForge.BuildingBlocks/Permissions/IAggregatedPermissionCatalog.cs`) | The union of every registered contributor's groups (`AllGroups`) and known keys (`AllKnownKeys`), computed once at startup | Consumed through the `IAggregatedPermissionCatalog` injected into `RolesFeature.MapRolesFeature` (catalog endpoint, role-permission validation, resolved-permission union), built by the API host's factory registration in `src/api/TenantForge.Api/Program.cs`; B035 extends the contributor set it aggregates | none (plain records/interfaces) | `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` | High — `AllKnownKeys` gates the "Select only known permission keys." validation and the owner/role permission-resolution union; member changes break `RolesFeature` and the host factory |
+| `AggregatedPermissionCatalog` | `TenantForge.BuildingBlocks.Permissions.AggregatedPermissionCatalog` (`src/building-blocks/TenantForge.BuildingBlocks/Permissions/AggregatedPermissionCatalog.cs`) | The one, trivial, eager-flattening implementation: unions every registered contributor's groups and keys exactly once, in the constructor (contributors are startup-fixed singletons) | The API host (`src/api/TenantForge.Api/Program.cs`) registers the singleton factory over every `IPermissionCatalogContributor` | none (plain records/interfaces) | `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` | Medium — single trivial implementation; the constructor signature is consumed only by the host's factory registration |
 
 No other public production type is exported. If delivered code ever adds a
 third exported type without updating this table, that is a documentation
@@ -293,6 +298,20 @@ by a type that both modules actually use today, not by a third module that
 "might" adopt it. A type that only one module consumes today stays in that
 module (as Shop's own `TsidValueConverter` does, mirroring IAM's).
 
+Completed evidence — `Permissions` catalog contract (B034/S31):
+
+| Evidence | Answer |
+| --- | --- |
+| Problem | IAM's own hardcoded catalog structurally blocks a second module from ever registering a permission key, and there is no shared shape to fix that from a business module without a false module→module reference. |
+| Consumers | IAM (this task, migrated with zero behavior change) and Shop (B035, immediately next). |
+| Ownership | No business module should own another module's permission keys. |
+| Minimal API | 4 plain records/interfaces + 1 trivial aggregator, nothing else. |
+| Dependencies | None new. |
+| Compatibility | Additive; IAM's own wire response shape (`PermissionCatalogResponse`) is unchanged, only its source is. |
+| Security | A module's own known-keys set still gates its own endpoints; the aggregate only unions labels/keys for the catalog and for `AllKnownKeys` membership checks, never bypasses any module's own authorization. |
+| Tests | `BuildingBlocksArchitectureTests.BuildingBlocks_ExportsOnlyTheApprovedProductionTypes` plus the full existing IAM integration suite, unmodified and passing. |
+| Alternatives | Keeping it IAM-local was tried; it is what caused the structural block this task fixes. |
+
 ## 8. Explicit exclusions
 
 Post-B018 exclusions and their current owners — each stays in IAM for a
@@ -305,7 +324,7 @@ concrete reason, not a promise of future extraction:
 | `IAMConfig` and its options (`AuthOptions`, `SeedAdminOptions`, `JwtBearerSigningKeyOptions`) | `src/modules/iam/TenantForge.Modules.Iam/IAMConfig.cs` and `features/login/` | Module-specific configuration implementation and options; only `IModuleConfig` itself is the shared contract |
 | Authentication/JWT (`JwtIssuer`, `JwtConstants`, `AccountCredentialChecker`) | `src/modules/iam/TenantForge.Modules.Iam/features/login/` | IAM-owned business/security behavior, not a cross-module primitive |
 | Seeding (`PlatformAdminSeeder`) | `src/modules/iam/TenantForge.Modules.Iam/features/login/` | IAM-specific startup behavior |
-| Permission catalog and tenant authorization (`RolesFeature`, `AuthorizationPolicyNames`) | `src/modules/iam/TenantForge.Modules.Iam/features/roles/`, `src/modules/iam/TenantForge.Modules.Iam/AuthorizationPolicyNames.cs` | IAM business/domain rules, not infrastructure-neutral |
+| Tenant authorization and endpoint logic (RolesFeature's handlers, AuthorizationPolicyNames) — the permission-group/descriptor *shape* itself is now shared, see Section 4 | `src/modules/iam/TenantForge.Modules.Iam/features/roles/`, `src/modules/iam/TenantForge.Modules.Iam/AuthorizationPolicyNames.cs` | IAM business/domain rules, not infrastructure-neutral |
 | Entities, DTOs, features and migrations | `src/modules/iam/TenantForge.Modules.Iam/domain/`, `features/**`, `infrastructure/Migrations/` | Module business/domain and schema history — never a BuildingBlocks concern |
 | API health/CORS/startup host behavior | `src/api/TenantForge.Api/Program.cs`, `src/api/TenantForge.Api/HealthEndpoints.cs` | Host-composition behavior, not a module or cross-module contract |
 
@@ -397,3 +416,8 @@ BuildingBlocks docs impact: none — <specific reason>
 A vague "docs not needed" does not satisfy this gate. Cross-check a shared
 TSID or module-config change against `docs/modules/IAM.md` as well, since IAM
 is the current consumer of both contracts.
+
+B034/S31 declaration:
+`BuildingBlocks docs impact: updated — Sections 2, 4, 7, 8 (5 new Permissions
+types; narrowed the RolesFeature/AuthorizationPolicyNames exclusion;
+admission evidence recorded).`

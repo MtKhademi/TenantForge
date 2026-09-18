@@ -31,7 +31,12 @@ public sealed class BuildingBlocksArchitectureTests
 
         Assert.Equal([
             "TenantForge.BuildingBlocks.Identifiers.TsidId",
-            "TenantForge.BuildingBlocks.Modules.IModuleConfig"
+            "TenantForge.BuildingBlocks.Modules.IModuleConfig",
+            "TenantForge.BuildingBlocks.Permissions.AggregatedPermissionCatalog",
+            "TenantForge.BuildingBlocks.Permissions.IAggregatedPermissionCatalog",
+            "TenantForge.BuildingBlocks.Permissions.IPermissionCatalogContributor",
+            "TenantForge.BuildingBlocks.Permissions.PermissionDescriptor",
+            "TenantForge.BuildingBlocks.Permissions.PermissionGroup"
         ], exportedTypes);
     }
 

@@ -1,4 +1,5 @@
 using TenantForge.Api;
+using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Iam;
 using TenantForge.Modules.Shop;
 
@@ -19,6 +20,12 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddIamModule(builder.Environment);
 builder.Services.AddShopModule(builder.Environment);
+
+// B034: one aggregate built from every registered IPermissionCatalogContributor
+// (today: IAM's own; B035 adds Shop's). Registered after both modules'
+// RegisterServices calls so every contributor is already in the container.
+builder.Services.AddSingleton<IAggregatedPermissionCatalog>(sp =>
+    new AggregatedPermissionCatalog(sp.GetServices<IPermissionCatalogContributor>()));
 
 var app = builder.Build();
 
