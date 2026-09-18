@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Iam.Contract.Requests;
 using TenantForge.Modules.Iam.Contract.Responses;
 using TenantForge.Modules.Iam.Domain;
@@ -20,9 +21,9 @@ internal static class InvitationsFeature
 
     public static IEndpointRouteBuilder MapInvitationsFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/tenants/{tenantId}/invitations", async (string tenantId, HttpRequest request, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/tenants/{tenantId}/invitations", async (string tenantId, HttpRequest request, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
-            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.InvitationsViewPermission);
+            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, catalog, RolesFeature.InvitationsViewPermission);
             if (auth.Result is not null) return auth.Result;
             if (!PaginationSupport.TryBind(request, out var page, out var errors))
             {
@@ -42,9 +43,9 @@ internal static class InvitationsFeature
             return Results.Ok(new InvitationListResponse(invitations, pagination));
         }).RequireAuthorization();
 
-        endpoints.MapPost("/api/tenants/{tenantId}/invitations", async (string tenantId, CreateInvitationRequest request, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapPost("/api/tenants/{tenantId}/invitations", async (string tenantId, CreateInvitationRequest request, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
-            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, RolesFeature.InvitationsCreatePermission);
+            var auth = await RolesFeature.AuthorizeTenantAccessAsync(tenantId, principal, db, catalog, RolesFeature.InvitationsCreatePermission);
             if (auth.Result is not null) return auth.Result;
 
             var errors = Validate(request);

@@ -98,6 +98,12 @@ same registration-before-`Build` / activation-after-`Build` order:
 builder.Services.AddIamModule(builder.Environment);
 builder.Services.AddShopModule(builder.Environment);
 
+// B034: one aggregate built from every registered IPermissionCatalogContributor
+// (today: IAM's own; B035 adds Shop's). Registered after both modules'
+// RegisterServices calls so every contributor is already in the container.
+builder.Services.AddSingleton<IAggregatedPermissionCatalog>(sp =>
+    new AggregatedPermissionCatalog(sp.GetServices<IPermissionCatalogContributor>()));
+
 var app = builder.Build();
 
 await app.UseIamModuleAsync();
@@ -149,7 +155,7 @@ details — it only calls the two `IamModule` methods above.
 | Platform users | `src/modules/iam/TenantForge.Modules.Iam/features/users/` | `UsersFeature` (the `CreateUserRequest`/`UsersListResponse`/`UserResponse` records now live in `TenantForge.Modules.Iam.Contract`; `UserResponse.FromAccount` stays here as a module-owned mapper because it references the internal `Account` entity) |
 | Platform tenants | `src/modules/iam/TenantForge.Modules.Iam/features/tenants/` | `TenantsFeature` (the `CreateTenantRequest`/`TenantListResponse`/`TenantSummaryResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
 | Tenant members | `src/modules/iam/TenantForge.Modules.Iam/features/tenantmembers/` | `TenantMembersFeature` (the `TenantMembersResponse`/`TenantContextResponse`/`TenantMemberResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
- | Roles/permissions | `src/modules/iam/TenantForge.Modules.Iam/features/roles/` | `RolesFeature` (catalog data, CRUD, assignment, resolved permissions, `AuthorizeTenantAccessAsync`; the handler-only records `TenantAccess`/`ActorSnapshot`/`AssignmentValidation`/`RemovedAssignment` stay here). The nine contract records (`CreateRoleRequest`/`UpdateRoleRequest`/`PermissionCatalogResponse`/`PermissionGroupResponse`/`PermissionResponse`/`TenantRolesResponse`/`PagedTenantRolesResponse`/`TenantRoleResponse`/`ResolvedPermissionsResponse`) now live in `TenantForge.Modules.Iam.Contract` |
+ | Roles/permissions | `src/modules/iam/TenantForge.Modules.Iam/features/roles/` | `RolesFeature` (CRUD, assignment, resolved permissions, `AuthorizeTenantAccessAsync`; the handler-only records `TenantAccess`/`ActorSnapshot`/`AssignmentValidation`/`RemovedAssignment` stay here) and `IamPermissionCatalogContributor` (IAM's own `IPermissionCatalogContributor`: the 3 permission groups that used to be hardcoded in `RolesFeature`, now registered in `IAMConfig.RegisterServices` and mapped to the Contract wire shape by `RolesFeature.ToResponseGroups` at the catalog endpoint — see [Section 10](#10-authorization-and-tenant-isolation)). The nine contract records (`CreateRoleRequest`/`UpdateRoleRequest`/`PermissionCatalogResponse`/`PermissionGroupResponse`/`PermissionResponse`/`TenantRolesResponse`/`PagedTenantRolesResponse`/`TenantRoleResponse`/`ResolvedPermissionsResponse`) now live in `TenantForge.Modules.Iam.Contract` |
  | Invitations | `src/modules/iam/TenantForge.Modules.Iam/features/invitations/` | `InvitationsFeature` (the `CreateInvitationRequest`/`InvitationListResponse`/`InvitationResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
  | Audit | `src/modules/iam/TenantForge.Modules.Iam/features/audit/` | `AuditFeature` (the `AuditListResponse`/`AuditEventResponse` records now live in `TenantForge.Modules.Iam.Contract`) |
 | Pagination | `src/modules/iam/TenantForge.Modules.Iam/features/pagination/` | `PaginationSupport` (binding/execution); the `PaginationQuery`/`PaginationMetadata` records now live in `TenantForge.Modules.Iam.Contract` |
@@ -353,8 +359,9 @@ and an active `Tenant`; any missing link returns `Results.Forbid()`.
 
 **Owner semantics** — `TenantMembershipRole.Owner` implicitly holds every
 known permission key (`RolesFeature.ResolvePermissionsAsync` unions the full
-catalog for an owner membership, in addition to any explicitly assigned
-custom-role keys).
+known-key set — `IAggregatedPermissionCatalog.AllKnownKeys`, i.e. every
+registered module's keys, not just IAM's own — for an owner membership, in
+addition to any explicitly assigned custom-role keys).
 
 **Tenant role assignments and resolved permission union** — a member's
 effective permissions are: (owner ? full catalog : ∅) ∪ (permission keys of
@@ -379,7 +386,9 @@ proves platform-admin status alone never substitutes for tenant membership.
 **UI hiding is not authorization** — every rule above is enforced
 server-side, independent of what the frontend displays or disables.
 
-Permission catalog (from `RolesFeature.CatalogGroups`, exposed by
+Permission catalog (from the registered `IamPermissionCatalogContributor`
+through the host-built `IAggregatedPermissionCatalog` — B034; the same 3
+groups `RolesFeature` used to hardcode as `CatalogGroups` — exposed by
 `GET /api/permissions/catalog`):
 
 | Key | Consuming endpoints |
@@ -584,3 +593,10 @@ contract in `TenantForge.BuildingBlocks`/the API host):
 IAM.md impact: updated — <sections>
 IAM.md impact: none — <specific reason>
 ```
+
+B034/S31 declaration:
+`IAM.md impact: updated — Sections 3, 4, 10 (catalog provenance moved from
+RolesFeature's hardcoded CatalogGroups to IamPermissionCatalogContributor via
+the host-built IAggregatedPermissionCatalog; owner-semantics wording now
+names the aggregate's AllKnownKeys; Program.cs composition snippet shows the
+aggregator registration).`

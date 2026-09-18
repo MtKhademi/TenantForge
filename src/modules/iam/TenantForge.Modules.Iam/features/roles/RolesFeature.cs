@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Iam.Contract.Queries;
 using TenantForge.Modules.Iam.Contract.Requests;
 using TenantForge.Modules.Iam.Contract.Responses;
@@ -22,33 +23,10 @@ internal static class RolesFeature
     internal const string InvitationsCreatePermission = "IAM.Invitations.Create";
     internal const string AuditViewPermission = "IAM.Audit.View";
 
-    private static readonly PermissionGroupResponse[] CatalogGroups =
-    [
-        new("roles", "نقش‌ها", "مدیریت نقش‌ها و مجوزهای مستأجر.",
-        [
-            new(RolesManagePermission, "مدیریت نقش‌ها", "اجازه ایجاد، ویرایش و تخصیص نقش‌های مستأجر.", "write")
-        ]),
-        new("invitations", "دعوت‌ها", "مدیریت دعوت‌نامه‌های مستأجر.",
-        [
-            new(InvitationsViewPermission, "مشاهده دعوت‌ها", "اجازه دیدن دعوت‌نامه‌های در انتظار.", "read"),
-            new(InvitationsCreatePermission, "ایجاد دعوت", "اجازه ایجاد دعوت‌نامه جدید برای مستأجر.", "write")
-        ]),
-        new("audit", "گزارش فعالیت", "دسترسی به رویدادهای ثبت‌شده مستأجر.",
-        [
-            new(AuditViewPermission, "مشاهده گزارش فعالیت", "اجازه خواندن گزارش فعالیت مستأجر.", "read")
-        ])
-    ];
-
-    private static readonly HashSet<string> PermissionKeys = CatalogGroups
-        .SelectMany(group => group.Permissions)
-        .Select(permission => permission.Key)
-        .ToHashSet(StringComparer.Ordinal);
-
-    internal static IReadOnlySet<string> KnownPermissionKeys => PermissionKeys;
-
     public static IEndpointRouteBuilder MapRolesFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/permissions/catalog", () => Results.Ok(new PermissionCatalogResponse(CatalogGroups)))
+        endpoints.MapGet("/api/permissions/catalog", (IAggregatedPermissionCatalog catalog) =>
+            Results.Ok(new PermissionCatalogResponse(ToResponseGroups(catalog.AllGroups))))
             .RequireAuthorization();
 
         endpoints.MapGet("/api/tenants/{tenantId}/roles", async (string tenantId, HttpRequest request, ClaimsPrincipal principal, IamDbContext db) =>
@@ -64,12 +42,12 @@ internal static class RolesFeature
             return Results.Ok(new PagedTenantRolesResponse(roles, pagination));
         }).RequireAuthorization();
 
-        endpoints.MapPost("/api/tenants/{tenantId}/roles", async (string tenantId, CreateRoleRequest request, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapPost("/api/tenants/{tenantId}/roles", async (string tenantId, CreateRoleRequest request, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
-            var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, RolesManagePermission);
+            var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, catalog, RolesManagePermission);
             if (access.Result is not null) return access.Result;
 
-            var errors = ValidateRoleRequest(request.Name, request.PermissionKeys, requireName: true);
+            var errors = ValidateRoleRequest(request.Name, request.PermissionKeys, requireName: true, catalog);
             if (errors.Count > 0)
             {
                 return Results.ValidationProblem(errors);
@@ -97,17 +75,17 @@ internal static class RolesFeature
             return Results.Created($"/api/tenants/{access.TenantId}/roles/{role.Id}", response);
         }).RequireAuthorization();
 
-        endpoints.MapPut("/api/tenants/{tenantId}/roles/{roleId}", async (string tenantId, string roleId, UpdateRoleRequest request, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapPut("/api/tenants/{tenantId}/roles/{roleId}", async (string tenantId, string roleId, UpdateRoleRequest request, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
             var tenantTsid = ParseTenantId(tenantId);
             var roleTsid = ParseTenantId(roleId);
-            var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, RolesManagePermission);
+            var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, catalog, RolesManagePermission);
             if (tenantTsid is null || roleTsid is null || access.Result is not null)
             {
                 return access.Result ?? Results.Forbid();
             }
 
-            var errors = ValidateRoleRequest(null, request.PermissionKeys, requireName: false);
+            var errors = ValidateRoleRequest(null, request.PermissionKeys, requireName: false, catalog);
             if (errors.Count > 0)
             {
                 return Results.ValidationProblem(errors);
@@ -141,9 +119,9 @@ internal static class RolesFeature
             return Results.Ok((await BuildRoleResponsesAsync(db, access.TenantId)).Single(item => item.Id == TsidId.Format(role.Id)));
         }).RequireAuthorization();
 
-        endpoints.MapPut("/api/tenants/{tenantId}/members/{memberId}/roles/{roleId}", async (string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapPut("/api/tenants/{tenantId}/members/{memberId}/roles/{roleId}", async (string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
-            var parsed = await ValidateAssignmentAsync(tenantId, memberId, roleId, principal, db);
+            var parsed = await ValidateAssignmentAsync(tenantId, memberId, roleId, principal, db, catalog);
             if (parsed.Result is not null) return parsed.Result;
 
             await using var transaction = await BeginTenantMutationAsync(db, parsed.TenantId);
@@ -161,9 +139,9 @@ internal static class RolesFeature
             return Results.Ok(new TenantRolesResponse(await BuildRoleResponsesAsync(db, parsed.TenantId)));
         }).RequireAuthorization();
 
-        endpoints.MapDelete("/api/tenants/{tenantId}/members/{memberId}/roles/{roleId}", async (string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapDelete("/api/tenants/{tenantId}/members/{memberId}/roles/{roleId}", async (string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
-            var parsed = await ValidateAssignmentAsync(tenantId, memberId, roleId, principal, db);
+            var parsed = await ValidateAssignmentAsync(tenantId, memberId, roleId, principal, db, catalog);
             if (parsed.Result is not null) return parsed.Result;
 
             await using var transaction = await BeginTenantMutationAsync(db, parsed.TenantId);
@@ -188,19 +166,39 @@ internal static class RolesFeature
             return Results.Ok(new TenantRolesResponse(await BuildRoleResponsesAsync(db, parsed.TenantId)));
         }).RequireAuthorization();
 
-        endpoints.MapGet("/api/tenants/{tenantId}/me/permissions", async (string tenantId, ClaimsPrincipal principal, IamDbContext db) =>
+        endpoints.MapGet("/api/tenants/{tenantId}/me/permissions", async (string tenantId, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog) =>
         {
             var access = await AuthorizeTenantAccessAsync(tenantId, principal, db);
             if (access.Result is not null) return access.Result;
 
-            var permissions = await ResolvePermissionsAsync(db, access.TenantId, access.AccountId);
+            var permissions = await ResolvePermissionsAsync(db, access.TenantId, access.AccountId, catalog);
             return Results.Ok(new ResolvedPermissionsResponse(permissions));
         }).RequireAuthorization();
 
         return endpoints;
     }
 
-    internal static async Task<TenantAccess> AuthorizeTenantAccessAsync(string tenantId, ClaimsPrincipal principal, IamDbContext db, string? permissionKey = null)
+    /// <summary>
+    /// Membership-only overload — unchanged call sites all across IAM keep
+    /// calling exactly this, with no catalog involved.
+    /// </summary>
+    internal static Task<TenantAccess> AuthorizeTenantAccessAsync(string tenantId, ClaimsPrincipal principal, IamDbContext db) =>
+        AuthorizeTenantAccessAsync(tenantId, principal, db, null, null);
+
+    /// <summary>
+    /// Permission-checking overload. Every caller that used to pass a bare
+    /// permissionKey now also passes the injected aggregate catalog, so the
+    /// caller's assigned/owner keys can be resolved against every module's
+    /// known keys, not just IAM's own.
+    ///
+    /// (B034 delivery note: the Spec sketched this as a non-nullable internal
+    /// shim plus a private nullable core, but C# forbids two overloads whose
+    /// only difference is a reference-type nullable annotation (CS0111). The
+    /// nullable core is therefore the single internal implementation — same
+    /// body and behavior; the 3-arg membership overload delegates to it with
+    /// (null, null) and never dereferences the catalog.)
+    /// </summary>
+    internal static async Task<TenantAccess> AuthorizeTenantAccessAsync(string tenantId, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog? catalog, string? permissionKey)
     {
         var tenantTsid = ParseTenantId(tenantId);
         var accountId = GetAuthenticatedAccountId(principal);
@@ -222,7 +220,7 @@ internal static class RolesFeature
 
         if (permissionKey is not null)
         {
-            var permissions = await ResolvePermissionsAsync(db, tenantTsid.Value, accountId.Value);
+            var permissions = await ResolvePermissionsAsync(db, tenantTsid.Value, accountId.Value, catalog!);
             if (!permissions.Contains(permissionKey, StringComparer.Ordinal))
             {
                 return TenantAccess.Forbidden;
@@ -232,14 +230,14 @@ internal static class RolesFeature
         return new(tenantTsid.Value, accountId.Value, row.Membership.Id, row.Membership.Role, row.Account.DisplayName, row.Account.Email, null);
     }
 
-    internal static async Task<bool> HasPermissionAsync(IamDbContext db, Tsid tenantId, Tsid accountId, string permissionKey) =>
-        (await ResolvePermissionsAsync(db, tenantId, accountId)).Contains(permissionKey, StringComparer.Ordinal);
+    internal static async Task<bool> HasPermissionAsync(IamDbContext db, Tsid tenantId, Tsid accountId, string permissionKey, IAggregatedPermissionCatalog catalog) =>
+        (await ResolvePermissionsAsync(db, tenantId, accountId, catalog)).Contains(permissionKey, StringComparer.Ordinal);
 
-    private static async Task<AssignmentValidation> ValidateAssignmentAsync(string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db)
+    private static async Task<AssignmentValidation> ValidateAssignmentAsync(string tenantId, string memberId, string roleId, ClaimsPrincipal principal, IamDbContext db, IAggregatedPermissionCatalog catalog)
     {
         var memberTsid = ParseTenantId(memberId);
         var roleTsid = ParseTenantId(roleId);
-        var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, RolesManagePermission);
+        var access = await AuthorizeTenantAccessAsync(tenantId, principal, db, catalog, RolesManagePermission);
         if (memberTsid is null || roleTsid is null || access.Result is not null)
         {
             return AssignmentValidation.Forbidden;
@@ -291,7 +289,7 @@ internal static class RolesFeature
             role.UpdatedAtUtc.UtcDateTime.ToString("O"))).ToList();
     }
 
-    private static async Task<IReadOnlyList<string>> ResolvePermissionsAsync(IamDbContext db, Tsid tenantId, Tsid accountId)
+    private static async Task<IReadOnlyList<string>> ResolvePermissionsAsync(IamDbContext db, Tsid tenantId, Tsid accountId, IAggregatedPermissionCatalog catalog)
     {
         var membership = await db.TenantMemberships.AsNoTracking()
             .Where(member => member.TenantId == tenantId && member.AccountId == accountId)
@@ -303,7 +301,10 @@ internal static class RolesFeature
         var keys = new HashSet<string>(StringComparer.Ordinal);
         if (membership.Role == TenantMembershipRole.Owner)
         {
-            keys.UnionWith(PermissionKeys);
+            // Owner bypass now spans every registered module's known keys,
+            // not just IAM's own — see this Spec's Context for why this
+            // must change together with the line below, not later in B035.
+            keys.UnionWith(catalog.AllKnownKeys);
         }
 
         var assignedKeys = await db.TenantMemberRoleAssignments.AsNoTracking()
@@ -312,7 +313,7 @@ internal static class RolesFeature
             .ToListAsync();
         foreach (var set in assignedKeys)
         {
-            keys.UnionWith(set.Where(PermissionKeys.Contains));
+            keys.UnionWith(set.Where(catalog.AllKnownKeys.Contains));
         }
 
         return keys.OrderBy(key => key, StringComparer.Ordinal).ToList();
@@ -372,7 +373,7 @@ internal static class RolesFeature
         return transaction;
     }
 
-    private static Dictionary<string, string[]> ValidateRoleRequest(string? name, IReadOnlyList<string>? permissionKeys, bool requireName)
+    private static Dictionary<string, string[]> ValidateRoleRequest(string? name, IReadOnlyList<string>? permissionKeys, bool requireName, IAggregatedPermissionCatalog catalog)
     {
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         if (requireName)
@@ -386,13 +387,21 @@ internal static class RolesFeature
         {
             errors["permissionKeys"] = ["Select at least one permission."];
         }
-        else if (permissionKeys.Any(key => !PermissionKeys.Contains(key)))
+        else if (permissionKeys.Any(key => !catalog.AllKnownKeys.Contains(key)))
         {
             errors["permissionKeys"] = ["Select only known permission keys."];
         }
 
         return errors;
     }
+
+    private static IReadOnlyList<PermissionGroupResponse> ToResponseGroups(IReadOnlyList<PermissionGroup> groups) =>
+        groups.Select(group => new PermissionGroupResponse(
+            group.Id,
+            group.Label,
+            group.Description,
+            group.Permissions.Select(permission => new PermissionResponse(permission.Key, permission.Label, permission.Description, permission.Kind)).ToList()))
+        .ToList();
 
     private static Tsid? ParseTenantId(string value) => TsidId.TryParseNullable(value);
 
