@@ -72,6 +72,8 @@ one valid Spec link.
 | F039 | S29 | Connect order review and payment to the real API | planned | F038, B031, B032 | [tasks/front/F039-connect-order-review-and-payment.md](front/F039-connect-order-review-and-payment.md) |
 | F040 | S30 | Order tracking page mock | planned | F039 | [tasks/front/F040-order-tracking-mock.md](front/F040-order-tracking-mock.md) |
 | F041 | S30 | Connect order tracking page to the real API | planned | F040, B033 | [tasks/front/F041-connect-order-tracking.md](front/F041-connect-order-tracking.md) |
+| F042 | S31 | Group ShellNav into labelled module sections | planned | F029 | [tasks/front/F042-modular-shell-navigation.md](front/F042-modular-shell-navigation.md) |
+| F043 | S31 | Gate Shop nav items on the new Shop permission keys | planned | F042, B035 | [tasks/front/F043-shop-nav-permission-gating.md](front/F043-shop-nav-permission-gating.md) |
 
 ## Backend queue
 
@@ -105,13 +107,13 @@ one valid Spec link.
 | B026 | S26 | Category and product admin API | done | B025 | — |
 | B027 | S26 | Public storefront catalog read API | done | B026 | — |
 | B028 | S27 | Cart persistence and API | done | B027 | — |
-| B029 | S28 | Shipping-rate and coupon admin API | planned | B026 | [tasks/backend/B029-shipping-rate-and-coupon-admin-api.md](backend/B029-shipping-rate-and-coupon-admin-api.md) |
-| B028 | S27 | Cart persistence and API | planned | B027 | [tasks/backend/B028-cart-persistence-and-api.md](backend/B028-cart-persistence-and-api.md) |
 | B029 | S28 | Shipping-rate and coupon admin API | done | B026 | — |
 | B030 | S28 | Checkout API | done | B028, B029 | — |
 | B031 | S29 | Order creation API | done | B030 | — |
 | B032 | S29 | Sandbox payment API | done | B031 | — |
 | B033 | S30 | Order lookup API | done | B032 | — |
+| B034 | S31 | Shared permission catalog contract (BuildingBlocks) and IAM migration | planned | — | [tasks/backend/B034-shared-permission-catalog-contract.md](backend/B034-shared-permission-catalog-contract.md) |
+| B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | planned | B034 | [tasks/backend/B035-shop-permission-enforcement.md](backend/B035-shop-permission-enforcement.md) |
 
 ## Cleanup batch: S11–S14
 
@@ -392,3 +394,50 @@ exact command. Never bypass a dependency merely to keep an agent busy.
 - Execution order: B033 depends on B032; F040 depends on F039; F041
   depends on F040 and B033. All rows are registered as `planned`;
   registering them does not implement or run any of B033/F040/F041.
+
+## Cross-module permissions and navigation: S31
+
+- [S31 — Cross-module permission catalog and modular navigation](slices/031-cross-module-permissions-and-nav.md)
+- The user found this himself, after reviewing the real, already-merged
+  Shop admin screens (F028/F029, B025–B031 on `main`): `ShellNav.tsx`
+  mixes IAM and Shop destinations in one flat, ungrouped list, and every
+  mutating Shop admin endpoint checks only tenant **membership**, never
+  a permission key — any tenant member, not just an Owner or a
+  role-holder, can create or edit Shop categories, products, shipping
+  rates and coupons today. Worse, this cannot be fixed inside Shop
+  alone: IAM's own permission catalog and role-validation code only
+  ever know about IAM's own hardcoded 3 groups, so a tenant owner cannot
+  even save a role containing a `Shop.*` key without a shared,
+  cross-module catalog contract first.
+- B034 adds a small `TenantForge.BuildingBlocks.Permissions` seam
+  (`PermissionDescriptor`/`PermissionGroup`/`IPermissionCatalogContributor`/
+  `IAggregatedPermissionCatalog`/`AggregatedPermissionCatalog`) and
+  migrates IAM's existing catalog onto it with zero visible behavior
+  change — including, beyond what was first proposed, threading the
+  aggregate catalog into `RolesFeature.ResolvePermissionsAsync` and its
+  two external callers (`AuditFeature.cs`, `InvitationsFeature.cs`),
+  because that function is what backs the `/me/permissions` endpoint
+  the frontend's nav gating already depends on. B035 (depends on B034)
+  is the concrete second consumer: it adds `Shop.Catalog.Manage` and
+  `Shop.Shipping.Manage`, a permission-checking overload of
+  `ShopAuthorization.AuthorizeTenantAccessAsync` mirroring IAM's own
+  pattern, and retrofits the 7 real mutating Shop admin endpoints found
+  by grepping the current repository (5 read-only endpoints are
+  untouched).
+- F042 (depends on F029) is a pure presentation restructure of
+  `ShellNav.tsx` into two labelled sections ("هویت و دسترسی", "فروشگاه")
+  — no behavior change. F043 (depends on F042 and B035) gates the two
+  existing Shop nav items on `Shop.Catalog.Manage`, mirroring the
+  existing `requires` mechanism exactly; it also confirms, by reading
+  the real `RolesPage.tsx`, that its generic `PermissionMatrix`
+  rendering needs no change at all once the server catalog includes a
+  Shop group.
+- Named non-goals: no third Shop permission key; no nav entry added for
+  the shipping-rate/coupon admin pages (no such destination exists in
+  `ShellNav.tsx` today — that gap, if it is one, is pre-existing and out
+  of scope here); no change to `RolesPage.tsx`; no anonymous/read-only
+  Shop endpoint change.
+- Execution order: B034 has no dependency; B035 depends on B034; F042
+  depends on F029; F043 depends on F042 and B035. All rows are
+  registered as `planned`; registering them does not implement or run
+  any of B034/B035/F042/F043.
