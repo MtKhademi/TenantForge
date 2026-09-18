@@ -62,7 +62,7 @@ one valid Spec link.
 | F029 | S26 | Connect admin catalog management to the real API | done | F028, B026 | — |
 | F030 | S26 | Storefront catalog browsing and product detail mock | done | F025 | — |
 | F031 | S26 | Connect storefront browsing and detail to the real API | done | F030, B027 | — |
-| F032 | S27 | Cart page mock | planned | F030 | [tasks/front/F032-cart-page-mock.md](front/F032-cart-page-mock.md) |
+| F032 | S27 | Cart page mock | done | F030 | — |
 | F033 | S27 | Connect cart page to the real API | planned | F032, B028 | [tasks/front/F033-connect-cart-page.md](front/F033-connect-cart-page.md) |
 | F034 | S28 | Admin shipping-rate and coupon management mock | planned | F029 | [tasks/front/F034-admin-shipping-and-coupon-mock.md](front/F034-admin-shipping-and-coupon-mock.md) |
 | F035 | S28 | Connect admin shipping-rate and coupon management to the real API | planned | F034, B029 | [tasks/front/F035-connect-admin-shipping-and-coupon.md](front/F035-connect-admin-shipping-and-coupon.md) |
