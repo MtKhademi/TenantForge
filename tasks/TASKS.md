@@ -60,7 +60,7 @@ one valid Spec link.
 | F027 | S25 | Put the sign-in form before the hero on mobile and de-emphasize the dev-credentials box | done | F025 | — |
 | F028 | S26 | Admin catalog management mock | done | F025 | — |
 | F029 | S26 | Connect admin catalog management to the real API | done | F028, B026 | — |
-| F030 | S26 | Storefront catalog browsing and product detail mock | planned | F025 | [tasks/front/F030-storefront-catalog-browsing-mock.md](front/F030-storefront-catalog-browsing-mock.md) |
+| F030 | S26 | Storefront catalog browsing and product detail mock | done | F025 | — |
 | F031 | S26 | Connect storefront browsing and detail to the real API | planned | F030, B027 | [tasks/front/F031-connect-storefront-catalog-browsing.md](front/F031-connect-storefront-catalog-browsing.md) |
 | F032 | S27 | Cart page mock | planned | F030 | [tasks/front/F032-cart-page-mock.md](front/F032-cart-page-mock.md) |
 | F033 | S27 | Connect cart page to the real API | planned | F032, B028 | [tasks/front/F033-connect-cart-page.md](front/F033-connect-cart-page.md) |
