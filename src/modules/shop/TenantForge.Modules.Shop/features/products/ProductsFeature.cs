@@ -22,7 +22,7 @@ internal static class ProductsFeature
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.CatalogManagePermission);
             if (access.Result is not null) return access.Result;
 
             var errors = await ValidateProductRequestAsync(db, access.TenantId, request.Name, request.Slug, request.CategoryId, request.Variants, request.SizeGuideColumns, request.SizeGuideRows, existingProductId: null);
@@ -109,7 +109,7 @@ internal static class ProductsFeature
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.CatalogManagePermission);
             if (access.Result is not null) return access.Result;
 
             if (!TsidId.TryParse(productId, out var productTsid)) return Results.NotFound();

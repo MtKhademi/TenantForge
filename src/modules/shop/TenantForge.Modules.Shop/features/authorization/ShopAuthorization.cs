@@ -20,18 +20,54 @@ internal sealed record ShopTenantAccess(Tsid TenantId, Tsid AccountId, IResult? 
 internal static class ShopAuthorization
 {
     /// <summary>
-    /// Parses the route's tenantId, reads the caller's account id from the
-    /// JWT "sub" claim, then checks IAM's own iam_tenant_memberships table
-    /// with a raw SQL query — see B026's Spec Context for why this cannot be
-    /// an EF entity/DbSet reference. Requires an active membership for an
-    /// active account in an active tenant, mirroring
-    /// RolesFeature.AuthorizeTenantAccessAsync's own active/active/active
-    /// join exactly.
+    /// B035: gates every mutating category/product endpoint. Granted to a
+    /// tenant Owner always, or to a member holding a tenant role whose
+    /// permission_keys array contains this key.
     /// </summary>
-    public static async Task<ShopTenantAccess> AuthorizeTenantAccessAsync(
+    internal const string CatalogManagePermission = "Shop.Catalog.Manage";
+
+    /// <summary>
+    /// B035: gates every mutating shipping-rate/coupon endpoint. Same
+    /// Owner-bypass/assigned-role-key rule as CatalogManagePermission.
+    /// </summary>
+    internal const string ShippingManagePermission = "Shop.Shipping.Manage";
+
+    /// <summary>The two keys Shop owns — see ShopPermissionCatalogContributor.</summary>
+    internal static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
+    {
+        CatalogManagePermission,
+        ShippingManagePermission
+    };
+
+    /// <summary>
+    /// Membership-only overload — every read-only Shop endpoint keeps
+    /// calling exactly this, unchanged from before this task.
+    /// </summary>
+    internal static Task<ShopTenantAccess> AuthorizeTenantAccessAsync(
         string tenantId,
         ClaimsPrincipal principal,
-        ShopDbContext db)
+        ShopDbContext db) =>
+        AuthorizeTenantAccessAsync(tenantId, principal, db, null);
+
+    /// <summary>
+    /// Permission-checking overload. Every mutating Shop endpoint (Scope
+    /// table in this Spec) now calls this with CatalogManagePermission or
+    /// ShippingManagePermission.
+    ///
+    /// (B035 delivery note: the Spec sketched this as a non-nullable
+    /// internal shim plus a private nullable core, but C# forbids two
+    /// overloads whose only difference is a reference-type nullable
+    /// annotation (CS0111) — the same adaptation B034 made to
+    /// RolesFeature.AuthorizeTenantAccessAsync. The nullable-annotated
+    /// parameter is therefore the single implementation; the 3-arg
+    /// membership overload delegates to it with null and never dereferences
+    /// a key.)
+    /// </summary>
+    internal static async Task<ShopTenantAccess> AuthorizeTenantAccessAsync(
+        string tenantId,
+        ClaimsPrincipal principal,
+        ShopDbContext db,
+        string? permissionKey)
     {
         if (principal.Identity is not { IsAuthenticated: true })
         {
@@ -49,9 +85,13 @@ internal static class ShopAuthorization
             return ShopTenantAccess.Forbidden;
         }
 
-        var membershipCount = await db.Database.SqlQueryRaw<int>(
+        // Same active/active/active join RolesFeature.AuthorizeTenantAccessAsync
+        // uses, now selecting the membership's role string instead of a bare
+        // count, so a permission check can tell Owner apart from Member
+        // without a second round trip.
+        var roles = await db.Database.SqlQueryRaw<string>(
             """
-            SELECT COUNT(*)::int AS "Value"
+            SELECT m.role AS "Value"
             FROM iam_tenant_memberships m
             JOIN iam_accounts a ON a.id = m.account_id AND a.status = 'Active'
             JOIN iam_tenants t ON t.id = m.tenant_id AND t.status = 'Active'
@@ -59,13 +99,49 @@ internal static class ShopAuthorization
             """,
             tenantTsid.ToLong(),
             accountTsid.Value.ToLong())
-            .SingleAsync();
+            .ToListAsync();
 
-        if (membershipCount == 0)
+        if (roles.Count == 0)
         {
             return ShopTenantAccess.Forbidden;
         }
 
+        if (permissionKey is not null)
+        {
+            var granted = roles[0] == "Owner"
+                ? KnownKeys.Contains(permissionKey)
+                : (await ResolveAssignedShopKeysAsync(db, tenantTsid, accountTsid.Value)).Contains(permissionKey);
+            if (!granted)
+            {
+                return ShopTenantAccess.Forbidden;
+            }
+        }
+
         return new ShopTenantAccess(tenantTsid, accountTsid.Value, null);
+    }
+
+    /// <summary>
+    /// Every Shop permission key the caller holds through an assigned
+    /// tenant role, intersected with Shop's own KnownKeys (a role's
+    /// permission_keys array may also hold IAM keys, which are irrelevant
+    /// here). Raw SQL for the same cross-database reason as the membership
+    /// check above: iam_tenant_member_role_assignments and iam_tenant_roles
+    /// are IAM's own tables, unreachable from ShopDbContext as EF entities.
+    /// </summary>
+    private static async Task<HashSet<string>> ResolveAssignedShopKeysAsync(ShopDbContext db, Tsid tenantId, Tsid accountId)
+    {
+        var keys = await db.Database.SqlQueryRaw<string>(
+            """
+            SELECT DISTINCT unnest(r.permission_keys) AS "Value"
+            FROM iam_tenant_memberships m
+            JOIN iam_tenant_member_role_assignments asg ON asg.tenant_membership_id = m.id
+            JOIN iam_tenant_roles r ON r.id = asg.tenant_role_id
+            WHERE m.tenant_id = {0} AND m.account_id = {1}
+            """,
+            tenantId.ToLong(),
+            accountId.ToLong())
+            .ToListAsync();
+
+        return keys.Where(KnownKeys.Contains).ToHashSet(StringComparer.Ordinal);
     }
 }

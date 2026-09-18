@@ -22,7 +22,7 @@ internal static class CouponsFeature
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.ShippingManagePermission);
             if (access.Result is not null) return access.Result;
 
             var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
@@ -79,13 +79,13 @@ internal static class CouponsFeature
             return Results.Ok(new CouponListResponse(coupons.Select(ToResponse).ToList(), pagination));
         }).RequireAuthorization();
 
-        endpoints.MapPatch("/api/tenants/{tenantId}/shop/coupons/{couponId}/deactivate", async (
+        endpoints.            MapPatch("/api/tenants/{tenantId}/shop/coupons/{couponId}/deactivate", async (
             string tenantId,
             string couponId,
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.ShippingManagePermission);
             if (access.Result is not null) return access.Result;
 
             if (!TsidId.TryParse(couponId, out var couponTsid)) return Results.NotFound();

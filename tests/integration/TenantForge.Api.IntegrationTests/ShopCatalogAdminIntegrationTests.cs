@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Iam.Infrastructure;
 using TSID.Creator.NET;
 using Xunit;
 
@@ -129,6 +130,51 @@ public sealed class ShopCatalogAdminIntegrationTests(ShopAdminDbFixture db) : ID
         var memberClient = CreateClient();
         SetMemberToken(memberClient, ownerAccount, $"owner-{ownerAccount.ToLong():x}@tenantforge.local");
         return (tenantId, memberClient, ownerAccount);
+    }
+
+    /// <summary>
+    /// B035: a real, active account with a plain (non-owner) membership in
+    /// the given tenant — no role assignment. Same direct-domain-entity
+    /// seeding shape as CreateOwnerAccountAsync, but through IAM's own
+    /// IamDbContext (the Shop fixtures' CreateContext) because membership
+    /// rows are IAM's own tables.
+    /// </summary>
+    private async Task<Tsid> CreateMemberAccountAsync(string tenantId, string email)
+    {
+        var tenantTsid = TsidId.TryParseNullable(tenantId);
+        if (tenantTsid is null)
+        {
+            throw new InvalidOperationException("tenantId must be a canonical TSID string.");
+        }
+
+        await using var context = db.CreateContext();
+        var account = Account.CreateUser(email, "Shop Member", "already-hashed-for-test", DateTimeOffset.UtcNow);
+        context.Accounts.Add(account);
+        context.TenantMemberships.Add(TenantMembership.CreateMember(tenantTsid.Value, account.Id, DateTimeOffset.UtcNow));
+        await context.SaveChangesAsync();
+        return account.Id;
+    }
+
+    /// <summary>
+    /// B035: assigns a tenant role carrying exactly the given permission
+    /// keys to a membership, through IAM's own domain entities.
+    /// </summary>
+    private async Task GrantRoleAsync(string tenantId, Tsid accountId, IReadOnlyList<string> permissionKeys)
+    {
+        var tenantTsid = TsidId.TryParseNullable(tenantId);
+        if (tenantTsid is null)
+        {
+            throw new InvalidOperationException("tenantId must be a canonical TSID string.");
+        }
+
+        await using var context = db.CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var membership = context.TenantMemberships
+            .Single(member => member.TenantId == tenantTsid.Value && member.AccountId == accountId);
+        var role = TenantRole.Create(tenantTsid.Value, $"Shop Grant {Guid.NewGuid():N}"[..22], permissionKeys, now);
+        context.TenantRoles.Add(role);
+        context.TenantMemberRoleAssignments.Add(TenantMemberRoleAssignment.Create(membership.Id, role.Id, now));
+        await context.SaveChangesAsync();
     }
 
     [Fact]
@@ -536,6 +582,76 @@ public sealed class ShopCatalogAdminIntegrationTests(ShopAdminDbFixture db) : ID
         using var memberClient = CreateClient();
         SetMemberToken(memberClient, ownerAccount, $"owner-{ownerAccount.ToLong():x}@tenantforge.local");
         Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.GetAsync("/api/tenants/not-a-tsid/shop/categories")).StatusCode);
+    }
+
+    // B035: a tenant Owner succeeds on every mutating catalog endpoint with no
+    // role grant at all (Owner bypass) — that is exactly what the Owner-token
+    // happy-path tests above already prove end to end.
+
+    [Fact]
+    public async Task MemberWithoutAShopRoleGrant_Gets403_OnTheMutatingCatalogRoutes()
+    {
+        var (tenantId, _, _) = await NewTenantWithOwnerAsync();
+        var memberAccount = await CreateMemberAccountAsync(tenantId, $"member-{Guid.NewGuid():N}@tenantforge.local");
+        using var client = CreateClient();
+        SetMemberToken(client, memberAccount, $"member-{memberAccount.ToLong():x}@tenantforge.local");
+
+        // POST create category: 403, even though this IS an active member.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/tenants/{tenantId}/shop/categories", new
+        {
+            name = "Shirts",
+            slug = "shirts",
+            displayOrder = 1
+        })).StatusCode);
+
+        // PUT update product: 403 as well (same Shop.Catalog.Manage key).
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/tenants/{tenantId}/shop/products/{TsidId.Format(TsidId.NewId())}", new
+        {
+            name = "Nope",
+            slug = "nope",
+            description = (string?)null,
+            categoryId = TsidId.Format(TsidId.NewId()),
+            basePrice = 1,
+            compareAtPrice = (decimal?)null,
+            isActive = true,
+            variants = (object?)null,
+            sizeGuideColumns = (object?)null,
+            sizeGuideRows = (object?)null
+        })).StatusCode);
+
+        // Read-only routes stay membership-only (unchanged): the same member
+        // can still see the tenant's catalog.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/tenants/{tenantId}/shop/categories")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/tenants/{tenantId}/shop/products")).StatusCode);
+    }
+
+    [Fact]
+    public async Task MemberWithARoleGrantingShopCatalogManage_CanCreateAndUpdate()
+    {
+        var (tenantId, _, _) = await NewTenantWithOwnerAsync();
+        var memberAccount = await CreateMemberAccountAsync(tenantId, $"member-{Guid.NewGuid():N}@tenantforge.local");
+        await GrantRoleAsync(tenantId, memberAccount, ["Shop.Catalog.Manage"]);
+        using var client = CreateClient();
+        SetMemberToken(client, memberAccount, $"member-{memberAccount.ToLong():x}@tenantforge.local");
+
+        // The granted key unlocks the mutating category/product endpoints.
+        var categoryId = await CreateCategoryAsync(client, tenantId, "Shirts", $"shirts-{Guid.NewGuid():N}"[..14]);
+        var productId = await CreateProductAsync(client, tenantId, categoryId, "Classic Shirt", $"classic-{Guid.NewGuid():N}"[..16]);
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/tenants/{tenantId}/shop/products/{productId}", new
+        {
+            name = "Classic Shirt v2",
+            slug = $"classic-v2-{Guid.NewGuid():N}"[..20],
+            description = (string?)null,
+            categoryId,
+            basePrice = 120,
+            compareAtPrice = (decimal?)null,
+            isActive = true,
+            variants = new object[] { new { color = "Navy", size = "M", sku = "V2", stockQuantity = 3, priceOverride = (decimal?)null } },
+            sizeGuideColumns = (object?)null,
+            sizeGuideRows = (object?)null
+        });
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
     }
 }
 

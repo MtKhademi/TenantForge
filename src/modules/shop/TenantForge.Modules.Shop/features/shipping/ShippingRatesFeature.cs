@@ -38,7 +38,7 @@ internal static class ShippingRatesFeature
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.ShippingManagePermission);
             if (access.Result is not null) return access.Result;
 
             if (string.IsNullOrWhiteSpace(request.ProvinceName))
