@@ -27,6 +27,11 @@ public sealed class ShopConfig : IModuleConfig
                 npgsqlOptions.MigrationsHistoryTable("__ShopMigrationsHistory");
             });
         });
+
+        // Scoped, not singleton: SandboxPaymentGateway depends on the scoped
+        // ShopDbContext, mirroring IAMConfig.RegisterServices' own
+        // scoped-vs-singleton reasoning for its database-backed services.
+        services.AddScoped<Features.Payments.IShopPaymentGateway, Features.Payments.SandboxPaymentGateway>();
     }
 
     public void ValidateConfiguration(IHostEnvironment environment, IConfiguration configuration)

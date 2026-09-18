@@ -12,6 +12,7 @@ using TenantForge.Modules.Shop.Features.Storefront;
 using TenantForge.Modules.Shop.Features.Checkout;
 using TenantForge.Modules.Shop.Features.Coupons;
 using TenantForge.Modules.Shop.Features.Orders;
+using TenantForge.Modules.Shop.Features.Payments;
 using TenantForge.Modules.Shop.Features.Shipping;
 using TenantForge.Modules.Shop.Infrastructure;
 
@@ -59,6 +60,7 @@ public static class ShopModule
         endpoints.MapCartsFeature();
         endpoints.MapCheckoutFeature();
         endpoints.MapOrderCreationFeature();
+        endpoints.MapPaymentsFeature();
     }
 
     private static void ValidateShopModuleConfiguration(IHostEnvironment environment, IConfiguration configuration)

@@ -110,7 +110,7 @@ one valid Spec link.
 | B029 | S28 | Shipping-rate and coupon admin API | done | B026 | — |
 | B030 | S28 | Checkout API | done | B028, B029 | — |
 | B031 | S29 | Order creation API | done | B030 | — |
-| B032 | S29 | Sandbox payment API | planned | B031 | [tasks/backend/B032-sandbox-payment-api.md](backend/B032-sandbox-payment-api.md) |
+| B032 | S29 | Sandbox payment API | done | B031 | — |
 | B033 | S30 | Order lookup API | planned | B032 | [tasks/backend/B033-guest-order-lookup-api.md](backend/B033-guest-order-lookup-api.md) |
 
 ## Cleanup batch: S11–S14
