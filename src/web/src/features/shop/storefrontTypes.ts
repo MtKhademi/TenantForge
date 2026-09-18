@@ -1,7 +1,8 @@
 /**
- * S26 storefront browsing (F030 mock, F031 connects to B027's real,
- * anonymous public catalog API). No Authorization header is ever sent
- * anywhere on this page family, mocked or real.
+ * S26 storefront browsing — real, anonymous API data types (F031) for
+ * B027's public catalog API. No Authorization header is ever sent anywhere
+ * on this page family. Field-for-field with B027's `StorefrontContracts.cs`
+ * (camelCased); the real responses carry no image fields.
  */
 
 export type StorefrontCategory = {
@@ -17,8 +18,6 @@ export type StorefrontProductSummary = {
   slug: string
   effectivePrice: number
   compareAtPrice: number | null
-  /** Not part of B027's real response — mock-only, used for the card thumbnail. */
-  imageUrl: string
 }
 
 export type StorefrontVariant = {
@@ -57,6 +56,4 @@ export type StorefrontProductDetail = {
   variants: StorefrontVariant[]
   sizeGuideColumns: StorefrontSizeGuideColumn[]
   sizeGuideRows: StorefrontSizeGuideRow[]
-  /** Not part of B027's real response — mock-only, gallery image list. */
-  imageUrls: string[]
 }
