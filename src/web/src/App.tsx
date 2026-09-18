@@ -13,6 +13,9 @@ import { LoginPage } from './pages/LoginPage'
 import { RolesPage } from './pages/RolesPage'
 import { CategoriesPage } from './pages/shop/admin/CategoriesPage'
 import { ProductsPage } from './pages/shop/admin/ProductsPage'
+import { CategoryPage } from './pages/shop/storefront/CategoryPage'
+import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
+import { StorefrontLayout } from './pages/shop/storefront/StorefrontLayout'
 import { TenantHome } from './pages/TenantHome'
 import { TenantScopePage } from './pages/TenantScopePage'
 import { TenantsPage } from './pages/TenantsPage'
@@ -117,6 +120,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/shop/:tenantId" element={<StorefrontLayout />}>
+        <Route index element={<CategoryPage />} />
+        <Route path="categories/:categorySlug" element={<CategoryPage />} />
+        <Route path="products/:productSlug" element={<ProductDetailPage />} />
+      </Route>
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
         <Route
