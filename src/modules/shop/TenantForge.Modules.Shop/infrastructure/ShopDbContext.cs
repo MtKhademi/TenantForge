@@ -17,6 +17,7 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
     internal DbSet<ShopCartItem> CartItems => Set<ShopCartItem>();
     internal DbSet<ShopOrder> Orders => Set<ShopOrder>();
     internal DbSet<ShopOrderItem> OrderItems => Set<ShopOrderItem>();
+    internal DbSet<ShopPaymentAttempt> PaymentAttempts => Set<ShopPaymentAttempt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,5 +33,6 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
         modelBuilder.ApplyConfiguration(new ShopCartItemMap());
         modelBuilder.ApplyConfiguration(new ShopOrderMap());
         modelBuilder.ApplyConfiguration(new ShopOrderItemMap());
+        modelBuilder.ApplyConfiguration(new ShopPaymentAttemptMap());
     }
 }
