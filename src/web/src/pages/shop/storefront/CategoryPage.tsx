@@ -4,15 +4,15 @@ import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
-import { mockStorefrontCatalog } from '@/features/shop/mockStorefrontCatalog'
+import { storefrontAdapter } from '@/features/shop/storefrontAdapter'
 import type { StorefrontCategory, StorefrontProductSummary } from '@/features/shop/storefrontTypes'
 
 /**
- * S26 storefront (F030): the category grid (no `categorySlug`) and, when a
- * `categorySlug` route param is present, that category's product-card grid.
- * Data is mocked in `mockStorefrontCatalog`; the states below (loading, empty,
- * retryable error) match the repository's shared conventions. F031 swaps the
- * data source only.
+ * S26 storefront (F030, F031): the category grid (no `categorySlug`) and, when
+ * a `categorySlug` route param is present, that category's product-card grid.
+ * F031 loads real, anonymous data from B027 via `storefrontAdapter`; the
+ * states below (loading, empty, retryable error) match the repository's shared
+ * conventions and are now driven by real HTTP failures.
  */
 export function CategoryPage() {
   const { tenantId = '', categorySlug } = useParams<{ tenantId: string; categorySlug?: string }>()
@@ -29,7 +29,7 @@ export function CategoryPage() {
     let cancelled = false
     setCategories(null)
     setCategoryError(false)
-    mockStorefrontCatalog
+    storefrontAdapter
       .listCategories(tenantId)
       .then((list) => {
         if (!cancelled) setCategories(list)
@@ -50,7 +50,7 @@ export function CategoryPage() {
     let cancelled = false
     setProducts(null)
     setProductError(false)
-    mockStorefrontCatalog
+    storefrontAdapter
       .listProducts(tenantId, categorySlug)
       .then((list) => {
         if (!cancelled) setProducts(list)

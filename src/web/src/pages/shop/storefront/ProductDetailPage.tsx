@@ -1,24 +1,23 @@
-import { Minus, Package, Plus, ShoppingCart, TriangleAlert, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Minus, Package, Plus, ShoppingCart, TriangleAlert } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { mockStorefrontCart } from '@/features/shop/mockStorefrontCartState'
-import { mockStorefrontCatalog } from '@/features/shop/mockStorefrontCatalog'
+import { storefrontAdapter } from '@/features/shop/storefrontAdapter'
 import type { StorefrontProductDetail } from '@/features/shop/storefrontTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S26 storefront (F030): the public product detail page.
+ * S26 storefront (F030, F031): the public product detail page.
  *
- * Data is mocked in `mockStorefrontCatalog` (F031 swaps the source only). The
- * gallery `imageUrls` are mock-only placeholders — rendered as neutral tiles,
- * never fake photos — with a fixed-overlay lightbox (no new dependency). The
- * color/size selectors reflect each combination's own stock; the quantity
- * stepper never exceeds the selected variant's mocked stock; the size-guide
- * table renders only when the product has one (absent otherwise, never an
- * empty table); add-to-cart writes to `mockStorefrontCart` (F032 builds the
- * cart page).
+ * F031 loads real, anonymous data from B027 via `storefrontAdapter`. The
+ * gallery is a plain placeholder tile — B027's response carries no image
+ * fields, so there is no real image to show (no lightbox). The color/size
+ * selectors reflect each combination's own live stock; the quantity stepper
+ * never exceeds the selected variant's stock; the size-guide table renders
+ * only when the product has one (absent otherwise, never an empty table);
+ * add-to-cart writes to `mockStorefrontCart` (F032 builds the cart page).
  */
 export function ProductDetailPage() {
   const { tenantId = '', productSlug = '' } = useParams<{ tenantId: string; productSlug: string }>()
@@ -40,7 +39,7 @@ export function ProductDetailPage() {
     setSize(null)
     setQuantity(1)
     setAddedMessage(null)
-    mockStorefrontCatalog
+    storefrontAdapter
       .getProduct(tenantId, productSlug)
       .then((value) => {
         if (!cancelled) setProduct(value)
@@ -150,7 +149,13 @@ export function ProductDetailPage() {
         >
           بازگشت به دسته‌بندی‌ها
         </Link>
-        <Gallery imageUrls={product.imageUrls} productName={product.name} />
+        <div
+          className="flex aspect-square w-full items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground"
+          role="img"
+          aria-label={`تصویر ${product.name}`}
+        >
+          <Package aria-hidden="true" className="size-10" />
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -314,116 +319,5 @@ function VariantOption({
     >
       {label}
     </button>
-  )
-}
-
-/**
- * The image gallery: an enlarged active tile plus a thumbnail strip. Images are
- * mock placeholders (neutral tiles, never fake photos). Clicking the active
- * tile opens a fixed-overlay lightbox.
- */
-function Gallery({ imageUrls, productName }: { imageUrls: string[]; productName: string }) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const [lightboxOpen, setLightboxOpen] = useState(false)
-  const mainRef = useRef<HTMLButtonElement>(null)
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
-
-  const count = imageUrls.length
-  const safeIndex = count > 0 ? Math.min(activeIndex, count - 1) : 0
-
-  useEffect(() => {
-    if (!lightboxOpen) return
-    // The main tile is always mounted (the lightbox is a sibling overlay), so
-    // capture the node now and focus it on close rather than re-reading the ref.
-    const mainTile = mainRef.current
-    closeButtonRef.current?.focus()
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setLightboxOpen(false)
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      mainTile?.focus()
-    }
-  }, [lightboxOpen])
-
-  if (count === 0) {
-    return (
-      <div className="flex aspect-square items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground">
-        <Package aria-hidden="true" className="size-10" />
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-3">
-      <button
-        ref={mainRef}
-        type="button"
-        onClick={() => setLightboxOpen(true)}
-        aria-label={`بزرگ‌نمایی تصویر ${productName}`}
-        className="flex aspect-square w-full items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground"
-      >
-        <PlaceholderImage index={safeIndex + 1} large />
-      </button>
-
-      <div className="grid grid-cols-4 gap-2">
-        {imageUrls.map((_, index) => (
-          <button
-            key={index}
-            type="button"
-            onClick={() => setActiveIndex(index)}
-            aria-label={`نمایش تصویر ${index + 1} از ${count}`}
-            aria-current={index === safeIndex ? 'true' : undefined}
-            className={cn(
-              'flex aspect-square items-center justify-center rounded-md border bg-muted text-muted-foreground',
-              index === safeIndex ? 'border-primary' : 'border-border hover:bg-muted/70',
-            )}
-          >
-            <PlaceholderImage index={index + 1} />
-          </button>
-        ))}
-      </div>
-
-      {lightboxOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setLightboxOpen(false)
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`تصویر بزرگ‌نمایی‌شده ${productName}`}
-            className="relative w-full max-w-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex aspect-square w-full items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground shadow-raised">
-              <PlaceholderImage index={safeIndex + 1} large />
-            </div>
-            <SecondaryButton
-              ref={closeButtonRef}
-              type="button"
-              aria-label="بستن تصویر بزرگ‌نمایی‌شده"
-              className="absolute -top-3 -end-3 rounded-full px-3 shadow-raised"
-              onClick={() => setLightboxOpen(false)}
-            >
-              <X aria-hidden="true" className="size-4" />
-            </SecondaryButton>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** A neutral placeholder for a product image (mock-only, no network request). */
-function PlaceholderImage({ index, large = false }: { index: number; large?: boolean }) {
-  return (
-    <span className="flex flex-col items-center justify-center gap-1">
-      <Package aria-hidden="true" className={large ? 'size-12' : 'size-5'} />
-      <span className={large ? 'text-sm' : 'text-xs'}>{index.toLocaleString('fa-IR')}</span>
-    </span>
   )
 }
