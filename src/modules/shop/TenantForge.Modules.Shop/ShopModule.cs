@@ -61,6 +61,7 @@ public static class ShopModule
         endpoints.MapCheckoutFeature();
         endpoints.MapOrderCreationFeature();
         endpoints.MapPaymentsFeature();
+        endpoints.MapOrderLookupFeature();
     }
 
     private static void ValidateShopModuleConfiguration(IHostEnvironment environment, IConfiguration configuration)
