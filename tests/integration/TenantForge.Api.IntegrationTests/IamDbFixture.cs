@@ -290,3 +290,25 @@ public sealed class ShopPaymentDbFixture : IamDbFixtureBase
 public sealed class ShopPaymentIsolatedCollection : ICollectionFixture<ShopPaymentDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B033's anonymous order-lookup tests. Kept off the
+/// shared main database (so IAM row-count assumptions stay stable) and off the
+/// B026 admin / B027 storefront / B028 cart / B029 shipping-coupon / B030
+/// checkout / B031 order / B032 payment databases (so their row-count and
+/// catalog assertions stay stable). The tests author catalog data through
+/// B026's authenticated admin API, create an order through B031's anonymous
+/// API (and pay it through B032's), then drive the order-lookup endpoint with
+/// a bare client that sends no Authorization header.
+/// </summary>
+public sealed class ShopOrderLookupDbFixture : IamDbFixtureBase
+{
+    public ShopOrderLookupDbFixture() : base("tenantforge_shop_order_lookup_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopOrderLookupIsolatedCollection))]
+public sealed class ShopOrderLookupIsolatedCollection : ICollectionFixture<ShopOrderLookupDbFixture>
+{
+}

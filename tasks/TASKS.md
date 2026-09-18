@@ -111,7 +111,7 @@ one valid Spec link.
 | B030 | S28 | Checkout API | done | B028, B029 | — |
 | B031 | S29 | Order creation API | done | B030 | — |
 | B032 | S29 | Sandbox payment API | done | B031 | — |
-| B033 | S30 | Order lookup API | planned | B032 | [tasks/backend/B033-guest-order-lookup-api.md](backend/B033-guest-order-lookup-api.md) |
+| B033 | S30 | Order lookup API | done | B032 | — |
 | B034 | S31 | Shared permission catalog contract (BuildingBlocks) and IAM migration | planned | — | [tasks/backend/B034-shared-permission-catalog-contract.md](backend/B034-shared-permission-catalog-contract.md) |
 | B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | planned | B034 | [tasks/backend/B035-shop-permission-enforcement.md](backend/B035-shop-permission-enforcement.md) |
 
