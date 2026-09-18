@@ -386,10 +386,12 @@ proves platform-admin status alone never substitutes for tenant membership.
 **UI hiding is not authorization** — every rule above is enforced
 server-side, independent of what the frontend displays or disables.
 
-Permission catalog (from the registered `IamPermissionCatalogContributor`
-through the host-built `IAggregatedPermissionCatalog` — B034; the same 3
-groups `RolesFeature` used to hardcode as `CatalogGroups` — exposed by
-`GET /api/permissions/catalog`):
+Permission catalog (from every registered `IPermissionCatalogContributor`
+through the host-built `IAggregatedPermissionCatalog` — B034; since B035 the
+registered contributors are IAM's `IamPermissionCatalogContributor` (the 3
+groups `RolesFeature` used to hardcode as `CatalogGroups`) and Shop's
+`ShopPermissionCatalogContributor` (one `shop` group) — exposed by
+`GET /api/permissions/catalog`, which serves the cross-module union):
 
 | Key | Consuming endpoints |
 | --- | --- |
@@ -397,6 +399,8 @@ groups `RolesFeature` used to hardcode as `CatalogGroups` — exposed by
 | `IAM.Invitations.View` | `GET /api/tenants/{tenantId}/invitations` |
 | `IAM.Invitations.Create` | `POST /api/tenants/{tenantId}/invitations` |
 | `IAM.Audit.View` | `GET /api/tenants/{tenantId}/audit` |
+| `Shop.Catalog.Manage` | Shop's mutating category/product admin endpoints (enforced by the Shop module, not IAM — see its own endpoints) |
+| `Shop.Shipping.Manage` | Shop's mutating shipping-rate/coupon admin endpoints (enforced by the Shop module, not IAM — see its own endpoints) |
 
 Membership-only (no specific permission key required) reads: `GET
 /api/tenants/{tenantId}/members`, `GET /api/tenants/{tenantId}/roles`, `GET
@@ -564,12 +568,14 @@ Verified against current code (not aspirational):
   single 30-minute access token per login; there is no refresh token,
   rotation or revocation list.
 - **Multi-module limitations** — a second business module (Shop) now exists
-  beside IAM. The dependency-direction rule
-  ([Section 3](#3-dependency-and-composition-boundary)) is enforced by
-  `BuildingBlocksArchitectureTests` and is now proven live against two
-  modules: Shop references `TenantForge.BuildingBlocks` only, never IAM or
-  its Contract. Shop still has no endpoints of its own (B025 shipped
-  persistence only), so it consumes no IAM request/response shape yet.
+   beside IAM. The dependency-direction rule
+   ([Section 3](#3-dependency-and-composition-boundary)) is enforced by
+   `BuildingBlocksArchitectureTests` and is now proven live against two
+   modules: Shop references `TenantForge.BuildingBlocks` only, never IAM or
+   its Contract. Shop's own endpoints enforce their tenant boundary and
+   permission keys (B035: `Shop.Catalog.Manage` / `Shop.Shipping.Manage`)
+   with Shop-module-owned raw SQL against IAM's tables, rather than through
+   IAM's own `RolesFeature.AuthorizeTenantAccessAsync`.
 
 ## 16. Change-impact checklist
 
@@ -600,3 +606,10 @@ RolesFeature's hardcoded CatalogGroups to IamPermissionCatalogContributor via
 the host-built IAggregatedPermissionCatalog; owner-semantics wording now
 names the aggregate's AllKnownKeys; Program.cs composition snippet shows the
 aggregator registration).`
+
+B035/S31 declaration:
+`IAM.md impact: updated — Section 10 (the permission catalog now aggregates
+Shop's two keys through the second registered contributor; no IAM route,
+request/response, entity, persistence, auth or endpoint-row change),
+Section 15 (stale "Shop still has no endpoints of its own" limitation
+replaced with Shop's own B035 enforcement boundary).`

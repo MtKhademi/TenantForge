@@ -113,7 +113,7 @@ one valid Spec link.
 | B032 | S29 | Sandbox payment API | done | B031 | — |
 | B033 | S30 | Order lookup API | done | B032 | — |
 | B034 | S31 | Shared permission catalog contract (BuildingBlocks) and IAM migration | done | — | — |
-| B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | planned | B034 | [tasks/backend/B035-shop-permission-enforcement.md](backend/B035-shop-permission-enforcement.md) |
+| B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | done | B034 | — |
 
 ## Cleanup batch: S11–S14
 

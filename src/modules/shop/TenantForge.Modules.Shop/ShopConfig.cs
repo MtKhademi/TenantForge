@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TenantForge.BuildingBlocks.Modules;
+using TenantForge.BuildingBlocks.Permissions;
+using TenantForge.Modules.Shop.Features.Authorization;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop;
@@ -32,6 +34,10 @@ public sealed class ShopConfig : IModuleConfig
         // ShopDbContext, mirroring IAMConfig.RegisterServices' own
         // scoped-vs-singleton reasoning for its database-backed services.
         services.AddScoped<Features.Payments.IShopPaymentGateway, Features.Payments.SandboxPaymentGateway>();
+
+        // B035: Shop's own contribution to the shared permission catalog
+        // (the second real contributor, after IAM's — see B034).
+        services.AddSingleton<IPermissionCatalogContributor, ShopPermissionCatalogContributor>();
     }
 
     public void ValidateConfiguration(IHostEnvironment environment, IConfiguration configuration)

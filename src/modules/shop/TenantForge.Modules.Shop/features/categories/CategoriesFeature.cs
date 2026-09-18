@@ -22,7 +22,7 @@ internal static class CategoriesFeature
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.CatalogManagePermission);
             if (access.Result is not null) return access.Result;
 
             var errors = ValidateCategoryFields(request.Name, request.Slug);
@@ -71,7 +71,7 @@ internal static class CategoriesFeature
             ClaimsPrincipal principal,
             ShopDbContext db) =>
         {
-            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db);
+            var access = await ShopAuthorization.AuthorizeTenantAccessAsync(tenantId, principal, db, ShopAuthorization.CatalogManagePermission);
             if (access.Result is not null) return access.Result;
 
             if (!TsidId.TryParse(categoryId, out var categoryTsid))
