@@ -47,3 +47,29 @@ export function clearOrderDraft(): void {
     // Best-effort only.
   }
 }
+
+const PLACED_ORDER_KEY = 'tenantforge:shop:placedOrder'
+
+export type PlacedOrder = {
+  orderId: string
+  orderNumber: string
+  trackingCode: string
+  gatewayReference: string
+}
+
+export function savePlacedOrder(order: PlacedOrder): void {
+  try {
+    window.sessionStorage.setItem(PLACED_ORDER_KEY, JSON.stringify(order))
+  } catch {
+    // Best-effort only, matching the design system's storage guidance.
+  }
+}
+
+export function loadPlacedOrder(): PlacedOrder | null {
+  try {
+    const raw = window.sessionStorage.getItem(PLACED_ORDER_KEY)
+    return raw ? (JSON.parse(raw) as PlacedOrder) : null
+  } catch {
+    return null
+  }
+}

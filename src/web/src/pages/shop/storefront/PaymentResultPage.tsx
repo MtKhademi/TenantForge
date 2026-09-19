@@ -1,26 +1,31 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
+import { loadPlacedOrder } from '@/features/shop/orderDraftState'
 
 /**
- * S29 payment result (F038, mocked): the terminal screen of the checkout →
- * review → bank → result flow, driven by the `outcome` query param.
- * F039 replaces the mock order number / tracking code with B031's real
- * values and clears the order draft once a real order exists.
+ * S29 payment result (F039, connected): the terminal screen of the
+ * checkout → review → bank → result flow, driven by the `outcome` query
+ * param (which the sandbox bank page sets from the server's resolved
+ * status). The displayed order number and tracking code are B031's real
+ * values, read from the placed-order carrier the review page stored after
+ * order creation — the F038 mock constants are gone.
  */
-const MOCK_ORDER_NUMBER = 'ORD-000001'
-const MOCK_TRACKING_CODE = 'MOCKTRACK123'
-
 export function PaymentResultPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const [searchParams] = useSearchParams()
   const approved = searchParams.get('outcome') === 'approved'
+  const placedOrder = loadPlacedOrder()
 
   if (approved) {
     return (
       <section aria-label="نتیجه پرداخت" className="max-w-md space-y-4 text-center">
         <p className="text-lg font-semibold text-success">پرداخت با موفقیت انجام شد</p>
-        <p>شماره سفارش: {MOCK_ORDER_NUMBER}</p>
-        <p>کد پیگیری: {MOCK_TRACKING_CODE}</p>
+        <p>
+          شماره سفارش: <span dir="ltr">{placedOrder?.orderNumber ?? '—'}</span>
+        </p>
+        <p>
+          کد پیگیری: <span dir="ltr">{placedOrder?.trackingCode ?? '—'}</span>
+        </p>
         <Link to={`/shop/${tenantId}`}>
           <Button type="button">بازگشت به فروشگاه</Button>
         </Link>
