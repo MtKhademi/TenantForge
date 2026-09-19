@@ -18,7 +18,10 @@ import { ShippingRatesPage } from './pages/shop/admin/ShippingRatesPage'
 import { CartPage } from './pages/shop/storefront/CartPage'
 import { CategoryPage } from './pages/shop/storefront/CategoryPage'
 import { CheckoutPage } from './pages/shop/storefront/CheckoutPage'
+import { OrderReviewPage } from './pages/shop/storefront/OrderReviewPage'
+import { PaymentResultPage } from './pages/shop/storefront/PaymentResultPage'
 import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
+import { SandboxBankPage } from './pages/shop/storefront/SandboxBankPage'
 import { StorefrontLayout } from './pages/shop/storefront/StorefrontLayout'
 import { TenantHome } from './pages/TenantHome'
 import { TenantScopePage } from './pages/TenantScopePage'
@@ -130,6 +133,9 @@ export default function App() {
         <Route path="products/:productSlug" element={<ProductDetailPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
+        <Route path="order-review" element={<OrderReviewPage />} />
+        <Route path="bank" element={<SandboxBankPage />} />
+        <Route path="payment-result" element={<PaymentResultPage />} />
       </Route>
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
