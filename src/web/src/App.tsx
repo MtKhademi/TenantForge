@@ -19,6 +19,7 @@ import { CartPage } from './pages/shop/storefront/CartPage'
 import { CategoryPage } from './pages/shop/storefront/CategoryPage'
 import { CheckoutPage } from './pages/shop/storefront/CheckoutPage'
 import { OrderReviewPage } from './pages/shop/storefront/OrderReviewPage'
+import { OrderTrackingPage } from './pages/shop/storefront/OrderTrackingPage'
 import { PaymentResultPage } from './pages/shop/storefront/PaymentResultPage'
 import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
 import { SandboxBankPage } from './pages/shop/storefront/SandboxBankPage'
@@ -136,6 +137,7 @@ export default function App() {
         <Route path="order-review" element={<OrderReviewPage />} />
         <Route path="bank" element={<SandboxBankPage />} />
         <Route path="payment-result" element={<PaymentResultPage />} />
+        <Route path="track-order" element={<OrderTrackingPage />} />
       </Route>
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
