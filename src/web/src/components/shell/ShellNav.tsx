@@ -55,6 +55,8 @@ const navItems: ShellNavItem[] = [
   { id: 'members', label: 'اعضای مستأجر', icon: UsersRound, href: '/t/', tenantScopedSuffix: '' },
   { id: 'shop-categories', label: 'دسته‌بندی‌های فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/categories' },
   { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products' },
+  { id: 'shop-shipping', label: 'نرخ‌های ارسال', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/shipping-rates' },
+  { id: 'shop-coupons', label: 'کدهای تخفیف', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/coupons' },
   { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', tenantScopedSuffix: '/roles' },
   { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations', requires: [INVITATIONS_VIEW_KEY] },
   { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit', requires: [AUDIT_VIEW_KEY] },
