@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWatch, useForm } from 'react-hook-form'
-import { Link, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { fetchCheckoutSummary, CheckoutValidationError, type CheckoutSummaryResponse } from '@/features/shop/checkoutAdapter'
+import { saveOrderDraft } from '@/features/shop/orderDraftState'
 
 /**
  * S28 checkout (F037): the public storefront checkout page, connected to
@@ -17,8 +18,9 @@ import { fetchCheckoutSummary, CheckoutValidationError, type CheckoutSummaryResp
  * cart (`EmptyCartError`, the 404) and an unshippable province or invalid
  * coupon (`CheckoutValidationError`, the 400) — surface as a plain message
  * in the summary panel instead of a silently-wrong total. No order is
- * created; the "continue" link is a forward reference to `/order-review`
- * (F038), mirroring the cart→checkout link.
+ * created here; the "continue" action saves the checkout inputs and the
+ * computed summary into `orderDraftState` (F038) and navigates to
+ * `/order-review`, where the review → bank → result flow picks them up.
  */
 const checkoutSchema = z.object({
   customerName: z.string().min(1, 'نام الزامی است.'),
@@ -33,6 +35,7 @@ type CheckoutFormValues = z.infer<typeof checkoutSchema>
 
 export function CheckoutPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
+  const navigate = useNavigate()
   const { register, control, getValues, formState: { errors } } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
@@ -144,9 +147,28 @@ export function CheckoutPage() {
             <div className="flex justify-between border-t border-border pt-2 font-semibold"><dt>مجموع نهایی</dt><dd>{summary.grandTotal.toLocaleString('fa-IR')}</dd></div>
           </dl>
         )}
-        <Link to={`/shop/${tenantId}/order-review`} className="block">
-          <Button type="button" className="w-full" disabled={!summary}>ادامه به بررسی سفارش</Button>
-        </Link>
+        <Button
+          type="button"
+          className="w-full"
+          disabled={!summary}
+          onClick={() => {
+            if (!summary) return
+            const values = getValues()
+            saveOrderDraft({
+              customerName: values.customerName,
+              customerPhone: values.customerPhone,
+              shippingProvince: values.shippingProvince,
+              shippingCity: values.shippingCity,
+              shippingAddressLine: values.shippingAddressLine,
+              shippingPostalCode: values.shippingPostalCode,
+              couponCode: values.couponCode || null,
+              ...summary,
+            })
+            navigate(`/shop/${tenantId}/order-review`)
+          }}
+        >
+          ادامه به بررسی سفارش
+        </Button>
       </div>
     </section>
   )
