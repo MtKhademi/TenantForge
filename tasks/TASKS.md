@@ -64,7 +64,7 @@ one valid Spec link.
 | F031 | S26 | Connect storefront browsing and detail to the real API | done | F030, B027 | — |
 | F032 | S27 | Cart page mock | done | F030 | — |
 | F033 | S27 | Connect cart page to the real API | done | F032, B028 | — |
-| F034 | S28 | Admin shipping-rate and coupon management mock | planned | F029 | [tasks/front/F034-admin-shipping-and-coupon-mock.md](front/F034-admin-shipping-and-coupon-mock.md) |
+| F034 | S28 | Admin shipping-rate and coupon management mock | done | F029 | — |
 | F035 | S28 | Connect admin shipping-rate and coupon management to the real API | planned | F034, B029 | [tasks/front/F035-connect-admin-shipping-and-coupon.md](front/F035-connect-admin-shipping-and-coupon.md) |
 | F036 | S28 | Checkout page mock | planned | F033 | [tasks/front/F036-checkout-page-mock.md](front/F036-checkout-page-mock.md) |
 | F037 | S28 | Connect checkout page to the real API | planned | F036, B030 | [tasks/front/F037-connect-checkout-page.md](front/F037-connect-checkout-page.md) |

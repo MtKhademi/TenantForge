@@ -12,7 +12,9 @@ import { InvitationsPage } from './pages/InvitationsPage'
 import { LoginPage } from './pages/LoginPage'
 import { RolesPage } from './pages/RolesPage'
 import { CategoriesPage } from './pages/shop/admin/CategoriesPage'
+import { CouponsPage } from './pages/shop/admin/CouponsPage'
 import { ProductsPage } from './pages/shop/admin/ProductsPage'
+import { ShippingRatesPage } from './pages/shop/admin/ShippingRatesPage'
 import { CartPage } from './pages/shop/storefront/CartPage'
 import { CategoryPage } from './pages/shop/storefront/CategoryPage'
 import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
@@ -147,6 +149,8 @@ export default function App() {
         <Route path="/t/:tenantId/audit" element={<AuditLogPage />} />
         <Route path="/t/:tenantId/shop/categories" element={<CategoriesPage />} />
         <Route path="/t/:tenantId/shop/products" element={<ProductsPage />} />
+        <Route path="/t/:tenantId/shop/shipping-rates" element={<ShippingRatesPage />} />
+        <Route path="/t/:tenantId/shop/coupons" element={<CouponsPage />} />
       </Route>
       <Route path="*" element={<RedirectHome />} />
     </Routes>
