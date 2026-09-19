@@ -1,4 +1,4 @@
-import { CircleCheck, Loader2, RefreshCw, Truck } from 'lucide-react'
+import { CircleCheck, Loader2, RefreshCw, Truck, TriangleAlert } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -6,16 +6,22 @@ import { useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
-import { mockShippingAndCouponAdapter } from '@/features/shop/mockShippingAndCouponAdapter'
+import { useAuth } from '@/features/auth/AuthContext'
+import { SessionExpiredError } from '@/features/auth/authTypes'
+import {
+  createShippingAndCouponAdapter,
+  ShopForbiddenError,
+  ShopValidationError,
+} from '@/features/shop/shippingAndCouponAdapter'
 import type { ShippingRate } from '@/features/shop/shopCheckoutAdminTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S28 (F034): admin shipping-rate management, mocked (F035 connects it to
- * B029's real API without changing this page's structure). Follows
- * `CategoriesPage.tsx`'s pattern: header, toggle form, skeleton, empty
- * state, table.
+ * S28 (F035): admin shipping-rate management, connected to B029's real API.
+ * Follows `CategoriesPage.tsx`'s exact pattern: header, toggle form,
+ * skeleton, empty state, table, list-failure panel.
  *
  * `setShippingRate` is an upsert by `provinceName` — there is no separate
  * province lookup table anywhere in this module, so submitting an existing
@@ -29,33 +35,66 @@ const rateSchema = z.object({
 type RateFormValues = z.infer<typeof rateSchema>
 
 export function ShippingRatesPage() {
+  const { session, signOut } = useAuth()
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const [rates, setRates] = useState<ShippingRate[] | null>(null)
   const [isBusy, setIsBusy] = useState(true)
+  const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
 
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null)
   const provinceInputRef = useRef<HTMLInputElement | null>(null)
+  // Fresh refs so the (stable) callbacks below always read the current token
+  // and sign-out action without re-creating the data source per render.
+  const sessionRef = useRef(session)
+  const signOutRef = useRef(signOut)
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+  useEffect(() => {
+    signOutRef.current = signOut
+  }, [signOut])
+
+  // One bound data-source instance per render, carrying the current token.
+  // Event handlers (submit) read `adapter` directly; the effect-driven load
+  // callback reads `adapterRef` so it stays referentially stable.
+  const adapter = createShippingAndCouponAdapter(session?.accessToken ?? '')
+  const adapterRef = useRef(adapter)
+  useEffect(() => {
+    adapterRef.current = adapter
+  }, [adapter])
 
   const {
     register,
     handleSubmit,
     reset,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(rateSchema),
     defaultValues: { provinceName: '', cost: 0 },
   })
 
+  const handleListFailure = useCallback((error: unknown) => {
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    setListFailure(error instanceof ShopForbiddenError ? 'forbidden' : 'unavailable')
+  }, [])
+
   const loadRates = useCallback(() => {
     setIsBusy(true)
-    return mockShippingAndCouponAdapter
+    setListFailure(null)
+    return adapterRef.current
       .listShippingRates(tenantId)
       .then(setRates)
+      .catch((error) => handleListFailure(error))
       .finally(() => setIsBusy(false))
-  }, [tenantId])
+  }, [tenantId, handleListFailure])
 
   useEffect(() => {
     void loadRates()
@@ -70,34 +109,51 @@ export function ShippingRatesPage() {
   const closeForm = useCallback(() => {
     setFormOpen(false)
     reset()
+    clearErrors()
     setSuccess(null)
     toggleButtonRef.current?.focus()
-  }, [reset])
+  }, [reset, clearErrors])
 
   const openForm = useCallback(() => {
     reset()
+    clearErrors()
     setSuccess(null)
     setFormOpen(true)
-  }, [reset])
+  }, [reset, clearErrors])
 
   const onSubmit = useCallback(
     async (values: RateFormValues) => {
       setIsSubmitting(true)
       setSuccess(null)
       try {
-        const saved = await mockShippingAndCouponAdapter.setShippingRate(tenantId, values)
+        const saved = await adapter.setShippingRate(tenantId, values)
         setSuccess(`نرخ ارسال استان ${saved.provinceName} ذخیره شد.`)
         reset()
         setFormOpen(false)
         void loadRates()
+      } catch (error) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+        } else if (error instanceof ShopValidationError) {
+          for (const [field, message] of Object.entries(error.fieldErrors)) {
+            if (field === 'provinceName' || field === 'cost') {
+              setError(field, { message })
+            }
+          }
+          provinceInputRef.current?.focus()
+        } else if (error instanceof ShopForbiddenError) {
+          setError('provinceName', { message: error.message })
+          provinceInputRef.current?.focus()
+        }
       } finally {
         setIsSubmitting(false)
       }
     },
-    [tenantId, reset, loadRates],
+    [tenantId, adapter, reset, setError, loadRates],
   )
 
   const isLoading = rates === null && isBusy
+  const listError = rates === null && !isBusy && listFailure !== null
   const isEmpty = rates !== null && rates.length === 0
   const provinceField = register('provinceName')
 
@@ -234,6 +290,24 @@ export function ShippingRatesPage() {
         )}
 
         {isLoading && <ShippingRatesSkeleton />}
+
+        {listError && (
+          <StatePanel
+            icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
+            title={listFailure === 'forbidden' ? 'دسترسی مدیریت فروشگاه مجاز نیست' : 'فهرست نرخ‌های ارسال در دسترس نیست'}
+            description={
+              listFailure === 'forbidden'
+                ? 'حساب فعلی مجوز مدیریت فروشگاه این مستأجر را ندارد.'
+                : 'هم‌اکنون نمی‌توانیم نرخ‌های ارسال را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'
+            }
+            action={
+              <Button type="button" className="mt-3 min-w-32" onClick={() => void loadRates()}>
+                <RefreshCw aria-hidden="true" className="me-2 size-4" />
+                تلاش دوباره
+              </Button>
+            }
+          />
+        )}
 
         {isEmpty && (
           <div className="rounded-xl border border-border bg-surface p-8 text-center shadow-soft">
