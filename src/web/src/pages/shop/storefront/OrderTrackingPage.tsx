@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
-import { mockLookupOrder, type OrderLookupResult } from '@/features/shop/mockOrderLookup'
+import { lookupOrder } from '@/features/shop/orderLookupAdapter'
+import type { OrderLookupResult } from '@/features/shop/orderLookupTypes'
 
 const trackingSchema = z.object({
   trackingCode: z.string().min(1, 'کد پیگیری الزامی است.'),
@@ -13,19 +15,31 @@ const trackingSchema = z.object({
 type TrackingFormValues = z.infer<typeof trackingSchema>
 
 /**
- * S30 guest order tracking (F040 mock, F041 connects to B033). Both
- * fields are always required together, and a failed lookup always shows
- * one generic message — never branching copy on which field was wrong.
+ * S30 guest order tracking (F041, connected to B033). Both fields are
+ * always required together, and a failed lookup always shows one generic
+ * message — never branching copy on which field was wrong. B033 returns
+ * the same 404 for a wrong phone and a made-up code, so `null` (not found)
+ * and a server failure are the only two non-success outcomes, and the
+ * server-failure case is a distinct, honest message rather than pretending
+ * the order simply doesn't exist.
  */
 export function OrderTrackingPage() {
+  const { tenantId = '' } = useParams<{ tenantId: string }>()
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<TrackingFormValues>({
     resolver: zodResolver(trackingSchema),
     defaultValues: { trackingCode: '', customerPhone: '' },
   })
   const [result, setResult] = useState<OrderLookupResult | null | undefined>(undefined)
+  const [lookupError, setLookupError] = useState<string | null>(null)
 
   const onSubmit = async (values: TrackingFormValues) => {
-    setResult(await mockLookupOrder(values.trackingCode, values.customerPhone))
+    setLookupError(null)
+    try {
+      setResult(await lookupOrder(tenantId, values.trackingCode, values.customerPhone))
+    } catch {
+      setResult(null)
+      setLookupError('هم‌اکنون نمی‌توانیم سفارش شما را پیدا کنیم. لطفاً دوباره تلاش کنید.')
+    }
   }
 
   return (
@@ -65,7 +79,11 @@ export function OrderTrackingPage() {
         </Button>
       </form>
 
-      {result === null && (
+      {lookupError && (
+        <p role="alert" className="text-sm font-semibold text-destructive">{lookupError}</p>
+      )}
+
+      {!lookupError && result === null && (
         <p role="alert" className="text-sm font-semibold text-destructive">
           سفارشی با این کد پیگیری و شماره تماس یافت نشد.
         </p>
