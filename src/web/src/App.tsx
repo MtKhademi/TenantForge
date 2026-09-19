@@ -17,6 +17,7 @@ import { ProductsPage } from './pages/shop/admin/ProductsPage'
 import { ShippingRatesPage } from './pages/shop/admin/ShippingRatesPage'
 import { CartPage } from './pages/shop/storefront/CartPage'
 import { CategoryPage } from './pages/shop/storefront/CategoryPage'
+import { CheckoutPage } from './pages/shop/storefront/CheckoutPage'
 import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
 import { StorefrontLayout } from './pages/shop/storefront/StorefrontLayout'
 import { TenantHome } from './pages/TenantHome'
@@ -128,6 +129,7 @@ export default function App() {
         <Route path="categories/:categorySlug" element={<CategoryPage />} />
         <Route path="products/:productSlug" element={<ProductDetailPage />} />
         <Route path="cart" element={<CartPage />} />
+        <Route path="checkout" element={<CheckoutPage />} />
       </Route>
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
