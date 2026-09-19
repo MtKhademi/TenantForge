@@ -1,22 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWatch, useForm } from 'react-hook-form'
 import { Link, useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
-import { computeMockCheckoutSummary, type CheckoutSummary } from '@/features/shop/mockCheckoutSummary'
+import { fetchCheckoutSummary, CheckoutValidationError, type CheckoutSummaryResponse } from '@/features/shop/checkoutAdapter'
 
 /**
- * S28 checkout (F036): the public storefront checkout page, mocked. An
- * address form (province, city, address line, postal code), a coupon-code
- * field and a live order summary that recomputes as the shopper edits the
- * form — against `mockCheckoutSummary`'s hardcoded data. The summary mirrors
- * B030's `CheckoutSummaryResponse` field-for-field, and the two named errors
- * (unshippable province, invalid coupon) match what the real endpoint will
- * throw, so F037 can swap the mock for `cartAdapter`-style real code without
- * touching the UI. No order is created; the "continue" link is a forward
- * reference to `/order-review` (F038), mirroring the cart→checkout link.
+ * S28 checkout (F037): the public storefront checkout page, connected to
+ * B030's real, compute-only checkout-summary endpoint via `checkoutAdapter`.
+ * An address form (province, city, address line, postal code) and a
+ * coupon-code field drive a debounced (300ms) recompute of the live order
+ * summary (subtotal, discount, shipping, grand total) so rapid typing does
+ * not fire one request per keystroke. The API's distinct errors — an empty
+ * cart (`EmptyCartError`, the 404) and an unshippable province or invalid
+ * coupon (`CheckoutValidationError`, the 400) — surface as a plain message
+ * in the summary panel instead of a silently-wrong total. No order is
+ * created; the "continue" link is a forward reference to `/order-review`
+ * (F038), mirroring the cart→checkout link.
  */
 const checkoutSchema = z.object({
   customerName: z.string().min(1, 'نام الزامی است.'),
@@ -31,40 +33,70 @@ type CheckoutFormValues = z.infer<typeof checkoutSchema>
 
 export function CheckoutPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
-  const { register, control, formState: { errors } } = useForm<CheckoutFormValues>({
+  const { register, control, getValues, formState: { errors } } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       customerName: '', customerPhone: '', shippingProvince: '', shippingCity: '',
       shippingAddressLine: '', shippingPostalCode: '', couponCode: '',
     },
   })
-  const [summary, setSummary] = useState<CheckoutSummary | null>(null)
+  const [summary, setSummary] = useState<CheckoutSummaryResponse | null>(null)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   // `useWatch` (not the render-phase `watch` helper) is the project idiom
   // (see `ProductsPage`): it reads the same react-hook-form store but is
   // React-Compiler-memoizable, so editing a field recomputes the summary
-  // without a fresh `incompatible-library` lint warning.
+  // without a fresh `incompatible-library` lint warning. Every field that
+  // can change the price (province drives shipping, coupon drives the
+  // discount, the rest ride along so one request always carries the whole
+  // address) re-triggers the debounced recompute.
   const province = useWatch({ control, name: 'shippingProvince' })
+  const city = useWatch({ control, name: 'shippingCity' })
+  const addressLine = useWatch({ control, name: 'shippingAddressLine' })
+  const postalCode = useWatch({ control, name: 'shippingPostalCode' })
   const couponCode = useWatch({ control, name: 'couponCode' })
 
-  const recompute = useCallback(async () => {
-    if (!province) {
-      setSummary(null)
-      setSummaryError(null)
-      return
-    }
-    try {
-      setSummary(await computeMockCheckoutSummary(province, couponCode))
-      setSummaryError(null)
-    } catch (error) {
-      setSummary(null)
-      setSummaryError(error instanceof Error ? error.message : 'خطایی رخ داد.')
-    }
-  }, [province, couponCode])
+  // Debounce: the summary is a network round-trip now (it was a local mock),
+  // so rapid typing must not fire one request per keystroke — each edit
+  // resets the 300ms timer; only the settled value is sent.
+  const debounceRef = useRef<number | null>(null)
+
+  const recompute = useCallback(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    debounceRef.current = window.setTimeout(async () => {
+      const values = getValues()
+      if (!values.shippingProvince) {
+        setSummary(null)
+        setSummaryError(null)
+        return
+      }
+      try {
+        const result = await fetchCheckoutSummary(tenantId, {
+          shippingProvince: values.shippingProvince,
+          shippingCity: values.shippingCity,
+          shippingAddressLine: values.shippingAddressLine,
+          shippingPostalCode: values.shippingPostalCode,
+          couponCode: values.couponCode || null,
+        })
+        setSummary(result)
+        setSummaryError(null)
+      } catch (error) {
+        setSummary(null)
+        if (error instanceof CheckoutValidationError) {
+          // The API's distinct, field-keyed messages (e.g. "This tenant does
+          // not ship to the selected province." / "This coupon code is not
+          // valid.") — surfaced verbatim so an unshippable province and a dead
+          // coupon read as different problems, per the task acceptance.
+          setSummaryError(Object.values(error.fieldErrors).join(' '))
+        } else {
+          setSummaryError(error instanceof Error ? error.message : 'خطایی رخ داد.')
+        }
+      }
+    }, 300)
+  }, [tenantId, getValues])
 
   useEffect(() => {
     void recompute()
-  }, [recompute])
+  }, [recompute, province, city, addressLine, postalCode, couponCode])
 
   return (
     <section aria-label="تسویه حساب" className="grid gap-8 md:grid-cols-2">
