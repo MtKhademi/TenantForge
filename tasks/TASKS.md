@@ -72,7 +72,7 @@ one valid Spec link.
 | F039 | S29 | Connect order review and payment to the real API | done | F038, B031, B032 | — |
 | F040 | S30 | Order tracking page mock | done | F039 | — |
 | F041 | S30 | Connect order tracking page to the real API | done | F040, B033 | — |
-| F042 | S31 | Group ShellNav into labelled module sections | planned | F029 | [tasks/front/F042-modular-shell-navigation.md](front/F042-modular-shell-navigation.md) |
+| F042 | S31 | Group ShellNav into labelled module sections | done | F029 | — |
 | F043 | S31 | Gate Shop nav items on the new Shop permission keys | planned | F042, B035 | [tasks/front/F043-shop-nav-permission-gating.md](front/F043-shop-nav-permission-gating.md) |
 
 ## Backend queue

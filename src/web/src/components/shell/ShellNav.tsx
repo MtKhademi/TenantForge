@@ -42,27 +42,52 @@ type ShellNavItem = {
 }
 
 /**
- * The destinations the shell exposes so far. S16 (F023) makes the nav
- * scope-aware: the tenant items — اعضای مستأجر، نقش‌ها، دعوت‌ها، گزارش
- * فعالیت — keep the URL's tenant id and are the only real destinations
- * inside a tenant; the platform items (admin-only) appear only in platform
- * scope. هویت پلتفرم and وضعیت امنیتی remain inert placeholders for later
- * slices.
+ * S31 (F042): a labelled group of destinations, rendered as its own
+ * heading + item list. Purely a presentation grouping — it carries no
+ * behavior of its own; every `ShellNavItem` inside it keeps working
+ * exactly as it did in the previous flat array.
  */
-const navItems: ShellNavItem[] = [
-  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', platform: true },
-  { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', platform: true },
-  { id: 'members', label: 'اعضای مستأجر', icon: UsersRound, href: '/t/', tenantScopedSuffix: '' },
-  { id: 'shop-categories', label: 'دسته‌بندی‌های فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/categories' },
-  { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products' },
-  { id: 'shop-shipping', label: 'نرخ‌های ارسال', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/shipping-rates' },
-  { id: 'shop-coupons', label: 'کدهای تخفیف', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/coupons' },
-  { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', tenantScopedSuffix: '/roles' },
-  { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations', requires: [INVITATIONS_VIEW_KEY] },
-  { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit', requires: [AUDIT_VIEW_KEY] },
-  { id: 'users', label: 'کاربران پلتفرم', icon: Users, href: '/users', platform: true },
-  { id: 'identity', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true, platform: true },
-  { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true, platform: true },
+type ShellNavSection = {
+  id: string
+  label: string
+  items: ShellNavItem[]
+}
+
+/**
+ * S31 (F042): the destinations grouped by owning module, so the sidebar
+ * visually separates "هویت و دسترسی" (platform + IAM tenant destinations)
+ * from "فروشگاه" (every Shop tenant destination, including the
+ * shipping-rate/coupon admin pages F034 added after this Spec was first
+ * drafted). S16 (F023) still governs scope-awareness item-by-item inside
+ * each section; S12 (F019) still governs `requires`-gating item-by-item.
+ * Grouping here changes neither — only how the same items are laid out.
+ */
+const navSections: ShellNavSection[] = [
+  {
+    id: 'identity',
+    label: 'هویت و دسترسی',
+    items: [
+      { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, href: '/dashboard', platform: true },
+      { id: 'tenants', label: 'مستأجران', icon: Building2, href: '/platform/tenants', platform: true },
+      { id: 'members', label: 'اعضای مستأجر', icon: UsersRound, href: '/t/', tenantScopedSuffix: '' },
+      { id: 'roles', label: 'نقش‌ها', icon: KeyRound, href: '/t/', tenantScopedSuffix: '/roles' },
+      { id: 'invitations', label: 'دعوت‌ها', icon: MailPlus, href: '/t/', tenantScopedSuffix: '/invitations', requires: [INVITATIONS_VIEW_KEY] },
+      { id: 'audit', label: 'گزارش فعالیت', icon: ScrollText, href: '/t/', tenantScopedSuffix: '/audit', requires: [AUDIT_VIEW_KEY] },
+      { id: 'users', label: 'کاربران پلتفرم', icon: Users, href: '/users', platform: true },
+      { id: 'identity-directory', label: 'هویت پلتفرم', icon: IdCard, href: '#identity', placeholder: true, platform: true },
+      { id: 'security', label: 'وضعیت امنیتی', icon: Shield, href: '#security', placeholder: true, platform: true },
+    ],
+  },
+  {
+    id: 'shop',
+    label: 'فروشگاه',
+    items: [
+      { id: 'shop-categories', label: 'دسته‌بندی‌های فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/categories' },
+      { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products' },
+      { id: 'shop-shipping', label: 'نرخ‌های ارسال', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/shipping-rates' },
+      { id: 'shop-coupons', label: 'کدهای تخفیف', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/coupons' },
+    ],
+  },
 ]
 
 type ShellNavProps = {
@@ -97,6 +122,13 @@ type ShellNavProps = {
  *   preserved via `aria-label` and a Persian tooltip is provided.
  * - The active route is shown with a pill plus an inline-start indicator bar,
  *   which is the logical "first" edge in RTL.
+ *
+ * S31 (F042): destinations are grouped into labelled `ShellNavSection`s
+ * ("هویت و دسترسی", "فروشگاه") purely for visual clarity — a section
+ * heading is hidden in collapsed mode (there is no room for it), exactly
+ * as item labels are hidden in collapsed mode. Every item's own
+ * scope/permission/active-state behavior above is untouched: this only
+ * changes how the same flat list of items is laid out.
  */
 export function ShellNav({ collapsed = false }: ShellNavProps) {
   const location = useLocation()
@@ -117,103 +149,120 @@ export function ShellNav({ collapsed = false }: ShellNavProps) {
   // S11 (F018) + S16 (F023): platform destinations are shown only to a
   // platform administrator (`isPlatformAdmin`, never tenant permission keys)
   // and only in platform scope. Tenant-scoped items resolve against the
-  // URL's tenant id and are inert placeholders outside a tenant.
-  const visibleItems = useMemo(() => {
-    return navItems.filter(
-      (item) =>
-        !item.platform || (isPlatformAdmin && !inTenantScope),
-    )
+  // URL's tenant id and are inert placeholders outside a tenant. S31 (F042):
+  // filtering now runs per-section, then sections with zero visible items
+  // are dropped entirely so no empty heading is ever shown.
+  const visibleSections = useMemo(() => {
+    return navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (item) => !item.platform || (isPlatformAdmin && !inTenantScope),
+        ),
+      }))
+      .filter((section) => section.items.length > 0)
   }, [isPlatformAdmin, inTenantScope])
 
   return (
     <nav className="flex h-full flex-col gap-6 p-4" aria-label="ناوبری اصلی">
       <BrandRow collapsed={collapsed} />
 
-      <ul className="space-y-1">
-        {visibleItems.map((item) => {
-          const scopedAvailable =
-            item.tenantScopedSuffix !== undefined && inTenantScope && tenantId.length > 0
-          const resolvedHref = scopedAvailable
-            ? `/t/${encodeURIComponent(tenantId)}${item.tenantScopedSuffix}`
-            : item.href
-          // S16 (F023): a tenant-scoped item (اعضای مستأجر، نقش‌ها، …) is a real,
-          // active link only while the URL's tenant id makes it available;
-          // outside a tenant it is an inert placeholder — discoverable but not
-          // navigable — exactly as the platform placeholders are (F018 parity).
-          // `item.placeholder` additionally marks the always-inert platform
-          // items (هویت پلتفرم، وضعیت امنیتی).
-          const placeholder =
-            !scopedAvailable &&
-            (Boolean(item.placeholder) || item.tenantScopedSuffix !== undefined)
-          // S12 (F019): a destination with required tenant permissions is inert
-          // while the server-resolved set is loading, failed or missing the
-          // keys. Hiding/disabling is presentation only — B013 denies the
-          // underlying read with a non-leaking 403 when the URL is reached
-          // directly.
-          const permissionGated =
-            Boolean(item.requires?.length) &&
-            inTenantScope &&
-            resolved.permissions !== null &&
-            !item.requires!.every((key) => resolved.permissions?.has(key) ?? false)
-          const permissionPending =
-            Boolean(item.requires?.length) && inTenantScope && resolved.isResolving
-          const inert = placeholder || permissionGated || permissionPending
-          // Exact match only: the member item matches `/t/{id}` itself, each
-          // child item its own child route, and platform items their own
-          // routes. No prefix matches, so the platform tenant-list entry
-          // never masquerades as the current page inside a tenant.
-          const active = !inert && location.pathname === resolvedHref
-          const Icon = item.icon
-          const link = (
-            <Link
-              key={item.id}
-              to={inert ? item.href : resolvedHref}
-              aria-label={collapsed ? item.label : undefined}
-              aria-describedby={collapsed ? `${item.id}-tooltip` : undefined}
-              aria-current={active ? 'page' : undefined}
-              aria-disabled={inert || undefined}
-              onClick={(event) => {
-                if (inert) {
-                  // Keep the named item discoverable without navigating to a
-                  // destination the current tenant permissions do not grant.
-                  event.preventDefault()
-                }
-              }}
-              className={cn(
-                'relative flex min-h-10 items-center rounded-md text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-                active
-                  ? 'bg-muted text-foreground'
-                  : 'text-sidebar-foreground/80 hover:text-foreground',
-                inert && 'cursor-default opacity-60',
-                collapsed ? 'justify-center px-0' : 'px-3',
-              )}
-            >
-              {/* Active indicator: a thin bar on the inline-start edge. */}
-              {active && (
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-primary"
-                />
-              )}
-              <Icon
-                aria-hidden="true"
-                className={cn('size-5 shrink-0', collapsed && 'mx-auto')}
-              />
-              {!collapsed && <span className="ms-3 truncate">{item.label}</span>}
-            </Link>
-          )
+      <div className="space-y-6">
+        {visibleSections.map((section) => (
+          <div key={section.id}>
+            {!collapsed && (
+              <p className="mb-2 px-3 text-xs font-medium text-muted-foreground">
+                {section.label}
+              </p>
+            )}
+            <ul className="space-y-1">
+              {section.items.map((item) => {
+                const scopedAvailable =
+                  item.tenantScopedSuffix !== undefined && inTenantScope && tenantId.length > 0
+                const resolvedHref = scopedAvailable
+                  ? `/t/${encodeURIComponent(tenantId)}${item.tenantScopedSuffix}`
+                  : item.href
+                // S16 (F023): a tenant-scoped item (اعضای مستأجر، نقش‌ها، …) is a real,
+                // active link only while the URL's tenant id makes it available;
+                // outside a tenant it is an inert placeholder — discoverable but not
+                // navigable — exactly as the platform placeholders are (F018 parity).
+                // `item.placeholder` additionally marks the always-inert platform
+                // items (هویت پلتفرم، وضعیت امنیتی).
+                const placeholder =
+                  !scopedAvailable &&
+                  (Boolean(item.placeholder) || item.tenantScopedSuffix !== undefined)
+                // S12 (F019): a destination with required tenant permissions is inert
+                // while the server-resolved set is loading, failed or missing the
+                // keys. Hiding/disabling is presentation only — B013 denies the
+                // underlying read with a non-leaking 403 when the URL is reached
+                // directly.
+                const permissionGated =
+                  Boolean(item.requires?.length) &&
+                  inTenantScope &&
+                  resolved.permissions !== null &&
+                  !item.requires!.every((key) => resolved.permissions?.has(key) ?? false)
+                const permissionPending =
+                  Boolean(item.requires?.length) && inTenantScope && resolved.isResolving
+                const inert = placeholder || permissionGated || permissionPending
+                // Exact match only: the member item matches `/t/{id}` itself, each
+                // child item its own child route, and platform items their own
+                // routes. No prefix matches, so the platform tenant-list entry
+                // never masquerades as the current page inside a tenant.
+                const active = !inert && location.pathname === resolvedHref
+                const Icon = item.icon
+                const link = (
+                  <Link
+                    key={item.id}
+                    to={inert ? item.href : resolvedHref}
+                    aria-label={collapsed ? item.label : undefined}
+                    aria-describedby={collapsed ? `${item.id}-tooltip` : undefined}
+                    aria-current={active ? 'page' : undefined}
+                    aria-disabled={inert || undefined}
+                    onClick={(event) => {
+                      if (inert) {
+                        // Keep the named item discoverable without navigating to a
+                        // destination the current tenant permissions do not grant.
+                        event.preventDefault()
+                      }
+                    }}
+                    className={cn(
+                      'relative flex min-h-10 items-center rounded-md text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                      active
+                        ? 'bg-muted text-foreground'
+                        : 'text-sidebar-foreground/80 hover:text-foreground',
+                      inert && 'cursor-default opacity-60',
+                      collapsed ? 'justify-center px-0' : 'px-3',
+                    )}
+                  >
+                    {/* Active indicator: a thin bar on the inline-start edge. */}
+                    {active && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-primary"
+                      />
+                    )}
+                    <Icon
+                      aria-hidden="true"
+                      className={cn('size-5 shrink-0', collapsed && 'mx-auto')}
+                    />
+                    {!collapsed && <span className="ms-3 truncate">{item.label}</span>}
+                  </Link>
+                )
 
-          if (!collapsed) return <li key={item.id}>{link}</li>
+                if (!collapsed) return <li key={item.id}>{link}</li>
 
-          return (
-            <li key={item.id}>
-              <Tooltip label={item.label} id={`${item.id}-tooltip`} className="block">
-                {link}
-              </Tooltip>
-            </li>
-          )
-        })}
-      </ul>
+                return (
+                  <li key={item.id}>
+                    <Tooltip label={item.label} id={`${item.id}-tooltip`} className="block">
+                      {link}
+                    </Tooltip>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
 
       {!collapsed && (
         <div className="mt-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
