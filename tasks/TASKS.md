@@ -65,7 +65,7 @@ one valid Spec link.
 | F032 | S27 | Cart page mock | done | F030 | — |
 | F033 | S27 | Connect cart page to the real API | done | F032, B028 | — |
 | F034 | S28 | Admin shipping-rate and coupon management mock | done | F029 | — |
-| F035 | S28 | Connect admin shipping-rate and coupon management to the real API | planned | F034, B029 | [tasks/front/F035-connect-admin-shipping-and-coupon.md](front/F035-connect-admin-shipping-and-coupon.md) |
+| F035 | S28 | Connect admin shipping-rate and coupon management to the real API | done | F034, B029 | — |
 | F036 | S28 | Checkout page mock | planned | F033 | [tasks/front/F036-checkout-page-mock.md](front/F036-checkout-page-mock.md) |
 | F037 | S28 | Connect checkout page to the real API | planned | F036, B030 | [tasks/front/F037-connect-checkout-page.md](front/F037-connect-checkout-page.md) |
 | F038 | S29 | Order review and sandbox payment mock | planned | F037 | [tasks/front/F038-order-review-and-sandbox-payment-mock.md](front/F038-order-review-and-sandbox-payment-mock.md) |

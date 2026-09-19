@@ -34,3 +34,18 @@ export class CouponConflictError extends Error {
     this.name = 'CouponConflictError'
   }
 }
+
+/**
+ * S28 (F035): the shipping-rate/coupon admin data-source contract. F034
+ * satisfied it with an in-memory mock; F035 satisfies it with
+ * `createShippingAndCouponAdapter` (real B029 calls). The mock file is
+ * deleted once the real adapter lands — same reasoning as F029's
+ * `ShopCatalogAdapter` move.
+ */
+export type ShippingAndCouponAdapter = {
+  listShippingRates(tenantId: string): Promise<ShippingRate[]>
+  setShippingRate(tenantId: string, request: SetShippingRateRequest): Promise<ShippingRate>
+  listCoupons(tenantId: string): Promise<Coupon[]>
+  createCoupon(tenantId: string, request: CreateCouponRequest): Promise<Coupon>
+  deactivateCoupon(tenantId: string, couponId: string): Promise<Coupon>
+}

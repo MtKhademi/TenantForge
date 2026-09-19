@@ -1,4 +1,4 @@
-import { BadgePercent, CircleCheck, Loader2, RefreshCw } from 'lucide-react'
+import { BadgePercent, CircleCheck, Loader2, RefreshCw, TriangleAlert } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -6,15 +6,21 @@ import { useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
+import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
-import { mockShippingAndCouponAdapter } from '@/features/shop/mockShippingAndCouponAdapter'
+import { useAuth } from '@/features/auth/AuthContext'
+import { SessionExpiredError } from '@/features/auth/authTypes'
+import {
+  createShippingAndCouponAdapter,
+  ShopForbiddenError,
+  ShopValidationError,
+} from '@/features/shop/shippingAndCouponAdapter'
 import { CouponConflictError, type Coupon } from '@/features/shop/shopCheckoutAdminTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S28 (F034): admin coupon management, mocked (F035 connects it to B029's
- * real API without changing this page's structure). Follows
- * `ShippingRatesPage.tsx`'s pattern exactly.
+ * S28 (F035): admin coupon management, connected to B029's real API.
+ * Follows `ShippingRatesPage.tsx`'s pattern exactly.
  *
  * There is no edit/reactivate action on this page — only create and
  * deactivate — matching B029's real scope exactly.
@@ -29,35 +35,69 @@ const couponSchema = z.object({
 type CouponFormValues = z.infer<typeof couponSchema>
 
 export function CouponsPage() {
+  const { session, signOut } = useAuth()
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const [coupons, setCoupons] = useState<Coupon[] | null>(null)
   const [isBusy, setIsBusy] = useState(true)
+  const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null)
   const codeInputRef = useRef<HTMLInputElement | null>(null)
+  // Fresh refs so the (stable) callbacks below always read the current token
+  // and sign-out action without re-creating the data source per render.
+  const sessionRef = useRef(session)
+  const signOutRef = useRef(signOut)
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+  useEffect(() => {
+    signOutRef.current = signOut
+  }, [signOut])
+
+  // One bound data-source instance per render, carrying the current token.
+  // Event handlers read `adapter` directly; the effect-driven load callback
+  // reads `adapterRef` so it stays referentially stable.
+  const adapter = createShippingAndCouponAdapter(session?.accessToken ?? '')
+  const adapterRef = useRef(adapter)
+  useEffect(() => {
+    adapterRef.current = adapter
+  }, [adapter])
 
   const {
     register,
     handleSubmit,
     reset,
     setError,
+    clearErrors,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(couponSchema),
     defaultValues: { code: '', discountType: 'Percentage' as const, discountValue: 0, expiresAtUtc: '' },
   })
 
+  const handleListFailure = useCallback((error: unknown) => {
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    setListFailure(error instanceof ShopForbiddenError ? 'forbidden' : 'unavailable')
+  }, [])
+
   const loadCoupons = useCallback(() => {
     setIsBusy(true)
-    return mockShippingAndCouponAdapter
+    setListFailure(null)
+    setActionError(null)
+    return adapterRef.current
       .listCoupons(tenantId)
       .then(setCoupons)
+      .catch((error) => handleListFailure(error))
       .finally(() => setIsBusy(false))
-  }, [tenantId])
+  }, [tenantId, handleListFailure])
 
   useEffect(() => {
     void loadCoupons()
@@ -72,22 +112,26 @@ export function CouponsPage() {
   const closeForm = useCallback(() => {
     setFormOpen(false)
     reset()
+    clearErrors()
     setSuccess(null)
     toggleButtonRef.current?.focus()
-  }, [reset])
+  }, [reset, clearErrors])
 
   const openForm = useCallback(() => {
     reset()
+    clearErrors()
     setSuccess(null)
+    setActionError(null)
     setFormOpen(true)
-  }, [reset])
+  }, [reset, clearErrors])
 
   const onSubmit = useCallback(
     async (values: CouponFormValues) => {
       setIsSubmitting(true)
       setSuccess(null)
+      setActionError(null)
       try {
-        const created = await mockShippingAndCouponAdapter.createCoupon(tenantId, {
+        const created = await adapter.createCoupon(tenantId, {
           code: values.code,
           discountType: values.discountType,
           discountValue: values.discountValue,
@@ -98,7 +142,19 @@ export function CouponsPage() {
         setFormOpen(false)
         void loadCoupons()
       } catch (error) {
-        if (error instanceof CouponConflictError) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+        } else if (error instanceof CouponConflictError) {
+          setError('code', { message: error.message })
+          codeInputRef.current?.focus()
+        } else if (error instanceof ShopValidationError) {
+          for (const [field, message] of Object.entries(error.fieldErrors)) {
+            if (field === 'code' || field === 'discountType' || field === 'discountValue') {
+              setError(field, { message })
+            }
+          }
+          codeInputRef.current?.focus()
+        } else if (error instanceof ShopForbiddenError) {
           setError('code', { message: error.message })
           codeInputRef.current?.focus()
         }
@@ -106,25 +162,37 @@ export function CouponsPage() {
         setIsSubmitting(false)
       }
     },
-    [tenantId, reset, setError, loadCoupons],
+    [tenantId, adapter, reset, setError, loadCoupons],
   )
 
   const onDeactivate = useCallback(
     async (couponId: string) => {
       setDeactivatingId(couponId)
       setSuccess(null)
+      setActionError(null)
       try {
-        const updated = await mockShippingAndCouponAdapter.deactivateCoupon(tenantId, couponId)
+        const updated = await adapter.deactivateCoupon(tenantId, couponId)
         setSuccess(`کد تخفیف ${updated.code} غیرفعال شد.`)
         void loadCoupons()
+      } catch (error) {
+        if (error instanceof SessionExpiredError) {
+          void signOutRef.current()
+          return
+        }
+        setActionError(
+          error instanceof ShopForbiddenError
+            ? error.message
+            : 'هم‌اکنون نمی‌توانیم کد تخفیف را غیرفعال کنیم. دوباره تلاش کنید.',
+        )
       } finally {
         setDeactivatingId(null)
       }
     },
-    [tenantId, loadCoupons],
+    [tenantId, adapter, loadCoupons],
   )
 
   const isLoading = coupons === null && isBusy
+  const listError = coupons === null && !isBusy && listFailure !== null
   const isEmpty = coupons !== null && coupons.length === 0
   const codeField = register('code')
 
@@ -175,6 +243,16 @@ export function CouponsPage() {
             </Button>
           </div>
         </div>
+
+        {actionError && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive"
+          >
+            <TriangleAlert aria-hidden="true" className="size-4" />
+            {actionError}
+          </div>
+        )}
 
         {success && (
           <div
@@ -278,6 +356,24 @@ export function CouponsPage() {
         )}
 
         {isLoading && <CouponsSkeleton />}
+
+        {listError && (
+          <StatePanel
+            icon={<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />}
+            title={listFailure === 'forbidden' ? 'دسترسی مدیریت فروشگاه مجاز نیست' : 'فهرست کدهای تخفیف در دسترس نیست'}
+            description={
+              listFailure === 'forbidden'
+                ? 'حساب فعلی مجوز مدیریت فروشگاه این مستأجر را ندارد.'
+                : 'هم‌اکنون نمی‌توانیم کدهای تخفیف را بارگذاری کنیم. اتصال را بررسی کنید و دوباره تلاش کنید.'
+            }
+            action={
+              <Button type="button" className="mt-3 min-w-32" onClick={() => void loadCoupons()}>
+                <RefreshCw aria-hidden="true" className="me-2 size-4" />
+                تلاش دوباره
+              </Button>
+            }
+          />
+        )}
 
         {isEmpty && (
           <div className="rounded-xl border border-border bg-surface p-8 text-center shadow-soft">

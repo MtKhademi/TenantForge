@@ -1,48 +1,30 @@
----
-id: F035
-slice: S28
-title: Connect admin shipping-rate and coupon management to the real API
-agent: ui-engineer
-source: tasks/slices/028-shop-checkout.md
----
-
-# Objective
-
-Replace F034's mocked shipping-rate and coupon admin screens with real
-calls to B029's API.
-
-This Spec gives you the exact adapter file (matching F034's
-`ShippingAndCouponAdapter` type one-for-one) and the exact call-site
-changes. Follow it literally.
-
-# Context
-
-Load `tenantforge-ui-system` and read `docs/design-system.md`. Read the
-complete `tasks/slices/028-shop-checkout.md`. Read B029's delivered
-endpoint shapes (from its integration tests or, if the Spec file still
-exists at task start, `tasks/backend/B029-shipping-rate-and-coupon-admin-api.md`)
-before writing the real adapter. Read F029's delivered
-`shopCatalogAdapter.ts` for this repository's exact authenticated-Shop-
-adapter shape (`createRequestAbortSignal`, `authHeaders`, `request`,
-`readJson`, per-status error mapping) — this task's adapter follows the
-identical shape.
-
-# Scope — every file, in order
-
-## 1. `src/web/src/features/shop/shippingAndCouponAdapter.ts`
-
-```typescript
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { ShopForbiddenError, ShopValidationError } from './shopCatalogAdapter'
+
+// Re-exported so pages keep one import site for the Shop admin error
+// classes (the Spec's page edits import them from this adapter).
+export { ShopForbiddenError, ShopValidationError }
+
 import {
   CouponConflictError,
   type Coupon,
   type CreateCouponRequest,
   type SetShippingRateRequest,
+  type ShippingAndCouponAdapter,
   type ShippingRate,
 } from './shopCheckoutAdminTypes'
-import type { ShippingAndCouponAdapter } from './mockShippingAndCouponAdapter'
 
+/**
+ * S28 admin shipping-rate/coupon management — real API data source (F035),
+ * replacing F034's mock. Calls B029's tenant-scoped admin endpoints with the
+ * current session bearer token, following F029's `shopCatalogAdapter.ts`
+ * shape exactly: 8s timeout, per-status error mapping (401 →
+ * SessionExpiredError, 403 → ShopForbiddenError, 400 → ShopValidationError
+ * with field errors, 409 → CouponConflictError).
+ *
+ * Deactivate uses PATCH, B029's delivered verb (this Spec's own note makes
+ * B029's route the source of truth over its POST guess).
+ */
 const REQUEST_TIMEOUT_MS = 8_000
 
 function createRequestAbortSignal() {
@@ -144,7 +126,7 @@ export function createShippingAndCouponAdapter(accessToken: string): ShippingAnd
 
     async deactivateCoupon(tenantId, couponId): Promise<Coupon> {
       const response = await request(`/api/tenants/${tenantId}/shop/coupons/${couponId}/deactivate`, {
-        method: 'POST',
+        method: 'PATCH',
         headers,
       })
       await handleCommonErrors(response)
@@ -153,79 +135,3 @@ export function createShippingAndCouponAdapter(accessToken: string): ShippingAnd
     },
   }
 }
-```
-
-If B029's delivered deactivate endpoint uses a different path/verb than
-`POST .../deactivate` (check its Spec's endpoint list or its integration
-tests), use the delivered path/verb instead — this Spec's guess follows
-B029's own scope description ("a deactivate action per row") but B029's
-own Spec is the source of truth for the literal route.
-
-## 2. Update `ShippingRatesPage.tsx` and `CouponsPage.tsx`
-
-In both files:
-
-1. Replace the import
-   `import { mockShippingAndCouponAdapter } from '@/features/shop/mockShippingAndCouponAdapter'`
-   with:
-   ```tsx
-   import { createShippingAndCouponAdapter } from '@/features/shop/shippingAndCouponAdapter'
-   import { useAuth } from '@/features/auth/AuthContext'
-   ```
-2. Add `const { session, signOut } = useAuth()` and
-   `const adapter = createShippingAndCouponAdapter(session?.accessToken ?? '')`
-   at the top of the component, matching F029's exact pattern for the
-   catalog admin pages.
-3. Replace every `mockShippingAndCouponAdapter.xxx(...)` call with
-   `adapter.xxx(...)`.
-4. In the coupon create form's `catch` block, map `CouponConflictError`
-   to the code field's inline error and `ShopValidationError` to each
-   named field, exactly like F029's product-form error mapping.
-
-## 3. Delete the mock
-
-Delete `src/web/src/features/shop/mockShippingAndCouponAdapter.ts`.
-Move the `ShippingAndCouponAdapter` type declaration into
-`shopCheckoutAdminTypes.ts` first (same reasoning as F029's equivalent
-step for `ShopCatalogAdapter`), then update
-`shippingAndCouponAdapter.ts`'s import accordingly before deleting the
-mock file.
-
-# Non-goals
-
-- No new screen or field beyond what F034 already built.
-
-# Acceptance
-
-- Shipping-rate set/update and coupon create/list/deactivate all work
-  end-to-end against the real API.
-- A duplicate coupon code shows a clear inline error.
-- No mock data path remains reachable.
-
-# Verification
-
-Automated:
-
-```bash
-cd src/web
-npm run build
-npm run lint
-```
-
-Manual, in a real browser, at 1440×900 and 390×844:
-
-- Set a real shipping rate and coupon, reload the page, and confirm both
-  persist. Attempt a duplicate coupon code and confirm the clear error.
-- No new browser console error.
-
-# Lifecycle
-
-Add row `F035` to the Front queue in `tasks/TASKS.md` with status
-`planned`, dependencies `F034, B029`, and Spec link
-`tasks/front/F035-connect-admin-shipping-and-coupon.md`.
-
-Keep this full Spec while the task is `planned`, `in_progress` or
-`review`. After final delivery approval, change the ledger row to `done`,
-replace its Spec cell with `—`, and delete this exact file in the same
-commit. `tasks/slices/028-shop-checkout.md` is the permanent record and
-is never deleted.
