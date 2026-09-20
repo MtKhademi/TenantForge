@@ -38,12 +38,25 @@ detail not repeated here.
    compute its SHA-256 hash, store only the hash in `CallbackTokenHash`,
    and return the raw token exactly once, embedded in the client result URL
    returned from initiation.
-4. Delete the old `VerifyCallbackAsync(string gatewayReference, bool approved)`
-   method entirely. Replace it with two methods on the gateway interface:
-   `InitiateAsync(PaymentContext, CancellationToken)` and
-   `VerifyAsync(PaymentVerificationRequest, CancellationToken)`. The exact
-   shapes are in "Required code shape" below — implement every member, do not
-   leave placeholders. The verification result must carry an `Outcome`, a
+4. Rewrite `src/modules/shop/TenantForge.Modules.Shop/features/payments/IShopPaymentGateway.cs`.
+   As delivered today that file contains exactly three things: the records
+   `PaymentInitiation(string GatewayReference, string RedirectUrl)` and
+   `PaymentVerification(bool Succeeded)`, and the interface
+   `IShopPaymentGateway` with `InitiateAsync(ShopOrder order, CancellationToken ct)`
+   and `VerifyCallbackAsync(string gatewayReference, bool approved, CancellationToken ct)`.
+   Replace all of it with the shapes in "Required code shape" below:
+   - Delete `VerifyCallbackAsync` entirely.
+   - Delete the existing `PaymentInitiation` and `PaymentVerification` records.
+     Their replacements are named `GatewayInitiation` and `GatewayVerification` —
+     the old names must not survive, because `InitiatePaymentResponse` is the
+     new HTTP-facing shape and two types called `PaymentInitiation` would be
+     ambiguous.
+   - Change `InitiateAsync` to take the new `PaymentContext` record instead of
+     a `ShopOrder`, so the gateway never sees the order aggregate.
+   - Add `VerifyAsync(PaymentVerificationRequest, CancellationToken)`.
+   Then update `SandboxPaymentGateway.cs` and `PaymentsFeature.cs` to compile
+   against the new interface. Implement every member, do not leave
+   placeholders. The verification result must carry an `Outcome`, a
    provider reference, and a stable error code. Never let a raw provider
    result directly mutate an order — always go through the completion service
    from step 6.
@@ -94,7 +107,10 @@ detail not repeated here.
      `Approved` boolean (a client-supplied "trust me, it succeeded" flag) —
      remove that boolean from any remaining request type. The sandbox resolve
      route above is now the only browser-driven simulation, and it cannot be
-     mapped outside Development.
+     mapped outside Development. The route to delete is exactly
+     `POST /api/shop/{tenantId}/orders/{orderId}/payments/callback`, registered
+     today in
+     `src/modules/shop/TenantForge.Modules.Shop/features/payments/PaymentsFeature.cs`.
 8. Implement the status lookup endpoint,
    `GET /api/shop/{tenantId}/orders/{orderId}/payments/status?token={resultToken}`:
    - Require the raw callback token from step 3 as the `token` query value.
@@ -132,7 +148,8 @@ Read `AGENTS.md`, the `B044` row in `tasks/TASKS.md`, this complete Spec, `docs/
 
 Also read the matching section in `docs/design/shop/http-contracts.md`; this backend task must update it to the delivered wire contract before its executable Spec is deleted.
 
-Current baseline is commit `34dc44e`: Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
+Baseline as of commit `34dc44e` (later commits changed only `src/web/**` and
+`tasks/**`, so this still describes the backend you will find): Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
 
 ## Files expected to change
 
@@ -188,10 +205,11 @@ public sealed record PaymentStatusResponse(
 public sealed record ResolveSandboxPaymentRequest(string Authority, bool Approved);
 ```
 
-`GatewayOutcome` is an enum you add (e.g. `Succeeded`, `Failed`) that
-`GatewayVerification.Outcome` uses — pick the exact success/failure member
-names your codebase's existing enum-naming convention uses; if unsure, use
-`Succeeded` and `Failed`.
+`GatewayOutcome` is an enum you add, in the same file, with exactly two
+members named `Succeeded` and `Failed`, in that order. Do not add a third
+member and do not rename them — `ShopPaymentAttempt.Status` uses the same two
+words, which keeps the mapping between gateway outcome and attempt status
+obvious.
 
 The snippets define names, ownership and invariants. Complete the omitted mapping/validation/async code; do not paste placeholder comments into production. Keep feature types `internal` except HTTP records already following the module's current public-record convention.
 
@@ -231,15 +249,86 @@ In the PR body give `F062` exact routes, sample JSON, error codes, permission ke
 
 ## Validation
 
-1. `dotnet build TenantForge.sln --nologo`
-2. Targeted Shop integration test class.
-3. Full `dotnet test TenantForge.sln --nologo` (or the repository's documented Windows `dotnet.exe` equivalent).
-4. Inspect the generated migration for only intended schema changes.
-5. Verify `docs/modules/SHOP.md` against routes/entities/config/auth/tests and update the Bxxx learning note.
+Run these from the repository root, in this order, and fix every failure
+before moving to the next command.
+
+On the reference WSL setup there is no Linux `dotnet` binary — use `dotnet.exe`
+instead of `dotnet` in every command below. See
+`docs/architecture.md#local-development-environment-wsl--windows-net-sdk`.
+
+The integration tests start PostgreSQL through Testcontainers, so Docker must
+be running before you run any test command. Start it with `docker compose up -d postgres`
+if Docker Desktop is not already up (the compose service is not what the tests
+connect to, but it confirms the Docker daemon is reachable).
+
+1. Build everything:
+
+   ```bash
+   dotnet build TenantForge.sln --nologo
+   ```
+
+2. Run only this task's Shop integration tests first (replace
+   `<ShopTestClass>` with the exact class name you added or extended, for
+   example `ShopCatalogAdminIntegrationTests`):
+
+   ```bash
+   dotnet test TenantForge.sln --nologo --filter FullyQualifiedName~<ShopTestClass>
+   ```
+
+3. Run the full test suite and confirm it is green:
+
+   ```bash
+   dotnet test TenantForge.sln --nologo
+   ```
+
+4. Open the migration file you generated under
+   `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
+   read it line by line. Confirm it contains only the schema changes this Spec
+   asked for and nothing else. Confirm `ShopDbContextModelSnapshot.cs` was
+   updated in the same change.
+
+5. Re-read `docs/modules/SHOP.md` and check every routes/entities/config/auth/tests
+   statement against the code you actually delivered. Then finish the
+   `docs/learning/B044-<slug>.md` learning note.
+
+6. Confirm the frontend was not touched:
+
+   ```bash
+   git diff --name-only origin/main... -- src/web
+   ```
+
+   This must print nothing.
 
 ## Non-goals
 
 A real provider, refund/reversal, cards, saved payment methods or multi-currency.
+
+## Completion report
+
+When the task is finished, report exactly these six things — no more, no less.
+Do not skip a heading because you think it is obvious.
+
+1. **Files changed.** The full list of paths you created, edited or deleted,
+   grouped as: production code, EF migration (generated), tests,
+   documentation. Say which files are generated rather than hand-written.
+2. **Implementation decisions.** Every decision this Spec left to you, with
+   the option you picked and one sentence of why. If you followed an "if
+   unsure, do X" default from this Spec, say so and name it.
+3. **Commands executed.** Every command from "Validation" above, copied
+   verbatim in the order you ran them.
+4. **Results of those checks.** For each command: pass or fail, and for the
+   test commands the actual passed/failed/skipped counts. If you had to re-run
+   something after a fix, say that and give the final result. Never report a
+   command as passing if you did not run it.
+5. **Risks, blockers and follow-up.** Anything you could not verify, any
+   scenario from "Integration tests required" you could not cover and why, any
+   contract detail that differed from this Spec, and anything the next task
+   (F062) must know. Write "None." if there is genuinely nothing.
+6. **Documentation impact statement.** The exact line
+   `SHOP.md impact: <what you updated>` or
+   `SHOP.md impact: none — <specific reason>`, plus the same line for
+   `IAM.md`, `BuildingBlocks docs` and `IAM Contract docs` if your diff touched
+   any of them (see `AGENTS.md`). A vague "docs not needed" is not accepted.
 
 ## Acceptance checklist
 

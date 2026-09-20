@@ -31,9 +31,16 @@ just follow them).
    are anonymous, and integration tests live in files named
    `Shop*IntegrationTests.cs`. Do not change any of these conventions —
    this Spec does not ask you to.
-3. In the module's permission catalog (the existing file that lists Shop
-   permission keys), add a new permission key `Shop.Orders.View`.
-4. In the same permission catalog, also add `Shop.Orders.Manage`. Do not
+3. Add the permission key `Shop.Orders.View` to the module's permission
+   catalog. Concretely: add an `OrdersViewPermission` constant to
+   `src/modules/shop/TenantForge.Modules.Shop/features/authorization/ShopAuthorization.cs`
+   next to the existing `CatalogManagePermission` (`Shop.Catalog.Manage`) and
+   `ShippingManagePermission` (`Shop.Shipping.Manage`), add it to that class's
+   `KnownKeys` set, and contribute it from `ShopPermissionCatalogContributor.cs`
+   the same way the other two are contributed. This backend task owns the
+   server-side keys; the matching TypeScript constants are added by the
+   frontend task `F050`.
+4. In the same three places, also add `Shop.Orders.Manage`. Do not
    enforce or check `Shop.Orders.Manage` anywhere in this task — it is
    reserved for task `B043`. Leave the existing "Owner" role bypass
    (owners pass every permission check) exactly as it already works.
@@ -56,11 +63,14 @@ just follow them).
 8. Implement the query exactly as described in "Required implementation"
    step 2 below:
    - Filter by the route's `tenantId` first, before any other filter.
-   - If `q` is present, it must be at most 100 characters. Match it against
-     order number, tracking code, phone, or customer name (exact or
-     contains match — pick whichever the existing search helper in the
-     codebase already uses for similar text search; if there is no existing
-     helper, use a case-insensitive "contains" match on all four fields).
+   - If `q` is present, it must be at most 100 characters. Trim it first.
+     Match it with a case-insensitive "contains" comparison against all four
+     of: order number, tracking code, customer phone, customer name — a row
+     matches if any one of the four contains `q`. There is no shared text-search
+     helper in this repository today, so do not go looking for one and do not
+     create a general-purpose one; write the `Where` clause inline in this
+     endpoint. Let EF Core translate it to parameterized SQL; never build SQL
+     by string concatenation.
    - If `status` is present, it must be one of the defined order-status
      enum values; reject anything else with the repo's standard validation
      error.
@@ -154,7 +164,8 @@ Read `AGENTS.md`, the `B042` row in `tasks/TASKS.md`, this complete Spec, `docs/
 
 Also read the matching section in `docs/design/shop/http-contracts.md`; this backend task must update it to the delivered wire contract before its executable Spec is deleted.
 
-Current baseline is commit `34dc44e`: Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
+Baseline as of commit `34dc44e` (later commits changed only `src/web/**` and
+`tasks/**`, so this still describes the backend you will find): Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
 
 ## Files expected to change
 
@@ -234,15 +245,86 @@ In the PR body give `F060` exact routes, sample JSON, error codes, permission ke
 
 ## Validation
 
-1. `dotnet build TenantForge.sln --nologo`
-2. Targeted Shop integration test class.
-3. Full `dotnet test TenantForge.sln --nologo` (or the repository's documented Windows `dotnet.exe` equivalent).
-4. Inspect the generated migration for only intended schema changes.
-5. Verify `docs/modules/SHOP.md` against routes/entities/config/auth/tests and update the Bxxx learning note.
+Run these from the repository root, in this order, and fix every failure
+before moving to the next command.
+
+On the reference WSL setup there is no Linux `dotnet` binary — use `dotnet.exe`
+instead of `dotnet` in every command below. See
+`docs/architecture.md#local-development-environment-wsl--windows-net-sdk`.
+
+The integration tests start PostgreSQL through Testcontainers, so Docker must
+be running before you run any test command. Start it with `docker compose up -d postgres`
+if Docker Desktop is not already up (the compose service is not what the tests
+connect to, but it confirms the Docker daemon is reachable).
+
+1. Build everything:
+
+   ```bash
+   dotnet build TenantForge.sln --nologo
+   ```
+
+2. Run only this task's Shop integration tests first (replace
+   `<ShopTestClass>` with the exact class name you added or extended, for
+   example `ShopCatalogAdminIntegrationTests`):
+
+   ```bash
+   dotnet test TenantForge.sln --nologo --filter FullyQualifiedName~<ShopTestClass>
+   ```
+
+3. Run the full test suite and confirm it is green:
+
+   ```bash
+   dotnet test TenantForge.sln --nologo
+   ```
+
+4. Open the migration file you generated under
+   `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
+   read it line by line. Confirm it contains only the schema changes this Spec
+   asked for and nothing else. Confirm `ShopDbContextModelSnapshot.cs` was
+   updated in the same change.
+
+5. Re-read `docs/modules/SHOP.md` and check every routes/entities/config/auth/tests
+   statement against the code you actually delivered. Then finish the
+   `docs/learning/B042-<slug>.md` learning note.
+
+6. Confirm the frontend was not touched:
+
+   ```bash
+   git diff --name-only origin/main... -- src/web
+   ```
+
+   This must print nothing.
 
 ## Non-goals
 
 Status mutation, export, customer account, invoice PDF, refund or shipment tracking provider.
+
+## Completion report
+
+When the task is finished, report exactly these six things — no more, no less.
+Do not skip a heading because you think it is obvious.
+
+1. **Files changed.** The full list of paths you created, edited or deleted,
+   grouped as: production code, EF migration (generated), tests,
+   documentation. Say which files are generated rather than hand-written.
+2. **Implementation decisions.** Every decision this Spec left to you, with
+   the option you picked and one sentence of why. If you followed an "if
+   unsure, do X" default from this Spec, say so and name it.
+3. **Commands executed.** Every command from "Validation" above, copied
+   verbatim in the order you ran them.
+4. **Results of those checks.** For each command: pass or fail, and for the
+   test commands the actual passed/failed/skipped counts. If you had to re-run
+   something after a fix, say that and give the final result. Never report a
+   command as passing if you did not run it.
+5. **Risks, blockers and follow-up.** Anything you could not verify, any
+   scenario from "Integration tests required" you could not cover and why, any
+   contract detail that differed from this Spec, and anything the next task
+   (F060) must know. Write "None." if there is genuinely nothing.
+6. **Documentation impact statement.** The exact line
+   `SHOP.md impact: <what you updated>` or
+   `SHOP.md impact: none — <specific reason>`, plus the same line for
+   `IAM.md`, `BuildingBlocks docs` and `IAM Contract docs` if your diff touched
+   any of them (see `AGENTS.md`). A vague "docs not needed" is not accepted.
 
 ## Acceptance checklist
 

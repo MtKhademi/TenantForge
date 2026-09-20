@@ -33,10 +33,13 @@ just follow them).
    are anonymous, and integration tests live in files named
    `Shop*IntegrationTests.cs`. Do not change any of these conventions —
    this Spec does not ask you to.
-3. Add four new properties to the `ShopOrder` entity: `FulfilledAtUtc`
-   (nullable timestamp), `CancelledAtUtc` (nullable timestamp),
-   `InventoryReleasedAtUtc` (nullable timestamp), and `Version` (int — skip
-   this one if `B042` already added it; otherwise add it here).
+3. Add three new properties to the `ShopOrder` entity: `FulfilledAtUtc`
+   (nullable timestamp), `CancelledAtUtc` (nullable timestamp) and
+   `InventoryReleasedAtUtc` (nullable timestamp). Do **not** add `Version` —
+   `B042` already added it and this task depends on `B042`. Open
+   `src/modules/shop/TenantForge.Modules.Shop/domain/ShopOrder.cs` and confirm
+   `Version` is there before you start; if it is missing, stop and report that
+   `B042` was not delivered as specified instead of adding it yourself.
 4. Add an enum (or equivalent constant set) `OrderStatusAction` with
    exactly two values: `Fulfill` and `Cancel`. Do not add any other value.
 5. Add a new entity `ShopOrderOperation` with fields: `TenantId`, `OrderId`,
@@ -48,9 +51,8 @@ just follow them).
 6. Generate one EF migration (EF migration = "a generated script that
    changes the database schema; create it by running
    `dotnet ef migrations add <Name>` inside the Shop module project") that
-   adds the four `ShopOrder` columns from step 3 (or three, if `Version`
-   already exists) and the new `ShopOrderOperation` table with its unique
-   `(TenantId, Key)` constraint. Give it a clear name such as
+   adds the three `ShopOrder` columns from step 3 and the new
+   `ShopOrderOperation` table with its unique `(TenantId, Key)` constraint. Give it a clear name such as
    `AddShopOrderOperations`. After generating it, open the migration file
    and confirm it only contains these intended changes.
 7. Add a new Minimal API endpoint:
@@ -162,7 +164,8 @@ Read `AGENTS.md`, the `B043` row in `tasks/TASKS.md`, this complete Spec, `docs/
 
 Also read the matching section in `docs/design/shop/http-contracts.md`; this backend task must update it to the delivered wire contract before its executable Spec is deleted.
 
-Current baseline is commit `34dc44e`: Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
+Baseline as of commit `34dc44e` (later commits changed only `src/web/**` and
+`tasks/**`, so this still describes the backend you will find): Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
 
 ## Files expected to change
 
@@ -172,13 +175,15 @@ Do not edit `src/web/**`. Do not create a `Shop.Contract` project: no second .NE
 
 ## HTTP contract
 
+| Method | Route | Auth | Result |
+|---|---|---|---|
 | PATCH | `/api/tenants/{tenantId}/shop/orders/{orderId}/status` | JWT + `Shop.Orders.Manage` | `200 AdminOrderDetailResponse` |
 
 All errors use the repository's existing Minimal API/RFC7807 shapes (RFC7807 = "the repo's standard JSON error body shape for HTTP errors — reuse the existing helper, do not invent a new error format"). Malformed TSIDs and cross-tenant resource IDs return the same non-leaking result. Every mutation rechecks tenant authorization on the server; UI visibility is never authorization.
 
 ## Required implementation
 
-1. Add `FulfilledAtUtc`, `CancelledAtUtc`, `InventoryReleasedAtUtc`, `Version` to `ShopOrder`. Add `OrderStatusAction` values exactly `Fulfill` and `Cancel`.
+1. Add `FulfilledAtUtc`, `CancelledAtUtc` and `InventoryReleasedAtUtc` to `ShopOrder`. `Version` already exists — `B042` added it. Add `OrderStatusAction` values exactly `Fulfill` and `Cancel`.
 2. Allowed: Paid -> Fulfilled; PendingPayment -> Cancelled. Same action replay with the same idempotency key returns the stored final representation. All other transitions return `409 invalid_order_transition`. There is no transition out of Fulfilled/Cancelled.
 3. Require `ExpectedVersion` plus `Idempotency-Key` UUID. Persist `ShopOrderOperation` (`TenantId`, `OrderId`, key, canonical action, response snapshot, actor, created time) with unique `(TenantId, Key)`.
 4. Cancellation locks order and referenced variants, restores each order-item quantity only when `InventoryReleasedAtUtc` is null, marks it in the same transaction, and invalidates any Initiated payment attempts. It does not delete order history. Fulfil does not touch stock.
@@ -233,15 +238,86 @@ In the PR body give `F061` exact routes, sample JSON, error codes, permission ke
 
 ## Validation
 
-1. `dotnet build TenantForge.sln --nologo`
-2. Targeted Shop integration test class.
-3. Full `dotnet test TenantForge.sln --nologo` (or the repository's documented Windows `dotnet.exe` equivalent).
-4. Inspect the generated migration for only intended schema changes.
-5. Verify `docs/modules/SHOP.md` against routes/entities/config/auth/tests and update the Bxxx learning note.
+Run these from the repository root, in this order, and fix every failure
+before moving to the next command.
+
+On the reference WSL setup there is no Linux `dotnet` binary — use `dotnet.exe`
+instead of `dotnet` in every command below. See
+`docs/architecture.md#local-development-environment-wsl--windows-net-sdk`.
+
+The integration tests start PostgreSQL through Testcontainers, so Docker must
+be running before you run any test command. Start it with `docker compose up -d postgres`
+if Docker Desktop is not already up (the compose service is not what the tests
+connect to, but it confirms the Docker daemon is reachable).
+
+1. Build everything:
+
+   ```bash
+   dotnet build TenantForge.sln --nologo
+   ```
+
+2. Run only this task's Shop integration tests first (replace
+   `<ShopTestClass>` with the exact class name you added or extended, for
+   example `ShopCatalogAdminIntegrationTests`):
+
+   ```bash
+   dotnet test TenantForge.sln --nologo --filter FullyQualifiedName~<ShopTestClass>
+   ```
+
+3. Run the full test suite and confirm it is green:
+
+   ```bash
+   dotnet test TenantForge.sln --nologo
+   ```
+
+4. Open the migration file you generated under
+   `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
+   read it line by line. Confirm it contains only the schema changes this Spec
+   asked for and nothing else. Confirm `ShopDbContextModelSnapshot.cs` was
+   updated in the same change.
+
+5. Re-read `docs/modules/SHOP.md` and check every routes/entities/config/auth/tests
+   statement against the code you actually delivered. Then finish the
+   `docs/learning/B043-<slug>.md` learning note.
+
+6. Confirm the frontend was not touched:
+
+   ```bash
+   git diff --name-only origin/main... -- src/web
+   ```
+
+   This must print nothing.
 
 ## Non-goals
 
 Paid refunds, return merchandise, carrier integration, partial fulfilment/cancellation or editable customer address.
+
+## Completion report
+
+When the task is finished, report exactly these six things — no more, no less.
+Do not skip a heading because you think it is obvious.
+
+1. **Files changed.** The full list of paths you created, edited or deleted,
+   grouped as: production code, EF migration (generated), tests,
+   documentation. Say which files are generated rather than hand-written.
+2. **Implementation decisions.** Every decision this Spec left to you, with
+   the option you picked and one sentence of why. If you followed an "if
+   unsure, do X" default from this Spec, say so and name it.
+3. **Commands executed.** Every command from "Validation" above, copied
+   verbatim in the order you ran them.
+4. **Results of those checks.** For each command: pass or fail, and for the
+   test commands the actual passed/failed/skipped counts. If you had to re-run
+   something after a fix, say that and give the final result. Never report a
+   command as passing if you did not run it.
+5. **Risks, blockers and follow-up.** Anything you could not verify, any
+   scenario from "Integration tests required" you could not cover and why, any
+   contract detail that differed from this Spec, and anything the next task
+   (F061) must know. Write "None." if there is genuinely nothing.
+6. **Documentation impact statement.** The exact line
+   `SHOP.md impact: <what you updated>` or
+   `SHOP.md impact: none — <specific reason>`, plus the same line for
+   `IAM.md`, `BuildingBlocks docs` and `IAM Contract docs` if your diff touched
+   any of them (see `AGENTS.md`). A vague "docs not needed" is not accepted.
 
 ## Acceptance checklist
 
