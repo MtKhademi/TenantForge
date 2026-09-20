@@ -7,6 +7,11 @@
  * removing this comment's "mock" framing — the shape does not change.
  */
 
+// F044 (S32): the B026 product wire type is inferred from its Zod schema
+// (single source of truth) in `contracts/mediaContract.ts` and imported here
+// for the adapter interface below.
+import type { ShopProduct } from './contracts/mediaContract'
+
 export type ShopCategory = {
   id: string
   tenantId: string
@@ -29,14 +34,16 @@ export type UpdateCategoryRequest = {
   isActive: boolean
 }
 
-export type ShopProductVariant = {
-  id: string
-  color: string
-  size: string
-  sku: string
-  stockQuantity: number
-  priceOverride: number | null
-}
+// The B026 product/variant/size-guide wire types are now inferred from their
+// Zod schemas (single source of truth) in `contracts/mediaContract.ts` and
+// re-exported here so every existing import keeps working unchanged.
+export type {
+  ShopProduct,
+  ShopProductVariant,
+  SizeGuideColumn,
+  SizeGuideCell,
+  SizeGuideRow,
+} from './contracts/mediaContract'
 
 export type ProductVariantInput = {
   color: string
@@ -46,43 +53,10 @@ export type ProductVariantInput = {
   priceOverride: number | null
 }
 
-export type SizeGuideColumn = {
-  id: string
-  name: string
-  displayOrder: number
-}
-
-export type SizeGuideCell = {
-  columnId: string
-  value: string
-}
-
-export type SizeGuideRow = {
-  id: string
-  sizeLabel: string
-  displayOrder: number
-  cells: SizeGuideCell[]
-}
-
 /** The editor's own working shape: one string value per current column, in column order. */
 export type SizeGuideRowInput = {
   sizeLabel: string
   values: string[]
-}
-
-export type ShopProduct = {
-  id: string
-  tenantId: string
-  categoryId: string
-  name: string
-  slug: string
-  description: string
-  basePrice: number
-  compareAtPrice: number | null
-  isActive: boolean
-  variants: ShopProductVariant[]
-  sizeGuideColumns: SizeGuideColumn[]
-  sizeGuideRows: SizeGuideRow[]
 }
 
 export type ShopProductSummary = {
