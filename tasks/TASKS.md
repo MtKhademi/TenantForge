@@ -76,7 +76,7 @@ one valid Spec link.
 | F041 | S30 | Connect order tracking page to the real API | done | F040, B033 | — |
 | F042 | S31 | Group ShellNav into labelled module sections | done | F029 | — |
 | F043 | S31 | Gate Shop nav items on the new Shop permission keys | done | F042, B035 | — |
-| F044 | S32 | Build contract-shaped product gallery and storefront image mocks | planned | F043 | [F044 Spec](front/F044-shop-product-media-mock.md) |
+| F044 | S32 | Build contract-shaped product gallery and storefront image mocks | in_progress | F043 | [F044 Spec](front/F044-shop-product-media-mock.md) |
 | F045 | S33 | Build contract-shaped storefront discovery mocks | planned | F044 | [F045 Spec](front/F045-shop-discovery-mock.md) |
 | F046 | S34 | Build contract-shaped nested category mocks | planned | F045 | [F046 Spec](front/F046-shop-category-hierarchy-mock.md) |
 | F047 | S35 | Build contract-shaped storefront identity and policy mocks | planned | F046 | [F047 Spec](front/F047-shop-profile-policies-mock.md) |
