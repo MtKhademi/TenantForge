@@ -312,3 +312,20 @@ public sealed class ShopOrderLookupDbFixture : IamDbFixtureBase
 public sealed class ShopOrderLookupIsolatedCollection : ICollectionFixture<ShopOrderLookupDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B036's product-gallery persistence and media
+/// serving tests. Kept off prior Shop databases so gallery row counts and
+/// filesystem side effects stay isolated.
+/// </summary>
+public sealed class ShopProductMediaDbFixture : IamDbFixtureBase
+{
+    public ShopProductMediaDbFixture() : base("tenantforge_shop_product_media_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopProductMediaIsolatedCollection))]
+public sealed class ShopProductMediaIsolatedCollection : ICollectionFixture<ShopProductMediaDbFixture>
+{
+}

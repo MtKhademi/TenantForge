@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.Media;
 using TenantForge.Modules.Shop.Features.Pagination;
 using TenantForge.Modules.Shop.Infrastructure;
 
@@ -54,12 +55,20 @@ internal static class StorefrontCatalogFeature
                 .ThenBy(product => product.Id);
 
             var (products, pagination) = await PaginationSupport.PageAsync(query, page);
-            var summaries = products.Select(product => new StorefrontProductSummaryResponse(
-                TsidId.Format(product.Id),
-                product.Name,
-                product.Slug,
-                product.BasePrice,
-                product.CompareAtPrice)).ToList();
+            var summaries = new List<StorefrontProductSummaryResponse>();
+            foreach (var product in products)
+            {
+                var productRouteId = TsidId.Format(product.Id);
+                var tenantRouteId = TsidId.Format(product.TenantId);
+                var gallery = await ProductMediaFeature.LoadGalleryAsync(db, tenantTsid, product.Id, tenantRouteId, productRouteId, publicUrls: true, CancellationToken.None);
+                summaries.Add(new StorefrontProductSummaryResponse(
+                    productRouteId,
+                    product.Name,
+                    product.Slug,
+                    product.BasePrice,
+                    product.CompareAtPrice,
+                    gallery.Images));
+            }
 
             return Results.Ok(new StorefrontProductListResponse(summaries, pagination));
         });
@@ -112,14 +121,19 @@ internal static class StorefrontCatalogFeature
                     return new StorefrontSizeGuideCellResponse(TsidId.Format(column.Id), cell?.Value ?? string.Empty);
                 }).ToList())).ToList();
 
+            var productRouteId = TsidId.Format(product.Id);
+            var tenantRouteId = TsidId.Format(product.TenantId);
+            var gallery = await ProductMediaFeature.LoadGalleryAsync(db, tenantTsid, product.Id, tenantRouteId, productRouteId, publicUrls: true, CancellationToken.None);
+
             var response = new StorefrontProductDetailResponse(
-                TsidId.Format(product.Id),
+                productRouteId,
                 TsidId.Format(product.CategoryId),
                 product.Name,
                 product.Slug,
                 product.Description,
                 product.BasePrice,
                 product.CompareAtPrice,
+                gallery.Images,
                 variants,
                 columns.Select(column => new StorefrontSizeGuideColumnResponse(
                     TsidId.Format(column.Id), column.Name, column.DisplayOrder)).ToList(),

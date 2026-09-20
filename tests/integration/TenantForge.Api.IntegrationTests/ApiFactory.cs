@@ -56,7 +56,8 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
             // Shop shares the same physical database as IAM (a named B025
             // decision): every API-level host now runs UseShopModuleAsync,
             // which fail-closes on a missing Shop:ShopDb.
-            ["Shop:ShopDb"] = db.ConnectionString
+            ["Shop:ShopDb"] = db.ConnectionString,
+            ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media")
         };
 
         switch (seedMode)

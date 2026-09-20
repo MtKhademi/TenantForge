@@ -7,6 +7,7 @@ using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Authorization;
+using TenantForge.Modules.Shop.Features.Media;
 using TenantForge.Modules.Shop.Features.Pagination;
 using TenantForge.Modules.Shop.Infrastructure;
 
@@ -311,9 +312,13 @@ internal static class ProductsFeature
                 return new SizeGuideCellResponse(TsidId.Format(column.Id), cell?.Value ?? string.Empty);
             }).ToList())).ToList();
 
+        var productRouteId = TsidId.Format(product.Id);
+        var tenantRouteId = TsidId.Format(product.TenantId);
+        var gallery = await ProductMediaFeature.LoadGalleryAsync(db, tenantId, productId, tenantRouteId, productRouteId, publicUrls: false, CancellationToken.None);
+
         return new ProductResponse(
-            TsidId.Format(product.Id),
-            TsidId.Format(product.TenantId),
+            productRouteId,
+            tenantRouteId,
             TsidId.Format(product.CategoryId),
             product.Name,
             product.Slug,
@@ -321,6 +326,8 @@ internal static class ProductsFeature
             product.BasePrice,
             product.CompareAtPrice,
             product.IsActive,
+            gallery.Images,
+            gallery.GalleryVersion,
             variants,
             columns.Select(column => new SizeGuideColumnResponse(TsidId.Format(column.Id), column.Name, column.DisplayOrder)).ToList(),
             rowResponses);

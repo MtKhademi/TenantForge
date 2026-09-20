@@ -1,3 +1,5 @@
+using TenantForge.Modules.Shop.Features.Media;
+
 namespace TenantForge.Modules.Shop.Features.Storefront;
 
 public sealed record StorefrontCategoryResponse(string Id, string Name, string Slug, int DisplayOrder);
@@ -9,7 +11,8 @@ public sealed record StorefrontProductSummaryResponse(
     string Name,
     string Slug,
     decimal EffectivePrice,
-    decimal? CompareAtPrice);
+    decimal? CompareAtPrice,
+    IReadOnlyList<ProductImageResponse> Images);
 
 public sealed record StorefrontProductListResponse(
     IReadOnlyList<StorefrontProductSummaryResponse> Products,
@@ -39,6 +42,7 @@ public sealed record StorefrontProductDetailResponse(
     string Description,
     decimal BasePrice,
     decimal? CompareAtPrice,
+    IReadOnlyList<ProductImageResponse> Images,
     IReadOnlyList<StorefrontVariantResponse> Variants,
     IReadOnlyList<StorefrontSizeGuideColumnResponse> SizeGuideColumns,
     IReadOnlyList<StorefrontSizeGuideRowResponse> SizeGuideRows);
