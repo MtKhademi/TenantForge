@@ -6,6 +6,8 @@ The project grows through small, visible vertical slices. Each delivered capabil
 
 **راهنمای استفاده از برنامه:** اگر می‌خواهید با مسیرهای واقعی ادمین پلتفرم یا کار داخل یک مستأجر شروع کنید، [راهنمای فارسی کار با TenantForge](docs/user-guide/README.md) را باز کنید.
 
+Implementing a task? Read the knowledge base first: [agent knowledge](docs/knowledge/README.md) is the short operational memory for the backend and frontend agents; the matching human-facing explanations live beside it.
+
 Working on the IAM module? Read the [IAM module handbook](docs/modules/IAM.md) first — it is the current, searchable source for IAM routes, configuration, identifiers, permissions and tests.
 
 Working on `TenantForge.BuildingBlocks`? Read the [BuildingBlocks handbook](docs/building-blocks/README.md) first — it is the current, searchable source for its exported types, dependency direction and admission rule.

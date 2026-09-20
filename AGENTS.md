@@ -11,10 +11,14 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 2. Read the active row in `tasks/TASKS.md` and its complete linked Spec. The
    ledger is authoritative for status and dependencies; the Spec is
    authoritative for detailed scope and acceptance.
-3. Read only the product, architecture or design documents referenced by that Spec.
-4. State the visible outcome, files you expect to touch and what remains out of scope.
-5. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
-6. After synchronization and task selection, create the owning task branch
+3. Read the agent knowledge for your area completely:
+   `docs/knowledge/AGENT-frontend.md` for `/front-task`,
+   `docs/knowledge/AGENT-backend.md` for `/backend-task`. This file and those
+   two are the required reading for every task.
+4. Read only the product, architecture or design documents referenced by that Spec.
+5. State the visible outcome, files you expect to touch and what remains out of scope.
+6. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
+7. After synchronization and task selection, create the owning task branch
    before deep analysis. Backend tasks then wait for explicit plan approval.
    Frontend tasks present the plan for visibility and continue automatically
    without waiting for user approval.
@@ -138,6 +142,46 @@ Write concise notes that explain:
 7. three review questions for the learner.
 
 Do not turn the learning note into framework documentation. Explain only the code introduced in the slice.
+
+## Knowledge base
+
+TenantForge keeps two kinds of knowledge per area. `docs/knowledge/README.md`
+is their index.
+
+- **Agent knowledge** — `docs/knowledge/AGENT-backend.md` and
+  `docs/knowledge/AGENT-frontend.md`. Short operational memory for a
+  lightweight agent: paths, boundaries, conventions, reusable patterns,
+  commands, contract and authorization rules, known traps, and decisions later
+  tasks must preserve. Read the file for your area completely before every
+  task. This `AGENTS.md` is the shared agent knowledge; change it only when a
+  genuinely shared rule changes.
+- **Human knowledge** — `docs/knowledge/HUMAN-backend.md` and
+  `docs/knowledge/HUMAN-frontend.md`. Written for the repository owner. Never
+  required reading before implementing a task, so it does not consume agent
+  context. Always read it before editing it, so a task does not overwrite an
+  unrelated explanation.
+
+After verification and **before committing**, every `/front-task` and
+`/backend-task` run updates the agent knowledge with durable facts it learned or
+changed, and the human knowledge with a clear explanation of the completed work.
+Backend tasks additionally write `docs/learning/<task-id>-<slug>.md`. Knowledge
+describes the final verified implementation, not the plan. Never record
+debugging detail, speculation, abandoned approaches, task-specific noise,
+secrets or large copied code blocks. A task that produced no durable knowledge
+change adds nothing and says so in its completion report.
+
+## Code search
+
+Use the Codebase Memory MCP (`codebase-memory-mcp`, also shown as
+`MCP-CodeBaseServer`) first when looking for any file, class, endpoint,
+component, contract, symbol, existing implementation or usage. Verify every MCP
+result against the actual current file before editing — the graph can be stale.
+When the MCP returns nothing, a partial result or a stale path, fall back to
+repository search such as `rg`; a missing MCP result is never a reason to stop.
+Never guess a file path, type name, endpoint or contract member. Refresh the
+index with `index_repository` after delivery when the change is not yet in the
+graph, and report the exact outcome — a refresh the server does not expose, or
+one that failed, is reported as such and never as a success.
 
 ## Living module knowledge
 

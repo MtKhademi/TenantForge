@@ -158,9 +158,27 @@ Approval policy:
 Before editing:
 
 1. Read `AGENTS.md`, the active `tasks/TASKS.md` row and its complete live Spec.
-2. Load `vertical-slice-delivery`.
-3. Read only the architecture sections required by the task.
-4. Restate the accepted API contract, the backend learning goal and explicit out-of-scope work.
+2. Read `docs/knowledge/AGENT-backend.md` completely. It is the required
+   operational memory for every backend task. Do not read
+   `docs/knowledge/HUMAN-backend.md` or `docs/learning/**` as implementation
+   context.
+3. Load `vertical-slice-delivery`.
+4. Read only the architecture sections required by the task, plus any living
+   handbook the task's ownership triggers.
+5. Restate the accepted API contract, the backend learning goal and explicit out-of-scope work.
+
+Search with the Codebase Memory MCP (`codebase-memory-mcp`) first for any file,
+class, endpoint, entity, contract, symbol or usage. Verify every result against
+the current file before editing; fall back to `rg` when the MCP result is
+missing, partial or stale. Never guess a path, type name, endpoint, column or
+contract member.
+
+After verification and before the second approval gate, update
+`docs/knowledge/AGENT-backend.md` with durable facts and
+`docs/knowledge/HUMAN-backend.md` with an explanation of the completed change —
+reading the human file first so nothing unrelated is overwritten — in addition
+to the required learning note. If the task produced no durable knowledge change
+beyond the learning note, say so in the report instead of adding filler.
 
 After the user approves the plan, create the visible todo list with `todowrite`.
 Keep exactly one todo `in_progress`. Immediately after each successful step,

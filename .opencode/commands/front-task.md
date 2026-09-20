@@ -4,13 +4,13 @@ agent: ui-engineer
 subtask: false
 ---
 
-Run exactly one frontend task listed in `tasks/TASKS.md` from the current clone.
+Run exactly one frontend task from `tasks/TASKS.md` in the current clone.
 
 Arguments: `$ARGUMENTS`
 
-Accept no argument, an ID such as `F004` or `004`, or the exact live Spec
-path from the ledger. Reject multiple, backend or ambiguous arguments and show
-valid examples:
+Accept no argument, an ID such as `F004` or `004`, or the exact live Spec path
+from the ledger. Reject multiple, backend or ambiguous arguments and show valid
+examples:
 
 ```text
 /front-task
@@ -19,155 +19,278 @@ valid examples:
 /front-task tasks/front/F004-refactor-persian-rtl-interface.md
 ```
 
-## Fast entry or recovery
+Work through phases 0–10 in order. `/front-task` runs autonomously: after the
+task is resolved, never ask the user to approve, review, confirm or continue.
+The autonomy rule at the end of this file lists the only reasons to stop.
 
-The Git preflight is a short routing step, not a diagnostic task.
+---
 
-1. Run `git rev-parse --show-toplevel` once. Report that root as the active
-   **front clone**; never inspect or edit a sibling directory.
-2. Run `git branch --show-current` once.
+## Phase 0 — Git preflight
+
+A short routing step, not a diagnostic task. Run only the commands listed here,
+never an equivalent twice, and never inspect the Git executable, aliases, PATH,
+config or installation.
+
+1. `git rev-parse --show-toplevel` once. That root is the active **front
+   clone**; never inspect or edit a sibling directory. Never create a worktree.
+2. `git branch --show-current` once.
 3. If the branch matches `front/fxxx-<slug>`, route by evidence:
-   - infer the matching F task ID from the branch;
-   - run `git status --porcelain=v1` exactly once;
-   - if it contains substantive staged, untracked or unstaged changes, preserve
-     everything and recover this task in place. Do not fetch, switch, pull,
-     restore, stash, reset or clean;
-   - if it is non-empty but
+   - infer the F task ID from the branch;
+   - `git status --porcelain=v1` exactly once;
+   - substantive staged, untracked or unstaged changes → preserve everything and
+     recover this task in place. Do not fetch, switch, pull, restore, stash,
+     reset or clean;
+   - non-empty but
      `git diff --cached --quiet && test -z "$(git ls-files --others --exclude-standard)" && git diff --ignore-cr-at-eol --quiet`
-     succeeds, run `git restore --worktree -- .` once and treat it as clean;
-   - when clean, run `git fetch origin main` once and inspect only the exact
-     matching row from `origin/main:tasks/TASKS.md` using `git show`;
-   - if that remote-main row is `done` with Spec `—`, the task is already
-     delivered. Report the transition, run `git switch main`, then
-     `git pull --ff-only`, verify one clean `git status --porcelain=v1`, and
-     continue directly at **Select**. With no argument choose the next runnable
-     task; with the completed ID explicitly supplied, report it done and stop;
-   - otherwise recover the current task in place: read its local ledger row,
-     live Spec when present and current diff, then rebuild the plan and visible
-     todos;
+     succeeds → CRLF/LF noise only. Run `git restore --worktree -- .` once and
+     treat it as clean;
+   - clean → `git fetch origin main` once, then read only the matching row from
+     `origin/main:tasks/TASKS.md` with `git show`;
+   - that row is `done` with Spec `—` → the task is already delivered. Report
+     the transition, `git switch main`, `git pull --ff-only`, one clean
+     `git status --porcelain=v1`, then continue at Phase 1. With no argument
+     pick the next runnable task; with that completed ID supplied explicitly,
+     report it done and stop;
+   - otherwise recover in place: read its ledger row, live Spec and current
+     diff, then rebuild the plan and todos from Phase 4;
    - never delete the completed local branch automatically.
+4. If step 3 did not route onward, `git status --porcelain=v1` once.
+   - Empty → continue.
+   - Non-empty → run the one classifier from step 3. If it succeeds, run
+     `git restore --worktree -- .` once and continue. If it fails, show the
+     captured status and stop. Preserve the real changes; do not diagnose them.
+5. `git switch main`, `git pull --ff-only`, one final
+   `git status --porcelain=v1`. Not empty → report and stop.
 
-4. If step 3 did not already route to **Select**, run
-   `git status --porcelain=v1` exactly once.
-   - If empty, continue immediately.
-   - If non-empty, run exactly this one classifier:
-     `git diff --cached --quiet && test -z "$(git ls-files --others --exclude-standard)" && git diff --ignore-cr-at-eol --quiet`
-   - If it succeeds, the only changes are CRLF/LF noise. Run
-     `git restore --worktree -- .` once and continue.
-   - If it fails, show the already captured status and stop. Preserve the real
-     changes; do not diagnose or modify them.
-5. Run `git switch main`, then `git pull --ff-only`, then one final
-   `git status --porcelain=v1`. If it is not empty, report it and stop.
-6. Never create a worktree.
-7. Never inspect the Git executable, aliases, PATH, config or installation.
-   Never repeat an equivalent Git command. Preflight gets at most the commands
-   explicitly listed above.
+## Phase 1 — Resolve task
 
-## Select
-
-1. Read `tasks/TASKS.md`; it is the only source of status and dependencies.
-2. A dependency is complete only when its ledger row is `done` on current
+1. `tasks/TASKS.md` is the only source of status, order and dependencies.
+2. Determine the exact requested row. With an explicit argument, resolve exactly
+   one Front row. With no argument, the requested row is the lowest-numbered
+   `planned` Front row whose dependencies are all `done`.
+3. **Never silently select a different task.** If the requested row is `done`,
+   report that it was already delivered and stop. If it is blocked, report each
+   pending dependency, its status, owning clone and exact command, then stop.
+4. A dependency is complete only when its ledger row is `done` on current
    `main`.
-3. With no argument, select the lowest numeric `planned` Front row whose
-   dependencies are all `done`.
-4. With an explicit argument, resolve exactly one Front row and require
-   `status: planned` with complete dependencies. If it is `done`, report that
-   it has already been delivered and stop.
-5. A selected non-done row must contain one valid Spec link and that complete
-   file must exist. Stop on a missing, duplicate or mismatched Spec.
-6. If blocked, report each pending dependency, its status, owning clone and
-   exact command, then stop.
-7. For a fresh task, immediately create and switch to
-   `front/<id-lowercase>-<slug>` from the updated `main`. Do this before deep
-   analysis so every task starts on its own branch.
-8. Read the complete Spec, its `source` slice, `AGENTS.md`,
-   `docs/design-system.md` and load `vertical-slice-delivery` plus
-   `tenantforge-ui-system`. When the Spec has a "Do this in order" numbered
-   section, treat it as the primary, already-sequenced list of
-   implementation steps: read every other section it points to (contract
-   shape, required states, browser evidence, definition of done) for the
-   exact details, but do not re-derive your own step order from scratch when
-   one is already given.
+5. The selected non-done row must contain one valid Spec link and that file must
+   exist. Stop on a missing, duplicate or mismatched Spec.
+6. Read the complete Spec file and its `source` slice.
+7. Work only on this task. Implement a dependency's work only when the Spec
+   explicitly declares it in scope.
+8. If the Spec and `TASKS.md` disagree, resolve it against the current
+   repository and code, then record the discrepancy in the completion report and
+   the PR body.
+9. Create and switch to `front/<id-lowercase>-<slug>` from the updated `main`
+   now, before deep analysis.
 
-## Automatic plan handoff
+## Phase 2 — Load agent knowledge
 
-1. Inspect only relevant `src/web/**` code. Do not inspect, create or update frontend tests.
-2. Present visible outcome, UI states, accepted API contract, expected files,
-   browser demo, validation, branch `front/<id-lowercase>-<slug>` and explicit
-   out-of-scope work.
-3. Present the complete todos for visibility, then immediately call
-   `todowrite` and continue. Do not ask the user to approve, change, confirm or
-   continue and do not stop at the plan.
-4. The selected task branch already exists. Begin edits, package installation
-   and implementation commands only after the complete informational plan and
-   todo list have been shown.
+Read, in this order:
 
-## Execute
+1. `AGENTS.md` — shared rules, ownership, ledger lifecycle, Git safety.
+2. `docs/knowledge/AGENT-frontend.md` — **complete**, every time.
+3. Only the additional documents the Spec names (for example
+   `docs/design-system.md`, `docs/design/shop/http-contracts.md`, the paired
+   backend Spec).
+4. Load the `tenantforge-ui-system` skill, and `vertical-slice-delivery` when
+   the Spec's delivery shape is unfamiliar.
 
-1. After the automatic plan handoff, stay on the already selected or recovered
-   task branch.
-2. Add separate visible todos to change only the active ledger row from
-   `planned` to `in_progress`, implement, demo, review and deliver. Do not add
-   frontend test todos. When the Spec has a "Do this in order" numbered
-   section, turn each of its numbered steps into its own todo (or a small
-   group of adjacent steps into one todo) instead of inventing a different
-   breakdown; keep the ledger, demo, review and deliver todos this section
-   already lists in addition to those.
-3. Use the complete sequence already passed to `todowrite` and keep exactly one
-   item `in_progress`.
-4. Perform every step yourself in this same `ui-engineer` conversation. Never
-   call the `task` tool or delegate any phase.
-5. After each step succeeds, immediately update `todowrite`: complete that one
-   todo and start the next one. Show the evidence and next step; never
-   batch-complete hidden work.
-6. Keep product edits under `src/web/**` unless the Spec explicitly names one
-   shared file. Do not inspect, create or update frontend tests.
-7. Run frontend build, lint and real desktop/mobile browser demo as separate
-   visible todos. Do not run frontend test commands.
-8. Review the diff for backend edits, frontend test edits, secrets, generated
-   evidence, future work and unrelated changes.
+Do **not** read `docs/knowledge/HUMAN-frontend.md` as implementation context.
+Do not re-read the whole repository: agent knowledge first, then only
+task-relevant code.
 
-## Review and delivery
+## Phase 3 — Search and inspect
 
-1. When validation succeeds, change only the active ledger row from
-   `in_progress` to `review`.
-2. Compare the complete diff with the live Spec, source slice, visual contract
-   and acceptance criteria.
-3. Perform an automated self-review. Present findings, screenshots/browser
-   evidence, checked acceptance criteria, remaining risks and todo state as an
-   informational progress update; do not ask the user to approve or continue.
-4. If self-review finds an in-scope defect, add the smallest correction and
-   revalidation todos, execute them one at a time and repeat automated
-   self-review until it is clean. A review finding is not a reason to wait for
-   the user.
-5. Pause only for a real blocker, material scope or contract change, missing
-   authority, destructive action requiring approval, or explicit user
-   interruption. Preserve the branch, ledger state, Spec and current files
-   when pausing.
-6. After automated self-review is clean, capture the checked acceptance
-   criteria and evidence for the PR body, then continue automatically with
-   these separate visible todos:
-   - change only the active `tasks/TASKS.md` row from `review` to `done`;
-   - replace that row's Spec link with `—`;
-   - delete exactly the active tracked Spec with
-     `git rm -- <exact-active-spec-path>`;
-   - verify every non-done row still has one live Spec, every done row has none,
-     all dependency IDs exist and the graph has no cycle.
-7. Using your own judgment, update the knowledge base only if this delivery
-   needs it, as its own visible todo:
-   - re-index this project with codebase-memory-mcp (index_repository,
-     moderate or full mode) when the delivered change is not yet reflected
-     in the graph;
-   - update or add the Markdown documentation this change affects (e.g.
-     docs/design-system.md, a UI/page composition convention, or the
-     tenantforge-ui-system skill file) only when this slice introduced or
-     changed that structure;
-   - skip entirely, with a one-line note why, when neither the graph nor any
-     doc/skill needs a change for this delivery. Never invent speculative
-     documentation.
-8. Stage the frontend implementation, required docs, `tasks/TASKS.md` and the
-   active Spec deletion. Inspect the staged diff, commit with the F-ID,
-   push once without force and open a PR to `main`. These are automatic
-   delivery steps; do not request a final user review or approval.
-9. Report branch, commit, PR, validation and remaining risks. Stop before the
-   next task.
+Use the Codebase Memory MCP (`codebase-memory-mcp`, also shown as
+`MCP-CodeBaseServer`) **first** for every lookup of a file, component, page,
+hook, type, contract, symbol, existing implementation or usage.
+
+1. Project name for this clone: run `list_projects` and pick the entry whose
+   `root_path` is this clone's Git root. Note that `index_status` and
+   `detect_changes` take `project`, while `index_repository` takes `name` —
+   passing the wrong one returns a "missing required argument" error, not a
+   silent failure.
+2. Useful calls: `search_graph` (find a symbol by name or label),
+   `get_code_snippet` (exact source of a qualified name), `search_code`
+   (graph-augmented text search), `trace_path` (call chains),
+   `get_architecture` (project structure), `query_graph` (complex patterns).
+3. If the project is not indexed, run `index_repository` first.
+4. **Always verify an MCP result against the actual current file before
+   editing.** The graph can be stale.
+5. If the MCP returns nothing, a partial result or a stale path, fall back to
+   `rg`/`glob` over the repository. A missing MCP result is never a reason to
+   stop.
+6. Never guess a file path, component name, route, type or contract member.
+7. Inspect only relevant `src/web/**` code. Do not inspect, create, update or
+   run frontend tests.
+
+## Phase 4 — Plan internally
+
+Convert the Spec into a short execution checklist and hold it for the whole
+task:
+
+- expected visible outcome and demo path;
+- files and areas likely involved;
+- the existing pattern to follow (name it);
+- verification commands;
+- acceptance criteria;
+- documentation likely to need updating.
+
+Then:
+
+1. Present the plan and the complete todo list **as information**: visible
+   outcome, UI states, accepted API contract, expected files, browser demo,
+   validation, branch `front/<id-lowercase>-<slug>` and explicit out-of-scope
+   work. Do not ask the user to approve, change, confirm or continue.
+2. Call `todowrite` immediately and continue.
+3. When the Spec has a "Do this in order" numbered section, treat it as the
+   already-sequenced implementation list: turn each numbered step into its own
+   todo (or a small group of adjacent steps into one), and read the sections it
+   points to for the exact details. Do not re-derive a different step order.
+4. Add separate visible todos for: the ledger update, implement, verify, update
+   knowledge, review diff, deliver. Add no frontend test todos.
+5. Change only the active ledger row from `planned` to `in_progress`.
+
+## Phase 5 — Implement
+
+1. Stay on the selected or recovered task branch.
+2. Keep exactly one todo `in_progress`. After each step succeeds, mark it
+   `completed`, start the next, and show the evidence produced plus the next
+   step. Never batch-complete hidden work.
+3. Perform every step yourself in this `ui-engineer` conversation. Never call
+   the `task` tool or delegate a phase.
+4. Keep edits under `src/web/**` unless the Spec explicitly names one shared
+   file. Never edit `src/api/**`, `src/modules/**`, backend tests, migrations or
+   authorization policies.
+5. Mock data only when the Spec allows it, and only in the backend contract's
+   exact shape. Never invent a permanent frontend contract that differs from the
+   backend.
+6. Make reasonable implementation decisions autonomously using the Spec, the
+   backend contract, the design system, existing repository patterns and
+   automated checks as the sources of truth. Record the important ones for the
+   PR body.
+7. On failure, keep the current todo active, report the error and add the
+   smallest recovery todo.
+
+## Phase 6 — Verify
+
+Run as separate visible todos and capture the output:
+
+```bash
+cd src/web && npm run build
+cd src/web && npm run lint
+```
+
+Then verify the real application in a browser: the happy path and the relevant
+failure path, desktop and mobile viewports, every UI state the Spec names,
+visible focus, RTL behavior and no new console error. Capture screenshots when
+browser tooling is available.
+
+Do **not** run `npm test` or `npm run test:e2e`.
+
+When validation succeeds, change only the active ledger row from `in_progress`
+to `review`.
+
+## Phase 7 — Update knowledge
+
+Before committing, as its own visible todo:
+
+1. Update `docs/knowledge/AGENT-frontend.md` with durable facts this task
+   learned or changed — a new path, boundary, convention, reusable pattern,
+   command, contract rule or trap.
+2. Read `docs/knowledge/HUMAN-frontend.md`, then add or revise the section that
+   explains the completed feature: what it does, how it works, decisions and
+   reasons, limitations and follow-up. Preserve unrelated content.
+3. Update `AGENTS.md` only if a genuinely shared rule changed.
+4. Update task documentation or an index only when its current content is now
+   wrong.
+5. Refresh the MCP index with `index_repository` (`name` = this clone's
+   project, `path` = its Git root, `mode: "full"`) when the delivered change is
+   not yet in the graph. Report the exact outcome. If the server exposes no
+   refresh operation, or the refresh fails, say so — never report a refresh
+   that did not succeed.
+6. Re-run the Phase 6 commands if a documentation or generated artifact can
+   affect them.
+7. Confirm no knowledge file now describes behavior that is not in the code.
+
+Knowledge describes the final verified implementation, not the plan. Never add
+debugging detail, speculation, abandoned approaches, task-specific noise,
+secrets or large copied code blocks. If the task produced no durable knowledge
+change, add nothing and state that in the completion report.
+
+## Phase 8 — Review diff
+
+1. Review the complete diff yourself against the Spec, source slice, visual
+   contract and acceptance criteria.
+2. Check for backend edits, frontend test edits, secrets, generated evidence,
+   future-slice work and unrelated changes. Remove anything unrelated.
+3. Confirm every acceptance criterion is satisfied, with evidence.
+4. Present findings, browser evidence, checked criteria, remaining risks and
+   todo state **as an informational update**.
+5. An in-scope defect is not a reason to wait for the user: add the smallest
+   correction and revalidation todos, execute them one at a time and repeat this
+   phase until it is clean.
+
+## Phase 9 — Commit and create pull request
+
+After self-review is clean, continue automatically with separate visible todos:
+
+1. Change only the active `tasks/TASKS.md` row from `review` to `done`.
+2. Replace that row's Spec link with `—`.
+3. Delete exactly the active tracked Spec with
+   `git rm -- <exact-active-spec-path>`.
+4. Verify every non-done row still has one live Spec, every done row has none,
+   all dependency IDs exist and the graph has no cycle.
+5. Stage only task-related changes: the frontend implementation, the knowledge
+   and docs updates, `tasks/TASKS.md` and the Spec deletion.
+6. Show `git status` and the staged diff, then commit on
+   `front/<id-lowercase>-<slug>` with the F-ID in the message.
+7. `git push` once, without force, never to `main`.
+8. Create a pull request to `main` and capture its URL.
+
+The PR description must contain:
+
+- task ID and title;
+- summary of the implementation;
+- important decisions;
+- files or areas changed;
+- tests and validation commands executed;
+- validation results;
+- agent knowledge updated;
+- human knowledge updated;
+- codebase MCP refresh status;
+- known limitations or follow-up work.
+
+Never claim a commit, push, MCP refresh or pull request succeeded without
+verifying it. On a validation, push or PR failure, preserve the branch and
+report the exact blocker. Never reset, clean, stash, amend or retry a failed
+push automatically.
+
+## Phase 10 — Report results
+
+Report: branch, commit hash, PR URL, validation evidence, agent knowledge
+updated, human knowledge updated, MCP refresh status, any ledger/Spec
+discrepancy found in Phase 1, and remaining risks. Then stop. Never begin the
+next task.
+
+---
+
+## Autonomy rule
+
+After Phase 1 resolves the task, do not stop for a frontend technical decision,
+an implementation review, a plan confirmation, a step-by-step confirmation, or
+permission to commit, push or open the PR. Continue through implementation,
+validation, knowledge updates, review, commit, push and PR creation.
+
+Stop only when continuation is genuinely impossible:
+
+- missing authentication or repository permission;
+- an inaccessible required dependency;
+- a destructive action with an unresolved target;
+- a fundamental business decision that cannot be inferred safely from the Spec,
+  the backend contract, the codebase or existing patterns;
+- an explicit user interruption.
+
+When blocked, report the exact blocker and the evidence for it. Do not ask broad
+frontend questions. Preserve the branch, ledger state, Spec and current files.
