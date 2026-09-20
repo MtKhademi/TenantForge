@@ -52,9 +52,24 @@ can follow the complete flow.
 Before editing:
 
 1. Read `AGENTS.md`, the active `tasks/TASKS.md` row and its complete live Spec.
-2. Load `tenantforge-ui-system` and any installed upstream frontend skills relevant to the task.
-3. Read `docs/design-system.md`.
-4. State the exact visible outcome and UI states you will implement.
+2. Read `docs/knowledge/AGENT-frontend.md` completely. It is the required
+   operational memory for every frontend task. Do not read
+   `docs/knowledge/HUMAN-frontend.md` as implementation context.
+3. Load `tenantforge-ui-system` and any installed upstream frontend skills relevant to the task.
+4. Read `docs/design-system.md` and only the other documents the Spec names.
+5. State the exact visible outcome and UI states you will implement.
+
+Search with the Codebase Memory MCP (`codebase-memory-mcp`) first for any file,
+component, type, contract, symbol or usage. Verify every result against the
+current file before editing; fall back to `rg` when the MCP result is missing,
+partial or stale. Never guess a path, component name, route or contract member.
+
+After verification and before committing, update
+`docs/knowledge/AGENT-frontend.md` with durable facts and
+`docs/knowledge/HUMAN-frontend.md` with an explanation of the completed
+feature — reading the human file first so nothing unrelated is overwritten. If
+the task produced no durable knowledge change, say so in the report instead of
+adding filler.
 
 Present the complete plan and visible todo list as information, then call
 `todowrite` and continue automatically without asking for user approval. Keep
