@@ -1,6 +1,6 @@
 ---
 name: vertical-slice-delivery
-description: Plan, implement, verify and teach one TenantForge front or backend task in the three-clone workflow, preserving a visible vertical slice, fixed API contract, strict ownership, automated checks and user approval gates. Use for any executable task under tasks/front or tasks/backend.
+description: Plan, implement, verify and teach one TenantForge front or backend task in the three-clone workflow, preserving a visible vertical slice, fixed API contract, strict ownership, automated checks, automatic frontend delivery and backend approval gates. Use for any executable task under tasks/front or tasks/backend.
 ---
 
 # Vertical slice delivery
@@ -31,12 +31,14 @@ non-done row links one complete executable Spec under `tasks/front/` or
 `tasks/backend/`; read that Spec and its referenced `tasks/slices/*.md` contract.
 A dependency is complete only when its ledger row is `done` on current `main`.
 
-After plan approval, update only the active row to `in_progress`; after
-validation, update it to `review`. After final approval, update it to `done`, set
-its Spec cell to `—` and delete exactly that completed Spec in the delivery
-commit. Never edit another row or delete another Spec.
+For backend tasks, update only the active row to `in_progress` after plan
+approval. For frontend tasks, do so immediately after the informational plan.
+After validation, update it to `review`. Update it to `done` after final backend
+approval or clean automated frontend self-review, set its Spec cell to `—` and
+delete exactly that completed Spec in the delivery commit. Never edit another
+row or delete another Spec.
 
-## Start gate
+## Start policy
 
 Before editing, state:
 
@@ -46,15 +48,20 @@ Before editing, state:
 - one primary learning goal;
 - validation and explicit out-of-scope work.
 
-This is the first of exactly two routine blocking gates. Require `Approve`,
-`Change` or `Cancel`. Do not edit, install, branch or build before approval,
-and do not split the plan into step-by-step permission prompts.
+For a backend task, this is the first of exactly two routine blocking gates.
+Require `Approve`, `Change` or `Cancel`; do not edit, install or build before
+approval, and do not split the plan into step-by-step permission prompts.
+
+For a frontend task, this is an informational handoff, not an approval gate.
+Present the complete plan and todos, call `todowrite` immediately and continue
+automatically. Do not ask the user to approve, change, confirm or continue.
 
 ## Visible todo protocol
 
-After plan approval:
+After backend plan approval, or immediately after the frontend informational
+plan:
 
-1. call `todowrite` with the complete approved sequence;
+1. call `todowrite` with the complete sequence;
 2. keep exactly one todo `in_progress`;
 3. perform that step in the current primary agent;
 4. immediately mark it `completed`, start the next todo, show its evidence and
@@ -69,7 +76,9 @@ After plan approval:
 
 Keep build, focused tests, broader tests, browser/API demo, learning note,
 self-review, status update, staging, commit, push and PR creation as distinct
-todos whenever they apply. Do not start delivery todos before final approval.
+todos whenever they apply. For backend tasks, do not start delivery todos
+before final approval. For frontend tasks, start delivery todos immediately
+after automated self-review is clean.
 
 ## Delivery order
 
@@ -166,14 +175,23 @@ See `docs/architecture.md` ("Local development environment") and the
 ## Review and delivery
 
 After all checks pass, review the complete diff yourself in the same primary
-conversation. Present findings, acceptance evidence and remaining risks. This
-is the second and final routine blocking gate: require `Approve`, `Change` or
-`Cancel` before commit, push and PR creation.
+conversation. Present findings, acceptance evidence and remaining risks.
 
-On `Change`, add visible correction and revalidation todos, execute them one at
-a time and repeat self-review. On `Cancel`, preserve the branch and stop.
+For a backend task, this is the second and final routine blocking gate: require
+`Approve`, `Change` or `Cancel` before commit, push and PR creation. On
+`Change`, add visible correction and revalidation todos, execute them one at a
+time and repeat self-review. On `Cancel`, preserve the branch and stop. After
+final approval, never ask for a third routine permission.
 
-After final approval, never ask for a third routine permission:
+For a frontend task, self-review and delivery are automatic. Present review
+evidence as an informational progress update and do not wait for user approval.
+When review finds an in-scope defect, add the smallest correction and
+revalidation todos, execute them one at a time and repeat self-review until it
+is clean. Then continue directly to commit, push and PR creation. Pause only
+for a real blocker, material scope/contract change, missing authority,
+destructive action requiring approval or explicit user interruption.
+
+After final backend approval or clean automated frontend self-review:
 
 1. continue the same visible todo list;
 2. preserve the checked Spec acceptance criteria and evidence for the PR body;

@@ -56,12 +56,13 @@ Before editing:
 3. Read `docs/design-system.md`.
 4. State the exact visible outcome and UI states you will implement.
 
-After the user approves the plan, create the visible todo list with `todowrite`.
-Keep exactly one todo `in_progress`. Immediately after each successful step,
-mark it `completed`, move the next todo to `in_progress`, and show a short update
-containing the evidence produced and the next step. Never complete several todos
-in one hidden batch. On failure, keep the current todo active, report the error
-and add or revise the smallest recovery todo.
+Present the complete plan and visible todo list as information, then call
+`todowrite` and continue automatically without asking for user approval. Keep
+exactly one todo `in_progress`. Immediately after each successful step, mark it
+`completed`, move the next todo to `in_progress`, and show a short update
+containing the evidence produced and the next step. Never complete several
+todos in one hidden batch. On failure, keep the current todo active, report the
+error and add or revise the smallest recovery todo.
 
 Own only `src/web/**` and task-requested browser evidence. Do not inspect, create, update or run frontend tests. Do not edit `src/api/**`, `src/modules/**`, backend tests, migrations or backend learning notes.
 
@@ -78,6 +79,11 @@ For every UI task:
 - capture desktop and mobile screenshots when browser tooling is available;
 - report console errors, browser/build/lint evidence and remaining out-of-scope work.
 
-Review your own final diff against the task and source slice, present findings
-and wait for final delivery approval. Stop when the active task is done. Never
-begin the next task-ledger item.
+Review your own final diff against the task and source slice automatically. If
+you find an in-scope defect, add correction and revalidation todos, fix it and
+repeat self-review until clean. Present findings and evidence as information,
+then continue directly through ledger cleanup, commit, push and PR creation
+without asking for final delivery approval. Pause only for a real blocker,
+material scope or contract change, missing authority, a destructive action
+requiring approval, or explicit user interruption. Stop when the active task is
+done. Never begin the next task-ledger item.

@@ -8,7 +8,8 @@ clone and use the `main` clone only for coordination and merged truth.
 
 - `planned`: not started; runnable only when every dependency is `done`.
 - `in_progress`: implementation is active on its owning task branch.
-- `review`: validation is complete and final user approval is pending.
+- `review`: validation is complete. Backend awaits final user approval;
+  frontend performs automated self-review and proceeds when clean.
 - `done`: delivered through its pull request; dependencies may rely on it.
 
 Readiness and blocking are derived from the dependency column. Never mark a
@@ -17,7 +18,8 @@ blocked task runnable by changing its status.
 ## Spec lifecycle
 
 Every non-done task has one complete executable spec under `tasks/front/` or
-`tasks/backend/`. After final approval, the delivery change must:
+`tasks/backend/`. After final backend approval or clean automated frontend
+self-review, the delivery change must:
 
 1. change only the active row to `done`;
 2. replace its Spec link with `—`;
@@ -74,6 +76,26 @@ one valid Spec link.
 | F041 | S30 | Connect order tracking page to the real API | done | F040, B033 | — |
 | F042 | S31 | Group ShellNav into labelled module sections | done | F029 | — |
 | F043 | S31 | Gate Shop nav items on the new Shop permission keys | done | F042, B035 | — |
+| F044 | S32 | Build contract-shaped product gallery and storefront image mocks | planned | F043 | [F044 Spec](front/F044-shop-product-media-mock.md) |
+| F045 | S33 | Build contract-shaped storefront discovery mocks | planned | F044 | [F045 Spec](front/F045-shop-discovery-mock.md) |
+| F046 | S34 | Build contract-shaped nested category mocks | planned | F045 | [F046 Spec](front/F046-shop-category-hierarchy-mock.md) |
+| F047 | S35 | Build contract-shaped storefront identity and policy mocks | planned | F046 | [F047 Spec](front/F047-shop-profile-policies-mock.md) |
+| F048 | S36 | Build contract-shaped cart expiry mocks | planned | F047 | [F048 Spec](front/F048-shop-cart-expiry-mock.md) |
+| F049 | S37 | Build contract-shaped advanced coupon mocks | planned | F048 | [F049 Spec](front/F049-shop-coupon-rules-mock.md) |
+| F050 | S38 | Build contract-shaped admin order list and detail mocks | planned | F049 | [F050 Spec](front/F050-shop-admin-orders-mock.md) |
+| F051 | S39 | Build contract-shaped fulfil and cancel mocks | planned | F050 | [F051 Spec](front/F051-shop-order-operations-mock.md) |
+| F052 | S40 | Build contract-shaped gateway-neutral payment mocks | planned | F051 | [F052 Spec](front/F052-shop-payment-lifecycle-mock.md) |
+| F053 | S42 | Build contract-shaped Shop rate-limit mocks | planned | F052 | [F053 Spec](front/F053-shop-rate-limit-mock.md) |
+| F054 | S32 | Bind product media client to B036 HTTP contract | planned | F053, B036 | [F054 Spec](front/F054-shop-product-media-connect.md) |
+| F055 | S33 | Bind discovery client to B037 HTTP contract | planned | F054, B037 | [F055 Spec](front/F055-shop-discovery-connect.md) |
+| F056 | S34 | Bind category hierarchy client to B038 HTTP contract | planned | F055, B038 | [F056 Spec](front/F056-shop-category-hierarchy-connect.md) |
+| F057 | S35 | Bind storefront profile client to B039 HTTP contract | planned | F056, B039 | [F057 Spec](front/F057-shop-profile-policies-connect.md) |
+| F058 | S36 | Bind cart lease UI to B040 contract | planned | F057, B040 | [F058 Spec](front/F058-shop-cart-expiry-connect.md) |
+| F059 | S37 | Bind coupon rules client to B041 HTTP contract | planned | F058, B041 | [F059 Spec](front/F059-shop-coupon-rules-connect.md) |
+| F060 | S38 | Bind admin orders client to B042 HTTP contract | planned | F059, B042 | [F060 Spec](front/F060-shop-admin-orders-connect.md) |
+| F061 | S39 | Bind order operation client to B043 HTTP contract | planned | F060, B043 | [F061 Spec](front/F061-shop-order-operations-connect.md) |
+| F062 | S41 | Bind payment lifecycle to B044/B045 HTTP contracts | planned | F061, B044, B045 | [F062 Spec](front/F062-shop-payment-connect.md) |
+| F063 | S42 | Bind shared 429 handling to B046 rate-limit contract | planned | F062, B046 | [F063 Spec](front/F063-shop-rate-limit-connect.md) |
 
 ## Backend queue
 
@@ -114,6 +136,40 @@ one valid Spec link.
 | B033 | S30 | Order lookup API | done | B032 | — |
 | B034 | S31 | Shared permission catalog contract (BuildingBlocks) and IAM migration | done | — | — |
 | B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | done | B034 | — |
+| B036 | S32 | Persist and serve safe product galleries | planned | B035 | [B036 Spec](backend/B036-shop-product-media.md) |
+| B037 | S33 | Add storefront search, sorting and sale discovery | planned | B036 | [B037 Spec](backend/B037-shop-storefront-discovery.md) |
+| B038 | S34 | Support one level of storefront subcategories | planned | B037 | [B038 Spec](backend/B038-shop-category-hierarchy.md) |
+| B039 | S35 | Add tenant storefront identity and policy content | planned | B036, B035 | [B039 Spec](backend/B039-shop-profile-policies.md) |
+| B040 | S36 | Expire abandoned carts and release reserved stock | planned | B031 | [B040 Spec](backend/B040-shop-cart-reservation-expiry.md) |
+| B041 | S37 | Add enforceable coupon limits and atomic redemption | planned | B040, B029 | [B041 Spec](backend/B041-shop-coupon-rules.md) |
+| B042 | S38 | Expose tenant order list and detail for operators | planned | B035, B033 | [B042 Spec](backend/B042-shop-admin-orders.md) |
+| B043 | S39 | Fulfil or cancel orders with inventory-safe transitions | planned | B042, B040 | [B043 Spec](backend/B043-shop-order-operations.md) |
+| B044 | S40 | Make payment initiation and verification gateway-neutral and idempotent | planned | B032, B043 | [B044 Spec](backend/B044-shop-payment-lifecycle.md) |
+| B045 | S41 | Integrate ZarinPal request and server-side verification | planned | B044 | [B045 Spec](backend/B045-shop-zarinpal-payment.md) |
+| B046 | S42 | Rate-limit sensitive anonymous Shop flows | planned | B045, B043 | [B046 Spec](backend/B046-shop-public-abuse-controls.md) |
+
+## Shop continuation: S32–S42
+
+The executable plan below continues the already delivered S26–S31 Shop implementation. Shared decisions and current-gap evidence live in [the Shop continuation design](../docs/design/shop/README.md).
+
+Frontend execution is deliberately two-phase: finish all contract-shaped UI
+mocks (`F044`–`F053`) first, then bind those accepted clients to backend HTTP
+contracts (`F054`–`F063`). The [frontend contract boundary](../docs/design/shop/frontend-contract-boundary.md)
+is mandatory for both phases; connection tasks must not redesign accepted UI.
+The persistent [Shop HTTP contracts](../docs/design/shop/http-contracts.md)
+survive backend Spec deletion and are updated by every B036–B046 delivery.
+
+- [S32 — Product galleries](slices/032-shop-product-media.md)
+- [S33 — Storefront discovery](slices/033-shop-storefront-discovery.md)
+- [S34 — Category hierarchy](slices/034-shop-category-hierarchy.md)
+- [S35 — Store identity and policies](slices/035-shop-profile-policies.md)
+- [S36 — Cart reservation expiry](slices/036-shop-cart-reservation-expiry.md)
+- [S37 — Coupon rules](slices/037-shop-coupon-rules.md)
+- [S38 — Admin order reading](slices/038-shop-admin-orders.md)
+- [S39 — Order operations](slices/039-shop-order-operations.md)
+- [S40 — Gateway-neutral payment lifecycle](slices/040-shop-payment-lifecycle.md)
+- [S41 — ZarinPal payment](slices/041-shop-zarinpal-payment.md)
+- [S42 — Public abuse controls](slices/042-shop-public-abuse-controls.md)
 
 ## Cleanup batch: S11–S14
 

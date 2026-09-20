@@ -84,23 +84,27 @@ The Git preflight is a short routing step, not a diagnostic task.
    `docs/design-system.md` and load `vertical-slice-delivery` plus
    `tenantforge-ui-system`.
 
-## Plan gate
+## Automatic plan handoff
 
 1. Inspect only relevant `src/web/**` code. Do not inspect, create or update frontend tests.
 2. Present visible outcome, UI states, accepted API contract, expected files,
    browser demo, validation, branch `front/<id-lowercase>-<slug>` and explicit
    out-of-scope work.
-3. Present todos and ask `Approve`, `Change` or `Cancel`; stop and wait.
-4. Before approval, do not edit product or task files, install packages or run
-   build commands. The selected task branch already exists.
+3. Present the complete todos for visibility, then immediately call
+   `todowrite` and continue. Do not ask the user to approve, change, confirm or
+   continue and do not stop at the plan.
+4. The selected task branch already exists. Begin edits, package installation
+   and implementation commands only after the complete informational plan and
+   todo list have been shown.
 
 ## Execute
 
-1. After approval, stay on the already selected or recovered task branch.
+1. After the automatic plan handoff, stay on the already selected or recovered
+   task branch.
 2. Add separate visible todos to change only the active ledger row from
    `planned` to `in_progress`, implement, demo, review and deliver. Do not add
    frontend test todos.
-3. Immediately call `todowrite` with the approved sequence and keep exactly one
+3. Use the complete sequence already passed to `todowrite` and keep exactly one
    item `in_progress`.
 4. Perform every step yourself in this same `ui-engineer` conversation. Never
    call the `task` tool or delegate any phase.
@@ -120,15 +124,20 @@ The Git preflight is a short routing step, not a diagnostic task.
    `in_progress` to `review`.
 2. Compare the complete diff with the live Spec, source slice, visual contract
    and acceptance criteria.
-3. Present findings, screenshots/browser evidence, checked acceptance criteria,
-   remaining risks and the final todo state. Ask the user to choose `Approve`,
-   `Change` or `Cancel`, then stop and wait.
-4. On `Change`, add correction and revalidation todos, execute them one at a
-   time and return to this review gate.
-5. On `Cancel`, preserve the branch, ledger state, Spec and current files and
-   stop without delivery.
-6. After final `Approve`, capture the checked acceptance criteria and evidence
-   for the PR body, then as separate visible todos:
+3. Perform an automated self-review. Present findings, screenshots/browser
+   evidence, checked acceptance criteria, remaining risks and todo state as an
+   informational progress update; do not ask the user to approve or continue.
+4. If self-review finds an in-scope defect, add the smallest correction and
+   revalidation todos, execute them one at a time and repeat automated
+   self-review until it is clean. A review finding is not a reason to wait for
+   the user.
+5. Pause only for a real blocker, material scope or contract change, missing
+   authority, destructive action requiring approval, or explicit user
+   interruption. Preserve the branch, ledger state, Spec and current files
+   when pausing.
+6. After automated self-review is clean, capture the checked acceptance
+   criteria and evidence for the PR body, then continue automatically with
+   these separate visible todos:
    - change only the active `tasks/TASKS.md` row from `review` to `done`;
    - replace that row's Spec link with `—`;
    - delete exactly the active tracked Spec with
@@ -149,6 +158,7 @@ The Git preflight is a short routing step, not a diagnostic task.
      documentation.
 8. Stage the frontend implementation, required docs, `tasks/TASKS.md` and the
    active Spec deletion. Inspect the staged diff, commit with the F-ID,
-   push once without force and open a PR to `main`.
+   push once without force and open a PR to `main`. These are automatic
+   delivery steps; do not request a final user review or approval.
 9. Report branch, commit, PR, validation and remaining risks. Stop before the
    next task.

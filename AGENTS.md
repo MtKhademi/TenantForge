@@ -15,31 +15,37 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 4. State the visible outcome, files you expect to touch and what remains out of scope.
 5. Confirm the task has a browser demo. If it has no visible consumer, stop and propose a smaller visible slice.
 6. After synchronization and task selection, create the owning task branch
-   before deep analysis. Then wait for explicit plan approval before editing,
-   installing packages or running implementation commands.
+   before deep analysis. Backend tasks then wait for explicit plan approval.
+   Frontend tasks present the plan for visibility and continue automatically
+   without waiting for user approval.
 
 ## Single-agent execution
 
 - `/front-task` runs directly in the primary `ui-engineer` conversation.
 - `/backend-task` runs directly in the primary `backend-mentor` conversation.
 - Never call the `task` tool, start a subagent or delegate a phase.
-- Routine execution has exactly two blocking user-approval gates:
+- Backend execution has exactly two blocking user-approval gates:
   1. after reading/analyzing the task, present the summary and complete plan,
      ask `Approve`, `Change` or `Cancel`, then wait;
   2. after implementation, validation and self-review are complete, present the
      final diff/evidence, ask `Approve`, `Change` or `Cancel`, then wait
      before commit, push and pull-request creation.
-- After the first approval, create the todo list with `todowrite` and keep
-  exactly one item `in_progress`.
-- Between the two gates, todo/progress updates are informational, not permission
-  requests. Immediately continue to the next approved todo after reporting its
-  evidence; never ask whether to start, continue, run normal validation or move
-  to the next step.
-- Pause between gates only for a real blocker, a material scope/contract change,
-  missing authority, destructive action requiring approval, or an explicit user
-  interruption.
-- After the second approval, finish commit, push and PR creation without asking
-  for a third routine approval.
+- Frontend execution has zero routine user-approval gates. After reading the
+  task, present the complete plan and todos as information, call `todowrite`
+  immediately and continue through implementation, build, lint, browser QA,
+  self-review, correction, commit, push and PR creation without asking the user
+  to approve or continue.
+- Keep exactly one todo item `in_progress`. Todo/progress updates are
+  informational, not permission requests. Immediately continue to the next
+  todo after reporting its evidence; never ask whether to start, continue, run
+  normal validation, self-review, delivery or move to the next step.
+- Pause only for a real blocker, a material scope/contract change, missing
+  authority, a destructive action requiring approval, or an explicit user
+  interruption. A normal frontend review finding is not a blocker: add the
+  smallest correction and revalidation todos, fix it and repeat self-review.
+- After the second backend approval, or after a clean automated frontend
+  self-review, finish commit, push and PR creation without another routine
+  approval.
 
 ## Task ledger and Spec lifecycle
 
@@ -47,11 +53,13 @@ TenantForge is built one visible vertical slice at a time. These rules apply to 
 - Every non-done row has exactly one complete executable Spec under
   `tasks/front/` or `tasks/backend/`; every done row has Spec `—` and no live
   executable task file.
-- After plan approval, change only the active row to `in_progress`. After
-  validation, change it to `review`.
-- After final delivery approval, change only the active row to `done`, replace
-  its Spec link with `—` and delete exactly that tracked Spec in the same
-  delivery commit.
+- For backend tasks, after plan approval change only the active row to
+  `in_progress`. For frontend tasks, do so immediately after presenting the
+  informational plan. After validation, change it to `review`.
+- For backend tasks, after final delivery approval change only the active row
+  to `done`. For frontend tasks, do so after automated self-review is clean.
+  Replace its Spec link with `—` and delete exactly that tracked Spec in the
+  same delivery commit.
 - Preserve source slices and Git/PR history as the permanent record. Never
   delete another task's Spec or use file absence alone as proof of completion.
 
@@ -209,7 +217,9 @@ Do not turn the learning note into framework documentation. Explain only the cod
   use a Git worktree.
 - For a fresh task, use the bounded command preflight: synchronize `main`,
   select the first runnable owning task, create `front/fxxx-<slug>` or
-  `backend/bxxx-<slug>`, then analyze and request plan approval.
+  `backend/bxxx-<slug>`, then analyze it. Request plan approval only for a
+  backend task; a frontend task continues automatically after displaying its
+  plan.
 - If tracked changes are proven to be CRLF/LF-only with
   `git diff --ignore-cr-at-eol --quiet`, the owning command may run exactly
   `git restore --worktree -- .` once. Never use that exception for staged,
@@ -226,10 +236,12 @@ Do not turn the learning note into framework documentation. Explain only the cod
 - Do not commit secrets, local credentials, database data or generated browser artifacts.
 - Keep `main` runnable and demoable.
 - During delivery, update only the active `tasks/TASKS.md` row and delete only
-  its exact linked Spec after final approval. Verify all other live Spec links
-  and dependencies before committing.
-- Require a second user approval after validation and review before commit,
-  push and pull-request creation.
+  its exact linked Spec after final backend approval or clean automated
+  frontend self-review. Verify all other live Spec links and dependencies
+  before committing.
+- Require a second user approval after backend validation and review before
+  commit, push and pull-request creation. Frontend validation and review are
+  automatic and must continue directly to delivery when clean.
 
 ## Security baseline
 
