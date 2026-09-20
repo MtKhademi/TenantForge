@@ -4,7 +4,13 @@ import { useMemo } from 'react'
 import { Link, useLocation, useMatch } from 'react-router-dom'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useTenantPermissions } from '@/features/roles/tenantPermissions'
-import { AUDIT_VIEW_KEY, INVITATIONS_VIEW_KEY, type PermissionKey } from '@/features/roles/roleTypes'
+import {
+  AUDIT_VIEW_KEY,
+  INVITATIONS_VIEW_KEY,
+  SHOP_CATALOG_MANAGE_KEY,
+  SHOP_SHIPPING_MANAGE_KEY,
+  type PermissionKey,
+} from '@/features/roles/roleTypes'
 import { useTenantScope } from '@/features/tenants/TenantScopeContext'
 import { cn } from '@/lib/utils'
 
@@ -82,10 +88,10 @@ const navSections: ShellNavSection[] = [
     id: 'shop',
     label: 'فروشگاه',
     items: [
-      { id: 'shop-categories', label: 'دسته‌بندی‌های فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/categories' },
-      { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products' },
-      { id: 'shop-shipping', label: 'نرخ‌های ارسال', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/shipping-rates' },
-      { id: 'shop-coupons', label: 'کدهای تخفیف', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/coupons' },
+      { id: 'shop-categories', label: 'دسته‌بندی‌های فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/categories', requires: [SHOP_CATALOG_MANAGE_KEY] },
+      { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products', requires: [SHOP_CATALOG_MANAGE_KEY] },
+      { id: 'shop-shipping', label: 'نرخ‌های ارسال', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/shipping-rates', requires: [SHOP_SHIPPING_MANAGE_KEY] },
+      { id: 'shop-coupons', label: 'کدهای تخفیف', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/coupons', requires: [SHOP_SHIPPING_MANAGE_KEY] },
     ],
   },
 ]

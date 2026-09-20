@@ -73,7 +73,7 @@ one valid Spec link.
 | F040 | S30 | Order tracking page mock | done | F039 | — |
 | F041 | S30 | Connect order tracking page to the real API | done | F040, B033 | — |
 | F042 | S31 | Group ShellNav into labelled module sections | done | F029 | — |
-| F043 | S31 | Gate Shop nav items on the new Shop permission keys | planned | F042, B035 | [tasks/front/F043-shop-nav-permission-gating.md](front/F043-shop-nav-permission-gating.md) |
+| F043 | S31 | Gate Shop nav items on the new Shop permission keys | done | F042, B035 | — |
 
 ## Backend queue
 
