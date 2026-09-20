@@ -28,12 +28,38 @@ detail not repeated here.
    storefront/cart/checkout/order/payment/lookup routes, and integration
    tests under `Shop*IntegrationTests.cs`. If something differs, note it in
    your plan before continuing.
-2. In the payment domain entity for a payment attempt, add these fields
-   exactly: `AmountSnapshot` (decimal), `CallbackTokenHash` (string),
-   `FailureCode` (nullable string), `ProviderReference` (nullable string),
-   `VerifiedAtUtc` (nullable `DateTimeOffset`), `Version` (used for optimistic
-   concurrency / row locking). Add a `Status` enum with exactly these values:
-   `Initiated`, `Succeeded`, `Failed`, `Invalidated`.
+2. Extend `src/modules/shop/TenantForge.Modules.Shop/domain/ShopPaymentAttempt.cs`
+   with exactly these fields: `AmountSnapshot` (decimal),
+   `CallbackTokenHash` (string), `FailureCode` (nullable string),
+   `ProviderReference` (nullable string), `VerifiedAtUtc` (nullable
+   `DateTimeOffset`), `Version` (int, used for optimistic concurrency / row
+   locking). Add `Invalidated` to the existing `ShopPaymentAttemptStatus`
+   enum, which today has `Initiated`, `Succeeded`, `Failed` — after this task
+   it has exactly those four. The enum is persisted as a string in a
+   `varchar(20)` column, and `Invalidated` fits, so that column does not need
+   widening.
+
+   Three facts about the entity as it exists today that you must not get
+   wrong:
+
+   - **`GatewayReference` already exists** (`string`, `varchar(60)`, required,
+     with a unique index `ix_shop_payment_attempts_gateway_reference`). It
+     holds the identifier the provider issues at **initiation** — for
+     `Sandbox` a random hex string, and for ZarinPal in `B045` the
+     `authority`. A ZarinPal authority is 36 characters, so 60 is enough.
+     **Do not add an `Authority` column.** Reusing `GatewayReference` is what
+     lets `B045` ship without any migration of its own.
+   - **`ProviderReference` is a different thing.** It is the reference the
+     provider returns at **verification** (ZarinPal's `RefId`). It is
+     nullable because it does not exist until verification succeeds. Never
+     store the authority in it and never store the RefId in
+     `GatewayReference`.
+   - **`ShopPaymentAttempt` has no `TenantId` column**, only `OrderId` with a
+     cascade foreign key to `ShopOrder`. The "apply `TenantId` in the first
+     predicate" rule in "Security and transaction rules" below therefore means:
+     reach the attempt by joining through `ShopOrder` and filter that order's
+     `TenantId` first. Do not add a `TenantId` column to the attempt table to
+     make the rule easier to follow.
 3. Never store the raw callback token. Generate a 32-byte random token,
    compute its SHA-256 hash, store only the hash in `CallbackTokenHash`,
    and return the raw token exactly once, embedded in the client result URL
@@ -97,6 +123,18 @@ detail not repeated here.
      the implementation matching `Shop:Payments:Provider`. Never resolve the
      gateway by registration order — always resolve it explicitly by the
      `Provider` string.
+   - Fix the sandbox redirect URL while you are rewriting
+     `SandboxPaymentGateway.cs`. It currently returns the relative path
+     `/shop/{tenantId}/payments/sandbox/{gatewayReference}`, which matches no
+     frontend route — the frontend ignores it today and hard-navigates to
+     `/shop/{tenantId}/bank` instead. `F052`/`F062` make the returned
+     `redirectUrl` load-bearing for the first time, so it has to be right.
+     Return exactly `/shop/{tenantId}/bank?authority={gatewayReference}`: a
+     relative, same-origin path that resolves to the real `bank` route
+     registered in `src/web/src/App.tsx`. Keep it relative — `F062`'s redirect
+     allowlist treats a leading-slash path as same-origin and an absolute URL
+     as needing an allowlisted host, and the ZarinPal gateway in `B045` is the
+     one that returns an absolute `https://` URL.
    - Map the sandbox approve/decline endpoint
      (`POST /api/shop/{tenantId}/orders/{orderId}/payments/sandbox/resolve`)
      only when the ASP.NET Core environment is Development. In Production,
@@ -173,7 +211,7 @@ All errors use the repository's existing Minimal API/RFC7807 shapes (RFC7807 = t
 
 ## Required implementation
 
-1. Extend attempt with `AmountSnapshot`, `CallbackTokenHash`, `FailureCode?`, `ProviderReference?`, `VerifiedAtUtc?`, `Version`. Status values: Initiated, Succeeded, Failed, Invalidated. Store only SHA-256 of a 32-byte random callback token; return the raw token once to the client result URL.
+1. Extend attempt with `AmountSnapshot`, `CallbackTokenHash`, `FailureCode?`, `ProviderReference?`, `VerifiedAtUtc?`, `Version`. Status values: Initiated, Succeeded, Failed, Invalidated. Reuse the existing `GatewayReference` column for the provider's initiation identifier (the ZarinPal authority in B045); do not add an `Authority` column. Store only SHA-256 of a 32-byte random callback token; return the raw token once to the client result URL.
 2. Replace `VerifyCallbackAsync(string gatewayReference, bool approved)` with provider-neutral `InitiateAsync(PaymentContext, ct)` and `VerifyAsync(PaymentVerificationRequest, ct)`. Verification result contains `Outcome`, provider reference and stable error code. Provider result can never directly mutate an order.
 3. Initiation requires `Idempotency-Key`, checks PendingPayment, and replays the same response for the same canonical request. At most one non-invalidated Initiated attempt per order; retry returns it instead of minting orphan rows. Cap attempts per order at 10.
 4. A single `ShopPaymentCompletionService` locks attempt and order, validates tenant/order/amount/provider/status, resolves the attempt once and changes PendingPayment -> Paid only for verified success. Duplicate provider callbacks return the already-computed outcome. Cancelled/Fulfilled orders never become Paid.
@@ -240,6 +278,7 @@ one test.
 - [ ] Write a test in the Development environment that calls the sandbox resolve endpoint, then asserts it succeeds.
 - [ ] Write a test that configures `Shop:Payments:Provider=Sandbox` in the Production environment, then asserts startup/activation fails closed.
 - [ ] Write a test that applies the new EF migration on top of the existing migration history, then asserts it upgrades cleanly with no conflicts.
+- [ ] Write a test that initiates a sandbox payment, then asserts the returned `redirectUrl` is exactly `/shop/{tenantId}/bank?authority={gatewayReference}` — a relative same-origin path, not an absolute URL.
 
 Add tests to the closest existing `Shop*IntegrationTests.cs` file or create one named after the feature. Use the real PostgreSQL fixture. Test response bodies and persisted side effects; a status-code-only happy-path test is insufficient.
 

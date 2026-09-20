@@ -23,8 +23,72 @@ Before anything else: read `AGENTS.md` (branch naming, ledger update rules and t
    return initiation;
    ```
    `shopFetch` is the authenticated fetch helper `F044` created in `src/web/src/features/shop/clients/shopFetch.ts` — reuse it, do not write a new fetch wrapper. (Its anonymous twin for public storefront routes is `shopFetchPublic`.) `Idempotency-Key` (a header value that lets the server recognize a retried request as "the same request", so repeating it has no extra effect — this is what "idempotent" means) must be sent on every initiation call, so a retried initiation never starts a second, duplicate payment.
-4. Create `assertAllowedPaymentRedirect(url: string): void` in `src/web/src/features/shop/clients/paymentRedirectAllowlist.ts`. It parses the URL, throws if the scheme is not `https:` or the host is not in the configured allowlist, and returns nothing on success. It does not exist yet. Call it on every redirect URL you receive, before using that URL anywhere. Read the allowed hosts from a Vite env var (`import.meta.env.VITE_SHOP_PAYMENT_REDIRECT_HOSTS`, a comma-separated list); if it is unset, allow no host at all and throw — fail closed, never fail open.
-5. Treat the redirect URL as **opaque** after the scheme/host allowlist check passes: do not parse it further, do not read query parameters out of it, and — critically — **never append** order ID, merchant ID, or amount onto it yourself. Use exactly the URL string the backend gave you.
+4. Create `assertAllowedPaymentRedirect(url: string): void` in
+   `src/web/src/features/shop/clients/paymentRedirectAllowlist.ts`. It does not
+   exist yet. Call it on every redirect URL you receive, before using that URL
+   anywhere.
+
+   The backend returns **two different shapes** of `redirectUrl` and this
+   function must accept both:
+
+   - the `Sandbox` provider returns a **relative, same-origin path**,
+     `/shop/{tenantId}/bank?authority={authority}` (see `B044`);
+   - the `ZarinPal` provider returns an **absolute `https://` URL** on the
+     gateway's own host (see `B045`).
+
+   A naive "parse it and check the host" check rejects every sandbox payment,
+   because `new URL('/shop/...')` throws without a base. Implement it exactly
+   like this instead:
+
+   ```ts
+   const ALLOWED_HOSTS = (import.meta.env.VITE_SHOP_PAYMENT_REDIRECT_HOSTS ?? '')
+     .split(',')
+     .map((host) => host.trim().toLowerCase())
+     .filter(Boolean)
+
+   export function assertAllowedPaymentRedirect(url: string): void {
+     // Protocol-relative ("//evil.example/x") is an absolute URL to another
+     // origin that merely looks like a path. Reject it before anything else.
+     if (url.startsWith('//')) {
+       throw new Error('Rejected payment redirect: protocol-relative URL')
+     }
+     // Same-origin in-app path (the Sandbox provider). Always allowed.
+     if (url.startsWith('/')) return
+
+     let parsed: URL
+     try {
+       parsed = new URL(url)
+     } catch {
+       throw new Error('Rejected payment redirect: not a valid URL')
+     }
+     if (parsed.protocol !== 'https:') {
+       throw new Error('Rejected payment redirect: scheme is not https')
+     }
+     if (!ALLOWED_HOSTS.includes(parsed.hostname.toLowerCase())) {
+       throw new Error('Rejected payment redirect: host is not allowlisted')
+     }
+   }
+   ```
+
+   Three rules about this function you must not relax:
+
+   - **Fail closed.** If `VITE_SHOP_PAYMENT_REDIRECT_HOSTS` is unset, the list
+     is empty and every absolute URL is rejected. Never treat "no allowlist
+     configured" as "allow everything".
+   - **Compare `hostname`, never `host` and never `href`.** `hostname` excludes
+     the port and cannot be spoofed by a userinfo prefix such as
+     `https://payment.example.com@evil.test/`.
+   - **Do not add a `startsWith` check on the full URL string.** An allowlist
+     entry must match the whole hostname, so that `evil-payment.example.com`
+     does not pass a check meant for `payment.example.com`.
+
+   Get the actual host values from `B045`'s pull-request body, which is
+   required to state the exact host of the `GatewayBaseUrl` it configured per
+   environment. Do not guess them from ZarinPal's public documentation — if the
+   allowlist and the backend's configured gateway host disagree, every
+   production payment redirect is rejected. If `B045`'s PR body does not state
+   the host, stop and ask for it rather than guessing.
+5. Treat the redirect URL as **opaque** after `assertAllowedPaymentRedirect` passes: do not parse it further, do not read query parameters out of it, and — critically — **never append** order ID, merchant ID, or amount onto it yourself. Use exactly the URL string the backend gave you. A relative sandbox path is navigated with the router; an absolute gateway URL is a full-page navigation.
 6. Implement the **callback result/status** handling: after the backend redirects the customer back, read the backend's callback result and status token exactly as the contract defines them, and parse them through the existing schema from `F052`. Do not derive payment status from the redirect URL's own query string — only from the backend's callback response.
 7. Implement the **Development sandbox route**: in the Development environment only, bind to the sandbox payment route defined in the `B044`/`B045` contract (this lets the payment flow be exercised locally without a real payment provider). Do not enable the sandbox route outside the Development environment.
 8. Implement **polling** for payment status: poll the status endpoint up to a maximum of **five times**, then stop. Do not poll indefinitely and do not exceed five attempts.
@@ -71,6 +135,9 @@ Change only the `payments` slot in `createShopClients()` from its mock implement
 - [ ] Initiate a payment, reload the page, and confirm the payment state persisted on the server.
 - [ ] Trigger one real backend failure or permission/conflict path in the payment flow and confirm the UI shows it correctly.
 - [ ] Confirm the redirect URL is only ever checked against the allowlist and passed through unmodified — never has order/merchant/amount appended by the client.
+- [ ] Confirm a relative sandbox `redirectUrl` (`/shop/{tenantId}/bank?authority=...`) is accepted and navigates correctly — the allowlist must not reject it.
+- [ ] Confirm an absolute URL on a non-allowlisted host, a protocol-relative `//host/path`, a `http://` URL and a `javascript:` URL are each rejected without navigating.
+- [ ] Confirm that with `VITE_SHOP_PAYMENT_REDIRECT_HOSTS` unset, every absolute redirect is rejected (fail closed) while the relative sandbox path still works.
 - [ ] Confirm polling stops after at most five attempts.
 - [ ] Fetch the same data from mock and from the real backend, parse both through the same schema, and confirm component props/view models are identical either way.
 - [ ] Run `cd src/web && npm run build` and confirm it succeeds.
