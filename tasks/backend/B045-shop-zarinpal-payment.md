@@ -93,10 +93,23 @@ detail not repeated here.
    never silently switch providers.
 9. In the learning note, cite the exact official ZarinPal request/verify
    documentation URL(s) you used and the date you reviewed them.
-10. Write an EF migration for any new persisted fields this task needs (for
-    example, storing the state/authority mapping if not already covered by
-    B044's schema). Inspect the generated migration for only intended
-    changes.
+10. **This task adds no EF migration.** Every field it needs already exists
+    after `B044`:
+
+    - the ZarinPal `authority` goes in the existing `GatewayReference` column
+      (`varchar(60)`, unique — a ZarinPal authority is 36 characters);
+    - the `RefId` returned by verify goes in `ProviderReference`;
+    - the failure code goes in `FailureCode`, the verification time in
+      `VerifiedAtUtc`, the charged amount in `AmountSnapshot`.
+
+    The signed state value from step 4 is a Data Protection token carried in
+    the callback query string — it is deliberately **not** persisted, so it
+    needs no column. Confirm that no new file appeared under
+    `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
+    that `ShopDbContextModelSnapshot.cs` is unchanged. If you believe you need
+    a new column, stop and report why before adding one — it means this Spec
+    or `B044` got something wrong, and adding it silently would break
+    `B044`'s entity contract.
 11. Write every integration test listed in "Integration tests required"
     below.
 12. Update `docs/modules/SHOP.md` and the matching section of
@@ -193,12 +206,20 @@ one test.
 - [ ] Write a test where a late success verification arrives for an order already `Cancelled`, then assert the order does not become `Paid`.
 - [ ] Write a test that misconfigures a Production host/URL (not on the allowlist or not HTTPS), then assert startup/activation fails.
 - [ ] Write a test that inspects response bodies and log fixtures after a full flow, then assert no secrets (merchant ID, card PAN, etc.) appear in either.
+- [ ] Write a test that stores a ZarinPal authority on an attempt, then asserts it persisted in the existing `GatewayReference` column and that the `RefId` from verify persisted separately in `ProviderReference`.
 
 Add tests to the closest existing `Shop*IntegrationTests.cs` file or create one named after the feature. Use the real PostgreSQL fixture. Test response bodies and persisted side effects; a status-code-only happy-path test is insufficient.
 
 ## Browser handoff
 
-In the PR body give `F062` exact routes, sample JSON, error codes, permission key and seed/setup steps. Demonstrate the happy path and relevant failure path through the current or immediately dependent frontend.
+In the PR body, state the **exact host** of the `GatewayBaseUrl` you configured
+(for example the host part of `Shop:Payments:ZarinPal:GatewayBaseUrl`) for each
+environment. `F062` builds a client-side redirect allowlist and must be
+configured with exactly these hosts — if the two disagree, every production
+payment redirect is rejected by the browser client. Do not make `F062` guess
+the host from ZarinPal's public documentation.
+
+In the PR body also give `F062` exact routes, sample JSON, error codes, permission key and seed/setup steps. Demonstrate the happy path and relevant failure path through the current or immediately dependent frontend.
 
 ## Validation
 
@@ -234,12 +255,11 @@ connect to, but it confirms the Docker daemon is reachable).
    dotnet test TenantForge.sln --nologo
    ```
 
-4. This task generates a migration only if it adds a persisted field. If you
-   generated one, open it under
+4. This task adds **no** EF migration (see "Do this in order" step 10).
+   Confirm that no new file appeared under
    `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
-   confirm it contains only the intended schema changes, and that
-   `ShopDbContextModelSnapshot.cs` was updated too. If you generated none, say
-   so explicitly in the completion report.
+   that `ShopDbContextModelSnapshot.cs` is unchanged. If either changed, you
+   went outside this task's scope — revert it.
 
 5. Re-read `docs/modules/SHOP.md` and check every routes/entities/config/auth/tests
    statement against the code you actually delivered. Then finish the

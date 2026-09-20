@@ -23,7 +23,23 @@ Before starting, follow the boilerplate already described in "Ownership, phase a
 7. Give the mock a way to select named scenarios (for example an in-memory scenario map keyed by order ID or by a query parameter), so a reviewer can force each of the states listed in "Required states" below. Do not show task IDs (like `F052`) anywhere in production UI text.
 8. Gate any scenario-selection UI (a "scenario toolbar") behind `import.meta.env.DEV` (a build-time flag that is `true` only in the local dev server, `false` in a production build). Verify a production build (`cd src/web && npm run build`) does not render this toolbar.
 9. Add a `payments` slot to the `ShopClients` type and to `createShopClients()` in `src/web/src/features/shop/clients/ShopClientsProvider.tsx` (created by `F044`), wired to your new mock payments client. Components get it through `useShopClients()`, never by constructing or importing it directly. Do not touch any other slot.
-10. Create `src/web/src/pages/shop/storefront/PaymentRedirectPage.tsx` and add a `payment-redirect` child route for it in `src/web/src/App.tsx`, inside the existing `<Route path="/shop/:tenantId" element={<StorefrontLayout />}>` block beside the current `payment-result` route. It calls `initiate` with `tenantId`, `orderId`, and an idempotency key ("idempotent" = calling it more than once with the same key produces the same result instead of creating duplicates), then navigates the user only after validating that `redirectUrl`'s scheme and host are safe (allow only the expected scheme, e.g. `https`, and the expected host(s); reject anything else and show an error instead of navigating).
+10. Create `src/web/src/pages/shop/storefront/PaymentRedirectPage.tsx` and add a `payment-redirect` child route for it in `src/web/src/App.tsx`, inside the existing `<Route path="/shop/:tenantId" element={<StorefrontLayout />}>` block beside the current `payment-result` route. It calls `initiate` with `tenantId`, `orderId`, and an idempotency key ("idempotent" = calling it more than once with the same key produces the same result instead of creating duplicates), then navigates the user only after checking that `redirectUrl` is safe.
+
+    Your mock must return both of the shapes the real backend returns, because
+    `F062` has to handle both:
+
+    - for `provider: 'Sandbox'`, a **relative same-origin path**
+      `/shop/{tenantId}/bank?authority={authority}` (this is what `B044`
+      specifies, and it resolves to the existing `bank` route);
+    - for `provider: 'ZarinPal'`, an **absolute `https://` URL** on a gateway
+      host.
+
+    Add scenarios for an unsafe redirect too: an absolute `http://` URL, an
+    absolute URL on an unexpected host, and a protocol-relative `//host/path`
+    (which looks like a path but is actually another origin). Each must show an
+    error instead of navigating. `F062` replaces your check with a shared
+    `assertAllowedPaymentRedirect` helper, so keep the check in one small
+    function rather than inline in the component.
 11. Update the existing `src/web/src/pages/shop/storefront/PaymentResultPage.tsx` (delivered by an earlier task — do not create a second one). It must resolve its state purely from the opaque `resultToken` in the URL (not from session/draft state or a query-string "outcome" flag), so refreshing the page after a redirect still shows the correct state. It calls `getStatus` with that token.
 12. In `PaymentResultPage.tsx`, implement the `Pending` status as bounded fake polling (poll `getStatus` a fixed number of times with a delay between each, then stop) plus a manual "Retry"/"Check again" control the user can click at any time.
 13. Update the existing `src/web/src/pages/shop/storefront/SandboxBankPage.tsx` (the fake bank UI used only for the `Sandbox` provider — it already exists, do not create a second one) and mark it explicitly Development-only. Gate its `bank` route in `src/web/src/App.tsx` on `import.meta.env.DEV`, so the route is not registered at all in a production build.
@@ -160,7 +176,9 @@ after you have actually seen the described behaviour in the browser.
 - [ ] Only this row becomes review/done; stop before the next mock task.
 - [ ] Write/verify each result status (`PendingPayment`, `Paid`, `Cancelled`, `Fulfilled`) — assert each renders its own distinct state on `PaymentResultPage`.
 - [ ] Write/verify refreshing `PaymentResultPage` — assert the state still resolves from the `resultToken` in the URL, not from session or draft state.
-- [ ] Write/verify a redirect URL with a disallowed scheme or host — assert the app shows an error and does not navigate.
+- [ ] Write/verify a `Sandbox` redirect (`/shop/{tenantId}/bank?authority=...`) — assert it is accepted and navigates to the bank page.
+- [ ] Write/verify a `ZarinPal` redirect (absolute `https://` URL) — assert it is accepted.
+- [ ] Write/verify a redirect URL with a disallowed scheme, an unexpected host, or a protocol-relative `//host/path` — assert each shows an error and does not navigate.
 - [ ] Write/verify repeated `initiate` calls with the same idempotency key — assert no duplicate payment attempt is created and the same result comes back.
 - [ ] Write/verify the `PendingPayment` polling — assert it stops after its fixed number of attempts and does not poll forever.
 - [ ] Write/verify the manual "check again" control — assert it re-queries even after bounded polling has stopped.
