@@ -1,0 +1,19 @@
+# S35 — Store identity and policies
+
+## Visible outcome
+
+Tenant storefront identity, support and policy pages.
+
+## Delivered baseline
+
+This slice starts from merged commit `34dc44e` after S31. It extends the existing Shop module and pages; it does not recreate category, product, cart, checkout, order, payment, tracking or permission foundations.
+
+## Tasks
+
+B039, F047, F057.
+
+Each task's executable Spec under `tasks/backend/` or `tasks/front/` is authoritative for class names, routes, error behavior, tests and browser evidence while that task is live. When a task is delivered its Spec is deleted and this slice remains as the product record.
+
+## Boundary
+
+Only the capability named above belongs to this slice. The next slice is not started implicitly. Existing tenant isolation, permission enforcement, Persian RTL UX, guest checkout and order snapshots remain required.
