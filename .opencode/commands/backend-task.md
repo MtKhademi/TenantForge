@@ -81,7 +81,12 @@ The Git preflight is a short routing step, not a diagnostic task.
    `backend/<id-lowercase>-<slug>` from the updated `main`. Do this before
    deep analysis so every task starts on its own branch.
 8. Read the complete Spec, its `source` slice, `AGENTS.md`, relevant
-   architecture sections and load `vertical-slice-delivery`.
+   architecture sections and load `vertical-slice-delivery`. When the Spec
+   has a "Do this in order" numbered section, treat it as the primary,
+   already-sequenced list of implementation steps: read every other section
+   it points to (HTTP contract, required code shape, security rules, tests,
+   acceptance checklist) for the exact details, but do not re-derive your own
+   step order from scratch when one is already given.
 9. Detect IAM ownership: the task's expected files include
    `src/modules/iam/**`, or the task changes an IAM contract living in
    `TenantForge.BuildingBlocks` or the API host. When detected, read the
@@ -124,6 +129,11 @@ The Git preflight is a short routing step, not a diagnostic task.
 1. After approval, stay on the already selected or recovered task branch.
 2. Add separate visible todos to change only the active ledger row from
    `planned` to `in_progress`, implement, test, teach, review and deliver.
+   When the Spec has a "Do this in order" numbered section, turn each of its
+   numbered steps into its own todo (or a small group of adjacent steps into
+   one todo) instead of inventing a different breakdown; keep the ledger,
+   test, teach, review and deliver todos this section already lists in
+   addition to those.
 3. Immediately call `todowrite` with the approved sequence and keep exactly one
    item `in_progress`.
 4. Perform every step yourself in this same `backend-mentor` conversation.

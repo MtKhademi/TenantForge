@@ -82,7 +82,12 @@ The Git preflight is a short routing step, not a diagnostic task.
    analysis so every task starts on its own branch.
 8. Read the complete Spec, its `source` slice, `AGENTS.md`,
    `docs/design-system.md` and load `vertical-slice-delivery` plus
-   `tenantforge-ui-system`.
+   `tenantforge-ui-system`. When the Spec has a "Do this in order" numbered
+   section, treat it as the primary, already-sequenced list of
+   implementation steps: read every other section it points to (contract
+   shape, required states, browser evidence, definition of done) for the
+   exact details, but do not re-derive your own step order from scratch when
+   one is already given.
 
 ## Automatic plan handoff
 
@@ -103,7 +108,11 @@ The Git preflight is a short routing step, not a diagnostic task.
    task branch.
 2. Add separate visible todos to change only the active ledger row from
    `planned` to `in_progress`, implement, demo, review and deliver. Do not add
-   frontend test todos.
+   frontend test todos. When the Spec has a "Do this in order" numbered
+   section, turn each of its numbered steps into its own todo (or a small
+   group of adjacent steps into one todo) instead of inventing a different
+   breakdown; keep the ledger, demo, review and deliver todos this section
+   already lists in addition to those.
 3. Use the complete sequence already passed to `todowrite` and keep exactly one
    item `in_progress`.
 4. Perform every step yourself in this same `ui-engineer` conversation. Never
