@@ -39,14 +39,19 @@ detail not repeated here.
    a positive number, and each must be within a documented maximum you write
    down in `docs/modules/SHOP.md`. If Production is missing any of these
    values, startup must fail.
-3. Find where the host currently calls `AddRateLimiter` (ASP.NET Core's
-   built-in rate-limiting middleware registration). If no call exists yet,
-   add exactly one `AddRateLimiter` call at host composition
-   (`src/api/TenantForge.Api/Program.cs`). If one already exists, add the
-   Shop policies to it — do not add a second `AddRateLimiter` call.
-   - Add `app.UseRateLimiter()` positioned after forwarded-header processing
-     and CORS middleware, and before the point where module endpoints
-     execute.
+3. Register the limiter in `src/api/TenantForge.Api/Program.cs`. As delivered
+   today that file contains **no** `AddRateLimiter` call and **no**
+   `UseForwardedHeaders` call — check this yourself before you start, then:
+   - Add exactly one `builder.Services.AddRateLimiter(...)` call, placed after
+     `builder.Services.AddShopModule(builder.Environment);` and before
+     `var app = builder.Build();`. Never add a second `AddRateLimiter` call.
+   - Add `app.UseForwardedHeaders(...)` as the first middleware, before the
+     existing `app.UseCors();` line, configured with the trusted-proxy
+     allowlist from the next bullet. This middleware does not exist yet; this
+     task adds it.
+   - Add `app.UseRateLimiter();` immediately after `app.UseCors();` and before
+     `await app.UseIamModuleAsync();` — module activation is what maps the
+     endpoints, so the limiter must be in the pipeline before it runs.
    - Partition rate-limit buckets by normalized tenant ID plus remote IP
      (i.e., the limiter tracks "this tenant + this IP" as one bucket, not
      tenant alone or IP alone).
@@ -104,7 +109,8 @@ Read `AGENTS.md`, the `B046` row in `tasks/TASKS.md`, this complete Spec, `docs/
 
 Also read the matching section in `docs/design/shop/http-contracts.md`; this backend task must update it to the delivered wire contract before its executable Spec is deleted.
 
-Current baseline is commit `34dc44e`: Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
+Baseline as of commit `34dc44e` (later commits changed only `src/web/**` and
+`tasks/**`, so this still describes the backend you will find): Shop uses one module project, internal EF entities, TSID IDs, a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
 
 ## Files expected to change
 
@@ -121,7 +127,7 @@ All errors use the repository's existing Minimal API/RFC7807 shapes (RFC7807 = t
 ## Required implementation
 
 1. Add `ShopRateLimitOptions` with per-minute limits and queue length zero. Development defaults: lookup 30, cart mutations 120, checkout/order 30, payment initiation 20. Production requires explicit positive values within documented maxima.
-2. Register one `AddRateLimiter` call at host composition only if not already present; Shop contributes named policies. Add `app.UseRateLimiter()` after forwarded-header processing/CORS and before module endpoint execution is reached. Partition by normalized tenant ID plus remote IP. When behind a proxy, trust forwarded headers only from explicitly configured proxies/networks; otherwise use direct remote IP.
+2. Add the single `AddRateLimiter` registration and the `UseForwardedHeaders`/`UseRateLimiter` middleware to `src/api/TenantForge.Api/Program.cs` at the exact positions named in "Do this in order" step 3; Shop contributes named policies. Partition by normalized tenant ID plus remote IP. When behind a proxy, trust forwarded headers only from explicitly configured proxies/networks; otherwise use direct remote IP.
 3. Apply lookup policy to order lookup, cart policy to create/add/update/delete, order policy to checkout summary/order creation, and payment policy to initiation. Do not IP-throttle the provider callback: many legitimate callbacks may share provider egress addresses, while B045 already protects that route with signed state, bounded input and idempotent verification. Public catalog reads are not limited in this slice.
 4. Return RFC7807 429 with `type=shop_rate_limit`, generic Persian-safe detail and integer `Retry-After`. Do not disclose whether tracking code, phone, cart or order exists.
 5. Bound request body sizes for media, JSON Shop requests and callback query lengths. Reject over-limit before model work. Logging includes policy and tenant but no phone/tracking/coupon/authority.
@@ -176,15 +182,85 @@ In the PR body give `F063` exact routes, sample JSON, error codes, permission ke
 
 ## Validation
 
-1. `dotnet build TenantForge.sln --nologo`
-2. Targeted Shop integration test class.
-3. Full `dotnet test TenantForge.sln --nologo` (or the repository's documented Windows `dotnet.exe` equivalent).
-4. Inspect the generated migration for only intended schema changes.
-5. Verify `docs/modules/SHOP.md` against routes/entities/config/auth/tests and update the Bxxx learning note.
+Run these from the repository root, in this order, and fix every failure
+before moving to the next command.
+
+On the reference WSL setup there is no Linux `dotnet` binary — use `dotnet.exe`
+instead of `dotnet` in every command below. See
+`docs/architecture.md#local-development-environment-wsl--windows-net-sdk`.
+
+The integration tests start PostgreSQL through Testcontainers, so Docker must
+be running before you run any test command. Start it with `docker compose up -d postgres`
+if Docker Desktop is not already up (the compose service is not what the tests
+connect to, but it confirms the Docker daemon is reachable).
+
+1. Build everything:
+
+   ```bash
+   dotnet build TenantForge.sln --nologo
+   ```
+
+2. Run only this task's Shop integration tests first (replace
+   `<ShopTestClass>` with the exact class name you added or extended, for
+   example `ShopCatalogAdminIntegrationTests`):
+
+   ```bash
+   dotnet test TenantForge.sln --nologo --filter FullyQualifiedName~<ShopTestClass>
+   ```
+
+3. Run the full test suite and confirm it is green:
+
+   ```bash
+   dotnet test TenantForge.sln --nologo
+   ```
+
+4. This task adds **no** EF migration. Confirm that no new file appeared under
+   `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
+   that `ShopDbContextModelSnapshot.cs` is unchanged. If either changed, you
+   went outside this task's scope — revert it.
+
+5. Re-read `docs/modules/SHOP.md` and check every routes/entities/config/auth/tests
+   statement against the code you actually delivered. Then finish the
+   `docs/learning/B046-<slug>.md` learning note.
+
+6. Confirm the frontend was not touched:
+
+   ```bash
+   git diff --name-only origin/main... -- src/web
+   ```
+
+   This must print nothing.
 
 ## Non-goals
 
 CAPTCHA, WAF, distributed Redis counters, bot scoring, catalog caching or account lockout.
+
+## Completion report
+
+When the task is finished, report exactly these six things — no more, no less.
+Do not skip a heading because you think it is obvious.
+
+1. **Files changed.** The full list of paths you created, edited or deleted,
+   grouped as: production code, EF migration (generated), tests,
+   documentation. Say which files are generated rather than hand-written.
+2. **Implementation decisions.** Every decision this Spec left to you, with
+   the option you picked and one sentence of why. If you followed an "if
+   unsure, do X" default from this Spec, say so and name it.
+3. **Commands executed.** Every command from "Validation" above, copied
+   verbatim in the order you ran them.
+4. **Results of those checks.** For each command: pass or fail, and for the
+   test commands the actual passed/failed/skipped counts. If you had to re-run
+   something after a fix, say that and give the final result. Never report a
+   command as passing if you did not run it.
+5. **Risks, blockers and follow-up.** Anything you could not verify, any
+   scenario from "Integration tests required" you could not cover and why, any
+   contract detail that differed from this Spec, and anything the next task
+   (F063) must know. Write "None." if there is genuinely nothing.
+6. **Documentation impact statement.** The exact line
+   `SHOP.md impact: <what you updated>` or
+   `SHOP.md impact: none — <specific reason>`, plus the same line for
+   `IAM.md`, `BuildingBlocks docs` and `IAM Contract docs` if your diff touched
+   any of them (see `AGENTS.md`). A vague "docs not needed" is not accepted.
 
 ## Acceptance checklist
 

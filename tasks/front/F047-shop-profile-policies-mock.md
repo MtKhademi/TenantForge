@@ -19,37 +19,50 @@ the branch-naming and ledger-update rules from `AGENTS.md`'s Ownership
 section. Do not skip those just because they are not repeated below.
 
 1. Open `docs/design/shop/http-contracts.md` and find the section for `B039`. Note every field name, type and nullability it defines — copy these exactly, do not rename or reshape them.
-2. Create `contracts/shopProfileContract.ts`. In it, write the Zod schemas and TypeScript types exactly as shown in "Required contract/code shape" below. ("Zod schema" means a runtime validator plus TypeScript type generator, already used elsewhere in `features/shop/contracts/`.)
+2. Create `src/web/src/features/shop/contracts/shopProfileContract.ts`. In it, write the Zod schemas and TypeScript types exactly as shown in "Required contract/code shape" below. ("Zod schema" means a runtime validator plus TypeScript type generator, created by `F044` in `src/web/src/features/shop/contracts/shopContract.ts`.)
 3. Define `shopProfileSchema` exactly as shown below, with all fields: `id`, `tenantId`, `name`, `tagline`, `supportPhone`, `instagramUrl` (nullable), `aboutText`, `shippingPolicy`, `paymentPolicy`, `returnPolicy`, `privacyPolicy`, `isPublished`, `version`, `updatedAtUtc`.
 4. Define `SaveShopProfileRequest` exactly as shown below: it is `ShopProfile` minus `id`, `tenantId`, `version`, `updatedAtUtc`, plus a new field `expectedVersion: number | null`. (`expectedVersion` is how the mock simulates optimistic concurrency: the caller sends the version it last saw, and a stale value should trigger the stale-version conflict state — this is the same pattern named "stale version" elsewhere in this Spec.)
 5. Also define a `PublicShopProfile` type and matching schema (referenced by `getPublic` below but not fully spelled out in the shape block) — write out every field of it in full, matching whatever public-facing subset of `shopProfileSchema`'s fields the backend Spec `B039` exposes publicly (the published, customer-facing fields such as `name`, `tagline`, `supportPhone`, `instagramUrl`, `aboutText`, and the four policy fields — omit any admin-only field `B039` does not expose publicly).
-6. Create `features/shop/clients/ShopProfileClient.ts`. Define the `ShopProfileClient` TypeScript interface exactly as shown below, with three methods: `getAdmin`, `save`, `getPublic`. Every method's last parameter is `signal?: AbortSignal` (abort-aware: cancel in-flight work when the caller cancels). `getAdmin` and `getPublic` both return `| null` — meaning "no profile has been created yet"; your UI must handle that null case explicitly (this is the "null-first setup" state named below), not crash or show a blank screen.
-7. Create the mock client (place it beside the other mock clients under `features/shop/clients/`, named for this feature) implementing `ShopProfileClient` fully — no method left unimplemented, no `any`, no unchecked casts. Give it deterministic, seeded fixture data.
-8. Simulate network latency in the mock client using the shared abort-aware delay helper already used by other mock clients in `features/shop/clients/`. Reuse that helper; do not write a new one.
+6. Create `src/web/src/features/shop/clients/ShopProfileClient.ts`. Define the `ShopProfileClient` TypeScript interface exactly as shown below, with three methods: `getAdmin`, `save`, `getPublic`. Every method's last parameter is `signal?: AbortSignal` (abort-aware: cancel in-flight work when the caller cancels). `getAdmin` and `getPublic` both return `| null` — meaning "no profile has been created yet"; your UI must handle that null case explicitly (this is the "null-first setup" state named below), not crash or show a blank screen.
+7. Create `src/web/src/features/shop/clients/mockShopProfileClient.ts` implementing `ShopProfileClient` fully — no method left unimplemented, no `any`, no unchecked casts. Give it deterministic, seeded fixture data.
+8. Simulate network latency in the mock client by awaiting the `delay(ms, signal)` helper `F044` created in `src/web/src/features/shop/clients/shopFetch.ts`. Use that one helper; never call `setTimeout` directly in a mock client.
 9. Add named, in-memory scenarios in the mock client for: null-first setup (`getAdmin`/`getPublic` return `null`), published profile, unpublished profile, and a stale-version conflict on `save` (when `expectedVersion` does not match the mock's current stored `version`).
-10. Wrap any scenario-selection UI in a check on `import.meta.env.DEV`, so it is stripped from the production build. Verify a production build (`npm run build`) contains no such toolbar and no task ID shown anywhere in production-rendered text.
-11. Extend `ShopClientsProvider`'s exported `ShopClients` object with a new `profile` slot wired to the mock profile client for this task.
-12. Build/update `ShopProfilePage.tsx` as a plain-text settings form covering every editable field in `SaveShopProfileRequest`. Add a live character counter next to each text field. Add a "published" toggle bound to `isPublished`. Add a preview of how the storefront header/footer will look with the current form values, updated live as the admin types.
-13. Update `StorefrontLayout.tsx` (or create it if missing) so the storefront header and footer render the store's `name`, `tagline`, `supportPhone`, and `instagramUrl` (when not null) from the profile client.
-14. Create/update `PolicyPage.tsx` as a single reusable component that renders one policy's text. Add routes and navigation entries for exactly five pages: About (uses `aboutText`), Shipping (uses `shippingPolicy`), Payment (uses `paymentPolicy`), Returns (uses `returnPolicy`), and Privacy (uses `privacyPolicy`).
+10. Wrap any scenario-selection UI in a check on `import.meta.env.DEV`, so it is stripped from the production build. Verify a production build (`cd src/web && npm run build`) contains no such toolbar and no task ID shown anywhere in production-rendered text.
+11. Add a `profile` slot to the `ShopClients` type and to `createShopClients()` in `src/web/src/features/shop/clients/ShopClientsProvider.tsx` (created by `F044`), wired to your mock profile client. Do not touch any other slot.
+12. Create `src/web/src/pages/shop/admin/ShopProfilePage.tsx` as a plain-text settings form covering every editable field in `SaveShopProfileRequest`. Add a live character counter next to each text field. Add a "published" toggle bound to `isPublished`. Add a preview of how the storefront header/footer will look with the current form values, updated live as the admin types.
+13. Update `src/web/src/pages/shop/storefront/StorefrontLayout.tsx` (it already exists) so the storefront header and footer render the store's `name`, `tagline`, `supportPhone`, and `instagramUrl` (when not null) from the profile client.
+14. Create `src/web/src/pages/shop/storefront/PolicyPage.tsx` as a single reusable component that renders one policy's text. In `src/web/src/App.tsx`, add five child routes under the existing `<Route path="/shop/:tenantId" element={<StorefrontLayout />}>` block, all rendering `PolicyPage` with a different field: `about` (uses `aboutText`), `shipping` (uses `shippingPolicy`), `payment` (uses `paymentPolicy`), `returns` (uses `returnPolicy`), `privacy` (uses `privacyPolicy`). Add the matching five links to the storefront footer. Also add a route for `ShopProfilePage` at `/t/:tenantId/shop/profile` inside the existing `<ProtectedLayout />` block, beside the other `/t/:tenantId/shop/*` routes, and a nav entry for it in `src/web/src/components/shell/ShellNav.tsx`.
 15. When rendering any of the five policy texts or the about text, preserve line breaks (newlines) as visual line breaks, but render the text as plain text — never interpret it as HTML (no `dangerouslySetInnerHTML` or equivalent).
 16. Decide what the storefront shows when `isPublished` is false: render a neutral fallback (e.g., "this store is not yet open" style message) instead of the real header/footer/policy content. Apply this same unpublished fallback consistently across the header, footer and policy pages — do not show real content on some and the fallback on others.
 17. Consume the `profile` client only through `ShopClientsProvider` in every component you touch. Never import mock fixtures directly into a component, and never call `fetch` anywhere in this task.
 18. Implement every state listed in "Required states" below: idle/initial, loading (without layout shift), success, empty, the named validation/409/403/404/410/429 states, unavailable-with-retry, and aborted/superseded request handling. Never show a success message the mock did not actually send.
-19. Run `npm run build` and `npm run lint`; fix all errors before moving on.
+19. Run `cd src/web && npm run build`, then `cd src/web && npm run lint`; fix every error before moving on.
 20. Manually exercise the app in a real browser at 1440×900, 1024×768 and 390×844 (see "Browser evidence and validation" for exactly what to click through), including long Persian text wrapping on all three viewports, and capture evidence.
 21. Report the exact line: `Data source: mock profile client; HTTP integration deferred to the matching F054–F063 task.`
 22. Walk the "Definition of done" checklist at the bottom of this file item by item before marking this task's ledger row as review/done, per the ledger rules in `AGENTS.md`.
 
 ## Files expected to change
 
-`contracts/shopProfileContract.ts`, `clients/ShopProfileClient.ts`, mock client, provider extension, ShopProfilePage, StorefrontLayout, PolicyPage, routes and navigation.
+Created by this task:
+
+- `src/web/src/features/shop/contracts/shopProfileContract.ts`
+- `src/web/src/features/shop/clients/ShopProfileClient.ts`
+- `src/web/src/features/shop/clients/mockShopProfileClient.ts`
+- `src/web/src/pages/shop/admin/ShopProfilePage.tsx`
+- `src/web/src/pages/shop/storefront/PolicyPage.tsx`
+
+Edited by this task:
+
+- `src/web/src/features/shop/clients/ShopClientsProvider.tsx` (add the `profile` slot)
+- `src/web/src/pages/shop/storefront/StorefrontLayout.tsx`
+- `src/web/src/App.tsx` (five policy routes plus the admin profile route)
+- `src/web/src/components/shell/ShellNav.tsx`
 
 Own only `src/web/**`, this task's ledger row and browser evidence. Do not edit backend, migrations or backend tests. Do not inspect or run frontend tests.
 
 ## Contract-first rule
 
-This mock is not throwaway UI data. Define the exact wire contract once under `features/shop/contracts/` using TypeScript types plus Zod response schemas. Define a feature client interface under `features/shop/clients/`; both mock and later HTTP implementations must satisfy that same interface. Components consume the client through `ShopClientsProvider`, never import fixtures and never call `fetch`.
+This mock is not throwaway UI data. Define the exact wire contract once under `src/web/src/features/shop/contracts/` using TypeScript types plus Zod response schemas. Define a feature client interface under `src/web/src/features/shop/clients/`; both mock and later HTTP implementations must satisfy that same interface. Components consume the client through `useShopClients()`, never import fixtures and never call `fetch`. All four of those things were created by `F044` — see that Spec's "Build the shared Shop client seam first" section for their exact contents.
 
 JSON member casing and nullability mirror `B039` exactly. Mock IDs are canonical 13-character TSID strings (TSID = "a sortable numeric string ID — see `TenantForge.BuildingBlocks`"; treat it as an opaque 13-character string). Timestamps are ISO UTC strings; statuses/error codes are only the backend Spec values. Do not add UI-only members to wire types—derive view models separately when needed.
 
@@ -74,18 +87,70 @@ The mock client must be deterministic, simulate latency through an abort-aware h
 
 ## Required states
 
-- idle/initial, loading without destructive layout shift, success and relevant empty state;
-- exact validation/409/403/404/410/429 states named by this capability;
-- unavailable-with-retry and aborted/superseded request behavior;
-- success feedback without inventing server authority.
+Build every one of these. "State" means something the user can actually see on
+screen, not a code path.
+
+- **idle / initial** — before anything is requested.
+- **loading** — visible progress, with no destructive layout shift (the page
+  must not jump or reflow when loading finishes).
+- **success** — the normal populated result.
+- **empty** — a successful response that contains no items. This is not an
+  error; it must not look like one.
+- **each error this capability actually defines.** For this task those are:
+  `400` (a field failed validation — over max length, a non-HTTPS or non-instagram.com `instagramUrl`, a phone with disallowed characters), `403` (the user lacks `Shop.Settings.Manage`), `404` (the public profile route when the store is unpublished — render the neutral fallback, not an error page) and `409` (stale `expectedVersion`). The admin route returns `200` with a null profile rather than `404` — that is the empty state, not an error. Each needs its own message — do not collapse them into one generic
+  "something went wrong". Do **not** invent a state for a status code not listed
+  here.
+- **unavailable, with retry** — the request could not be made at all (network
+  failure). Show a retry control.
+- **aborted / superseded** — when a newer request starts, the older one's
+  result must never overwrite the newer one's, and an aborted request must not
+  surface as an error to the user.
+- **honest success feedback** — never show or imply a confirmation the mock did
+  not actually return.
 
 ## Browser evidence and validation
 
 Initial setup/edit/stale states; all policy pages; unpublished neutral fallback; long Persian wrapping on three viewports.
 
-Run `npm run build` and `npm run lint`. Use the real app at 1440×900, 1024×768 and 390×844; inspect keyboard focus, RTL overflow, contrast, layout shift and browser console. Report explicitly: `Data source: mock profile client; HTTP integration deferred to the matching F054–F063 task.`
+Run `cd src/web && npm run build`, then `cd src/web && npm run lint`. Both must succeed with no errors. Use the real app at 1440×900, 1024×768 and 390×844; inspect keyboard focus, RTL overflow, contrast, layout shift and browser console. Report explicitly: `Data source: mock profile client; HTTP integration deferred to the matching F054–F063 task.`
+
+## Completion report
+
+When the task is finished, report exactly these six things — no more, no less.
+Do not skip a heading because you think it is obvious.
+
+1. **Files changed.** The full list of paths you created, edited or deleted,
+   split into "created" and "edited". Compare it against "Files expected to
+   change" above and call out every difference, in either direction.
+2. **Implementation decisions.** Every decision this Spec left to you, with the
+   option you picked and one sentence of why. Name every place you had to add
+   a field, schema or type that the Spec referenced but did not spell out.
+3. **Commands executed.** `cd src/web && npm run build` and
+   `cd src/web && npm run lint`, copied verbatim, in the order you ran them.
+   State explicitly that you did not run `npm test` or `npm run test:e2e`
+   (the UI engineer does not touch frontend tests — see `AGENTS.md`).
+4. **Results of those checks.** For each command: pass or fail, plus the error
+   text if it failed and what you changed to fix it. Then the browser evidence:
+   which scenarios you exercised at 1440×900, 1024×768 and 390×844, and whether
+   the browser console stayed clean. Never report a check as passing if you did
+   not run it.
+5. **Contract fidelity.** State that every schema field name, type and
+   nullability matches the paired backend Spec, and list any field where you
+   were unsure. If the paired Spec and `docs/design/shop/http-contracts.md`
+   disagreed, say which one you followed and why.
+6. **Risks, blockers and follow-up.** Anything you could not verify, any
+   acceptance item you could not check off and why, and anything the paired
+   connection task needs to know. Finish with the exact `Data source:` line
+   this Spec names. Write "None." for the risk list if there is genuinely
+   nothing.
 
 ## Definition of done
+
+"Write/verify a scenario" below means: add that scenario to the mock client
+and exercise it by hand in a real browser, then record what you saw. It does
+**not** mean writing an automated test file — the UI engineer does not create,
+edit or run frontend tests (see `AGENTS.md`, "Ownership"). Check a box only
+after you have actually seen the described behaviour in the browser.
 
 - [ ] The whole named flow is reviewable without the backend capability.
 - [ ] Contract schemas/types match `B039` and the mock implements the same client port reserved for HTTP.

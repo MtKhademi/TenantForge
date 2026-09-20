@@ -18,6 +18,8 @@ type PaginationMetadata = {
   pageSize: number
   totalCount: number
   totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
 }
 
 type ShopProblem = {

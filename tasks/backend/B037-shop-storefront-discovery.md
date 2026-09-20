@@ -78,7 +78,8 @@ Read `AGENTS.md`, the `B037` row in `tasks/TASKS.md`, this complete Spec, `docs/
 
 Also read the matching section in `docs/design/shop/http-contracts.md`; this backend task must update it to the delivered wire contract before its executable Spec is deleted.
 
-Current baseline is commit `34dc44e`: Shop uses one module project, internal EF entities, TSID IDs (TSID = "a sortable numeric string ID, see `TenantForge.BuildingBlocks`" — higher TSID values were created later, which is what makes `newest` sort by `Id desc` work), a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
+Baseline as of commit `34dc44e` (later commits changed only `src/web/**` and
+`tasks/**`, so this still describes the backend you will find): Shop uses one module project, internal EF entities, TSID IDs (TSID = "a sortable numeric string ID, see `TenantForge.BuildingBlocks`" — higher TSID values were created later, which is what makes `newest` sort by `Id desc` work), a separate migration-history table, raw-SQL IAM membership/role checks, anonymous storefront/cart/checkout/order/payment/lookup routes, and exact integration tests under `Shop*IntegrationTests.cs`. Preserve those conventions unless this Spec explicitly changes one.
 
 ## Files expected to change
 
@@ -89,21 +90,23 @@ Do not edit `src/web/**`. Do not create a `Shop.Contract` project: no second .NE
 ## HTTP contract
 
 | Method | Route | Auth | Result |
-        |---|---|---|---|
-        | GET | `/api/shop/{tenantId}/products?pageNumber=1&pageSize=24&q=&categorySlug=&sort=newest&saleOnly=false` | anonymous | `200 StorefrontProductListResponse` |
-        Existing category-specific and detail routes remain valid.
+|---|---|---|---|
+| GET | `/api/shop/{tenantId}/products?pageNumber=1&pageSize=24&q=&categorySlug=&sort=newest&saleOnly=false` | anonymous | `200 StorefrontProductListResponse` |
+
+This route does not exist yet — this task creates it. The existing anonymous
+routes `GET /api/shop/{tenantId}/categories`,
+`GET /api/shop/{tenantId}/categories/{categorySlug}/products` and
+`GET /api/shop/{tenantId}/products/{productSlug}` stay exactly as they are.
 
 All errors use the repository's existing Minimal API/RFC7807 shapes (RFC7807 = "the repo's standard JSON error body shape for HTTP errors — reuse the existing helper, don't invent a new error format"). Malformed TSIDs and cross-tenant resource IDs return the same non-leaking result. Every mutation rechecks tenant authorization on the server; UI visibility is never authorization.
 
 ## Required implementation
 
-
-        1. Add one all-products query. Apply `TenantId`, `Product.IsActive` and active-category predicates before every optional filter and before `CountAsync`.
-        2. `q` is trimmed, maximum 100 characters and matched case-insensitively against product name using parameterized EF/Npgsql translation. Blank means no search. `categorySlug` must resolve to an active category in the same tenant or return generic `404`.
-        3. Allowed `sort`: `newest` (`Id desc`, relying on the repository's time-sortable TSID identifier), `price-asc`, `price-desc`, `name`. Because effective price may vary by variant, this task defines the card price as the lowest effective price among variants with `StockQuantity > 0`; products with no in-stock variant are still listed last as sold out using `BasePrice` as display fallback.
-        4. `saleOnly=true` requires `CompareAtPrice > card price`. Add `IsOnSale`, `IsSoldOut`, `ThumbnailUrl` to each summary. Do not expose SKU or exact stock count.
-        5. Return current pagination metadata and validate page bounds through existing `PaginationSupport`. Stable tie-breaker is always product ID.
-
+1. Add one all-products query. Apply `TenantId`, `Product.IsActive` and active-category predicates before every optional filter and before `CountAsync`.
+2. `q` is trimmed, maximum 100 characters and matched case-insensitively against product name using parameterized EF/Npgsql translation. Blank means no search. `categorySlug` must resolve to an active category in the same tenant or return generic `404`.
+3. Allowed `sort`: `newest` (`Id desc`, relying on the repository's time-sortable TSID identifier), `price-asc`, `price-desc`, `name`. Because effective price may vary by variant, this task defines the card price as the lowest effective price among variants with `StockQuantity > 0`; products with no in-stock variant are still listed last as sold out using `BasePrice` as display fallback.
+4. `saleOnly=true` requires `CompareAtPrice > card price`. Add `IsOnSale`, `IsSoldOut`, `ThumbnailUrl` to each summary. Do not expose SKU or exact stock count.
+5. Return current pagination metadata and validate page bounds through existing `PaginationSupport`. Stable tie-breaker is always product ID.
 
 ## Required code shape
 
@@ -179,15 +182,85 @@ In the PR body give `F055` exact routes, sample JSON, error codes, permission ke
 
 ## Validation
 
-1. `dotnet build TenantForge.sln --nologo`
-2. Targeted Shop integration test class.
-3. Full `dotnet test TenantForge.sln --nologo` (or the repository's documented Windows `dotnet.exe` equivalent).
-4. Inspect the generated migration for only intended schema changes.
-5. Verify `docs/modules/SHOP.md` against routes/entities/config/auth/tests and update the Bxxx learning note.
+Run these from the repository root, in this order, and fix every failure
+before moving to the next command.
+
+On the reference WSL setup there is no Linux `dotnet` binary — use `dotnet.exe`
+instead of `dotnet` in every command below. See
+`docs/architecture.md#local-development-environment-wsl--windows-net-sdk`.
+
+The integration tests start PostgreSQL through Testcontainers, so Docker must
+be running before you run any test command. Start it with `docker compose up -d postgres`
+if Docker Desktop is not already up (the compose service is not what the tests
+connect to, but it confirms the Docker daemon is reachable).
+
+1. Build everything:
+
+   ```bash
+   dotnet build TenantForge.sln --nologo
+   ```
+
+2. Run only this task's Shop integration tests first (replace
+   `<ShopTestClass>` with the exact class name you added or extended, for
+   example `ShopCatalogAdminIntegrationTests`):
+
+   ```bash
+   dotnet test TenantForge.sln --nologo --filter FullyQualifiedName~<ShopTestClass>
+   ```
+
+3. Run the full test suite and confirm it is green:
+
+   ```bash
+   dotnet test TenantForge.sln --nologo
+   ```
+
+4. This task adds **no** EF migration. Confirm that no new file appeared under
+   `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` and
+   that `ShopDbContextModelSnapshot.cs` is unchanged. If either changed, you
+   went outside this task's scope — revert it.
+
+5. Re-read `docs/modules/SHOP.md` and check every routes/entities/config/auth/tests
+   statement against the code you actually delivered. Then finish the
+   `docs/learning/B037-<slug>.md` learning note.
+
+6. Confirm the frontend was not touched:
+
+   ```bash
+   git diff --name-only origin/main... -- src/web
+   ```
+
+   This must print nothing.
 
 ## Non-goals
 
 Full-text search engine, popularity/rating sort, recommendation engine, tags or faceted color/size filters.
+
+## Completion report
+
+When the task is finished, report exactly these six things — no more, no less.
+Do not skip a heading because you think it is obvious.
+
+1. **Files changed.** The full list of paths you created, edited or deleted,
+   grouped as: production code, EF migration (generated), tests,
+   documentation. Say which files are generated rather than hand-written.
+2. **Implementation decisions.** Every decision this Spec left to you, with
+   the option you picked and one sentence of why. If you followed an "if
+   unsure, do X" default from this Spec, say so and name it.
+3. **Commands executed.** Every command from "Validation" above, copied
+   verbatim in the order you ran them.
+4. **Results of those checks.** For each command: pass or fail, and for the
+   test commands the actual passed/failed/skipped counts. If you had to re-run
+   something after a fix, say that and give the final result. Never report a
+   command as passing if you did not run it.
+5. **Risks, blockers and follow-up.** Anything you could not verify, any
+   scenario from "Integration tests required" you could not cover and why, any
+   contract detail that differed from this Spec, and anything the next task
+   (F055) must know. Write "None." if there is genuinely nothing.
+6. **Documentation impact statement.** The exact line
+   `SHOP.md impact: <what you updated>` or
+   `SHOP.md impact: none — <specific reason>`, plus the same line for
+   `IAM.md`, `BuildingBlocks docs` and `IAM Contract docs` if your diff touched
+   any of them (see `AGENTS.md`). A vague "docs not needed" is not accepted.
 
 ## Acceptance checklist
 
