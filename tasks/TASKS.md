@@ -136,7 +136,7 @@ one valid Spec link.
 | B033 | S30 | Order lookup API | done | B032 | — |
 | B034 | S31 | Shared permission catalog contract (BuildingBlocks) and IAM migration | done | — | — |
 | B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | done | B034 | — |
-| B036 | S32 | Persist and serve safe product galleries | planned | B035 | [B036 Spec](backend/B036-shop-product-media.md) |
+| B036 | S32 | Persist and serve safe product galleries | in_progress | B035 | [B036 Spec](backend/B036-shop-product-media.md) |
 | B037 | S33 | Add storefront search, sorting and sale discovery | planned | B036 | [B037 Spec](backend/B037-shop-storefront-discovery.md) |
 | B038 | S34 | Support one level of storefront subcategories | planned | B037 | [B038 Spec](backend/B038-shop-category-hierarchy.md) |
 | B039 | S35 | Add tenant storefront identity and policy content | planned | B036, B035 | [B039 Spec](backend/B039-shop-profile-policies.md) |

@@ -1,3 +1,5 @@
+using TenantForge.Modules.Shop.Features.Media;
+
 namespace TenantForge.Modules.Shop.Features.Products;
 
 public sealed record ProductVariantInput(string? Color, string? Size, string? Sku, int StockQuantity, decimal? PriceOverride);
@@ -55,6 +57,8 @@ public sealed record ProductResponse(
     decimal BasePrice,
     decimal? CompareAtPrice,
     bool IsActive,
+    IReadOnlyList<ProductImageResponse> Images,
+    int GalleryVersion,
     IReadOnlyList<ProductVariantResponse> Variants,
     IReadOnlyList<SizeGuideColumnResponse> SizeGuideColumns,
     IReadOnlyList<SizeGuideRowResponse> SizeGuideRows);

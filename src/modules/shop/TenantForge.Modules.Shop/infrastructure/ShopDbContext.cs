@@ -7,6 +7,7 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
 {
     internal DbSet<ShopCategory> Categories => Set<ShopCategory>();
     internal DbSet<ShopProduct> Products => Set<ShopProduct>();
+    internal DbSet<ShopProductImage> ProductImages => Set<ShopProductImage>();
     internal DbSet<ShopProductVariant> ProductVariants => Set<ShopProductVariant>();
     internal DbSet<ShopSizeGuideColumn> SizeGuideColumns => Set<ShopSizeGuideColumn>();
     internal DbSet<ShopSizeGuideRow> SizeGuideRows => Set<ShopSizeGuideRow>();
@@ -23,6 +24,7 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
     {
         modelBuilder.ApplyConfiguration(new ShopCategoryMap());
         modelBuilder.ApplyConfiguration(new ShopProductMap());
+        modelBuilder.ApplyConfiguration(new ShopProductImageMap());
         modelBuilder.ApplyConfiguration(new ShopProductVariantMap());
         modelBuilder.ApplyConfiguration(new ShopSizeGuideColumnMap());
         modelBuilder.ApplyConfiguration(new ShopSizeGuideRowMap());

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using TenantForge.BuildingBlocks.Modules;
 using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Features.Categories;
+using TenantForge.Modules.Shop.Features.Media;
 using TenantForge.Modules.Shop.Features.Products;
 using TenantForge.Modules.Shop.Features.Storefront;
 using TenantForge.Modules.Shop.Features.Checkout;
@@ -54,6 +55,7 @@ public static class ShopModule
     {
         endpoints.MapCategoriesFeature();
         endpoints.MapProductsFeature();
+        endpoints.MapProductMediaFeature();
         endpoints.MapStorefrontCatalogFeature();
         endpoints.MapShippingRatesFeature();
         endpoints.MapCouponsFeature();
