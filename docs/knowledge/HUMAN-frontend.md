@@ -46,9 +46,10 @@ adapter, not rewriting the screen.
 - permission-aware navigation for invitations and audit logs;
 - invitation creation and a pending-invitation list with expiry times;
 - a tenant audit log;
-- Shop administration: categories, products, shipping rates and coupons;
-- a Shop storefront: category browsing, product detail, cart, checkout, order
-  review, a sandbox bank page, a payment result page and guest order tracking.
+- Shop administration: categories, products, product galleries, shipping rates and coupons;
+- a Shop storefront: category browsing with product thumbnails, product detail
+  galleries, cart, checkout, order review, a sandbox bank page, a payment result
+  page and guest order tracking.
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -61,8 +62,13 @@ names, nullability and error codes — so connecting it later replaces one
 adapter and touches no component.
 
 **Pages never call `fetch`.** All network access goes through a feature
-adapter. That is what makes mock-first delivery possible and keeps error
-handling, timeouts and token attachment in one place per capability.
+adapter or Shop client. That is what makes mock-first delivery possible and
+keeps error handling, timeouts and token attachment in one place per capability.
+
+**New Shop capabilities use a client provider.** The Shop media mock defines the
+same contract shape that the later HTTP client will use. Admin product galleries
+and storefront images consume `useShopClients().media`, so connecting the real
+media API later should replace the provider slot rather than redesigning the UI.
 
 **Typed errors, not error strings.** Adapters throw
 `ApiUnavailableError`, `SessionExpiredError`, validation, forbidden and

@@ -1,6 +1,5 @@
 import { FlaskConical } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SecondaryButton } from '@/components/ui/Button'
 import {
   getShopMediaScenarioKey,
   SHOP_MEDIA_SCENARIOS,

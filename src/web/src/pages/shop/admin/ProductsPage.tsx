@@ -5,6 +5,7 @@ import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { DashboardShell } from '@/components/shell/DashboardShell'
+import { ProductGalleryEditor } from '@/components/shop/ProductGalleryEditor'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
@@ -690,6 +691,14 @@ export function ProductsPage() {
               </SecondaryButton>
             </div>
           </form>
+        )}
+
+        {editingId && (
+          <ProductGalleryEditor
+            tenantId={tenantId}
+            productId={editingId}
+            onUpdate={() => setSuccess('گالری محصول بر اساس پاسخ موفق mock به‌روزرسانی شد.')}
+          />
         )}
 
         {isLoading && <ProductsSkeleton />}

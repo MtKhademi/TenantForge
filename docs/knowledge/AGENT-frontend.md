@@ -29,6 +29,7 @@ src/web/src/
   main.tsx, index.css     # bootstrap + Tailwind tokens
   components/ui/          # Button, TextInput, StatePanel, PaginationControls, Tooltip
   components/shell/       # DashboardShell, ShellNav, TenantSwitcher, SessionLoadingScreen
+  components/shop/        # shared Shop UI such as ProductGalleryEditor/ProductMediaImage
   features/<area>/        # data access + types + context for one capability
   pages/                  # platform and tenant pages
   pages/shop/admin/       # CategoriesPage, ProductsPage, ShippingRatesPage, CouponsPage
@@ -90,13 +91,14 @@ Read the nearest existing adapter before writing a new one.
   fails.
 - Gate development-only scenario controls behind `import.meta.env.DEV`.
 
-### Shop client seam — planned, not present yet
+### Shop client seam
 
-`src/web/src/features/shop/` currently holds **flat adapter files only**. There
-is no `contracts/`, no `clients/`, no `ShopClientsProvider`, no `shopFetch`.
-Task `F044` creates that seam; `F045`–`F063` reuse it. Do not assume any of it
-exists until `F044` is `done`. See
-`docs/design/shop/frontend-contract-boundary.md`.
+`src/web/src/features/shop/contracts/` holds Zod wire contracts and
+`src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
+mounts one `ShopClientsProvider` around all routes; F044 binds its `media` slot
+to `mockShopMediaClient`, and F054 replaces only that slot with HTTP. Mock Shop
+scenario controls are development-only and selected through the provider, never
+by importing fixtures into pages. See `docs/design/shop/frontend-contract-boundary.md`.
 
 ## Authentication and permissions
 

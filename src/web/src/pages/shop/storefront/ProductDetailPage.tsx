@@ -1,9 +1,12 @@
 import { Minus, Package, Plus, ShoppingCart, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ProductMediaImage } from '@/components/shop/ProductMediaImage'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { cartAdapter } from '@/features/shop/cartAdapter'
+import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
+import type { ProductImage } from '@/features/shop/contracts/mediaContract'
 import { storefrontAdapter } from '@/features/shop/storefrontAdapter'
 import type { StorefrontProductDetail } from '@/features/shop/storefrontTypes'
 import { cn } from '@/lib/utils'
@@ -22,7 +25,10 @@ import { cn } from '@/lib/utils'
  */
 export function ProductDetailPage() {
   const { tenantId = '', productSlug = '' } = useParams<{ tenantId: string; productSlug: string }>()
+  const { media } = useShopClients()
   const [product, setProduct] = useState<StorefrontProductDetail | null | undefined>(undefined)
+  const [galleryImages, setGalleryImages] = useState<ProductImage[] | null>(null)
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const retry = () => setReloadKey((key) => key + 1)
@@ -52,6 +58,27 @@ export function ProductDetailPage() {
       cancelled = true
     }
   }, [tenantId, productSlug, reloadKey])
+
+  useEffect(() => {
+    if (!product || product === null) {
+      setGalleryImages(null)
+      setSelectedImageId(null)
+      return
+    }
+    const controller = new AbortController()
+    setGalleryImages(null)
+    setSelectedImageId(null)
+    void media.getProduct(tenantId, product.id, controller.signal)
+      .then((withGallery) => {
+        if (controller.signal.aborted) return
+        setGalleryImages(withGallery.images)
+        setSelectedImageId(withGallery.images[0]?.id ?? null)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setGalleryImages([])
+      })
+    return () => controller.abort()
+  }, [media, product, tenantId])
 
   const colors = useMemo(
     () => [...new Set(product?.variants.map((v) => v.color) ?? [])],
@@ -137,13 +164,12 @@ export function ProductDetailPage() {
         >
           بازگشت به دسته‌بندی‌ها
         </Link>
-        <div
-          className="flex aspect-square w-full items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground"
-          role="img"
-          aria-label={`تصویر ${product.name}`}
-        >
-          <Package aria-hidden="true" className="size-10" />
-        </div>
+        <StorefrontGallery
+          productName={product.name}
+          images={galleryImages}
+          selectedImageId={selectedImageId}
+          onSelect={setSelectedImageId}
+        />
       </div>
 
       <div className="space-y-6">
@@ -288,6 +314,66 @@ export function ProductDetailPage() {
         </div>
       </div>
     </section>
+  )
+}
+
+function StorefrontGallery({
+  productName,
+  images,
+  selectedImageId,
+  onSelect,
+}: {
+  productName: string
+  images: ProductImage[] | null
+  selectedImageId: string | null
+  onSelect: (id: string) => void
+}) {
+  if (images === null) {
+    return (
+      <div aria-busy="true" className="space-y-3">
+        <div className="aspect-square w-full animate-pulse rounded-xl border border-border bg-muted motion-reduce:animate-none" />
+        <div className="grid grid-cols-4 gap-2">
+          {[0, 1, 2, 3].map((index) => <div key={index} className="aspect-square animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />)}
+        </div>
+      </div>
+    )
+  }
+
+  const selected = images.find((image) => image.id === selectedImageId) ?? images[0]
+  if (!selected) {
+    return (
+      <div
+        className="flex aspect-square w-full items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground"
+        role="img"
+        aria-label={`تصویر ${productName}`}
+      >
+        <Package aria-hidden="true" className="size-10" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <ProductMediaImage image={selected} className="aspect-square w-full rounded-xl border border-border" />
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-6" role="list" aria-label="تصاویر محصول">
+        {images.map((image, index) => (
+          <button
+            key={image.id}
+            type="button"
+            role="listitem"
+            aria-label={`نمایش تصویر ${index + 1}`}
+            aria-pressed={image.id === selected.id}
+            onClick={() => onSelect(image.id)}
+            className={cn(
+              'rounded-lg border border-border bg-surface p-1 transition-colors focus-visible:border-ring',
+              image.id === selected.id && 'border-primary ring-2 ring-primary/40',
+            )}
+          >
+            <ProductMediaImage image={image} className="aspect-square rounded-md" showBrokenHint={false} />
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 
