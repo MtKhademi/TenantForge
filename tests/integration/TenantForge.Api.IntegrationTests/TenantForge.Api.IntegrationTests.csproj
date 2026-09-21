@@ -13,6 +13,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- B036: generates real JPEG/PNG/WebP test fixtures (including one with
+         EXIF/GPS metadata) for ShopProductMediaIntegrationTests. Same pinned
+         version as TenantForge.Modules.Shop's own dependency. -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.*" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.*" />
     <PackageReference Include="xunit" Version="2.*" />

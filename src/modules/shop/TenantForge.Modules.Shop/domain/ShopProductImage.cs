@@ -61,4 +61,20 @@ internal sealed class ShopProductImage
         if (displayOrder < 0) throw new ArgumentOutOfRangeException(nameof(displayOrder), "Display order cannot be negative.");
         DisplayOrder = displayOrder;
     }
+
+    /// <summary>
+    /// Moves this image to a temporary, guaranteed-unique negative slot. Used
+    /// only by ProductMediaFeature's reorder handler as an intermediate step:
+    /// the unique (ProductId, DisplayOrder) index is checked immediately by
+    /// PostgreSQL (not deferred to commit), so a non-compacting reorder (for
+    /// example swapping two positions) must first clear every affected row
+    /// out of the final 0-based range before assigning the real order, or two
+    /// rows can collide mid-update. No real image ever has a negative
+    /// DisplayOrder, so this can never collide with a persisted row.
+    /// </summary>
+    internal void MoveToTemporarySlot(int slot)
+    {
+        if (slot >= 0) throw new ArgumentOutOfRangeException(nameof(slot), "Temporary slot must be negative.");
+        DisplayOrder = slot;
+    }
 }

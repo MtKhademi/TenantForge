@@ -20,32 +20,59 @@ internal sealed class ShopImageValidator
         await CopyWithLimitAsync(input, bytes, MaxBytes, ct);
         bytes.Position = 0;
 
-        var format = await Image.DetectFormatAsync(bytes, ct);
+        IImageFormat? format;
+        try
+        {
+            format = await Image.DetectFormatAsync(bytes, ct);
+        }
+        catch (UnknownImageFormatException)
+        {
+            // Content that is not any recognizable image format at all (plain
+            // text, SVG markup, etc.) — DetectFormatAsync throws rather than
+            // returning null for this case. A clean 415, never a 500.
+            throw new ShopImageValidationException(ShopImageValidationFailure.UnsupportedMedia, "Only JPEG, PNG and WebP images are supported.");
+        }
+
         if (!IsAllowedFormat(format))
         {
             throw new ShopImageValidationException(ShopImageValidationFailure.UnsupportedMedia, "Only JPEG, PNG and WebP images are supported.");
         }
 
         bytes.Position = 0;
-        using var image = await Image.LoadAsync(bytes, ct);
-        if (image.Frames.Count != 1)
+        Image image;
+        try
         {
-            throw new ShopImageValidationException(ShopImageValidationFailure.UnsupportedMedia, "Animated or multi-frame images are not supported.");
+            image = await Image.LoadAsync(bytes, ct);
+        }
+        catch (ImageFormatException)
+        {
+            // The bytes announced a supported format (DetectFormatAsync above)
+            // but the pixel data itself is corrupt/truncated — a clean 415,
+            // never an unhandled 500.
+            throw new ShopImageValidationException(ShopImageValidationFailure.UnsupportedMedia, "The image file is corrupt or unreadable.");
         }
 
-        if (image.Width <= 0 || image.Height <= 0 || image.Width > MaxDimension || image.Height > MaxDimension || (long)image.Width * image.Height > MaxPixels)
+        using (image)
         {
-            throw new ShopImageValidationException(ShopImageValidationFailure.Oversized, "Image dimensions exceed the allowed limits.");
+            if (image.Frames.Count != 1)
+            {
+                throw new ShopImageValidationException(ShopImageValidationFailure.UnsupportedMedia, "Animated or multi-frame images are not supported.");
+            }
+
+            if (image.Width <= 0 || image.Height <= 0 || image.Width > MaxDimension || image.Height > MaxDimension || (long)image.Width * image.Height > MaxPixels)
+            {
+                throw new ShopImageValidationException(ShopImageValidationFailure.Oversized, "Image dimensions exceed the allowed limits.");
+            }
+
+            image.Metadata.ExifProfile = null;
+            image.Metadata.IccProfile = null;
+            image.Metadata.XmpProfile = null;
+
+            var sanitized = new MemoryStream();
+            await image.SaveAsWebpAsync(sanitized, new WebpEncoder { Quality = 82 }, ct);
+            sanitized.Position = 0;
+            return new SanitizedShopImage(sanitized, sanitized.Length, image.Width, image.Height);
         }
-
-        image.Metadata.ExifProfile = null;
-        image.Metadata.IccProfile = null;
-        image.Metadata.XmpProfile = null;
-
-        var sanitized = new MemoryStream();
-        await image.SaveAsWebpAsync(sanitized, new WebpEncoder { Quality = 82 }, ct);
-        sanitized.Position = 0;
-        return new SanitizedShopImage(sanitized, sanitized.Length, image.Width, image.Height);
     }
 
     private static async Task CopyWithLimitAsync(Stream input, Stream output, long maxBytes, CancellationToken ct)
