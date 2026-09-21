@@ -24,6 +24,14 @@ approval gates**: one at the end of Phase 4 and one at the end of Phase 8.
 Between and after them, execute continuously — a progress update is information,
 never a permission request.
 
+## Session length management (applies throughout)
+
+Monitor token usage across phases. When usage exceeds roughly 120K tokens, run
+`/compact` to compress the session context, then immediately resume the
+currently `in_progress` todo. Compaction is routine session hygiene: it never
+pauses for user approval and is not one of the two blocking approval gates
+above.
+
 ---
 
 ## Phase 0 — Git preflight
