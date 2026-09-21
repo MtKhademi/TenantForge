@@ -77,7 +77,7 @@ one valid Spec link.
 | F042 | S31 | Group ShellNav into labelled module sections | done | F029 | — |
 | F043 | S31 | Gate Shop nav items on the new Shop permission keys | done | F042, B035 | — |
 | F044 | S32 | Build contract-shaped product gallery and storefront image mocks | done | F043 | — |
-| F045 | S33 | Build contract-shaped storefront discovery mocks | planned | F044 | [F045 Spec](front/F045-shop-discovery-mock.md) |
+| F045 | S33 | Build contract-shaped storefront discovery mocks | done | F044 | — |
 | F046 | S34 | Build contract-shaped nested category mocks | planned | F045 | [F046 Spec](front/F046-shop-category-hierarchy-mock.md) |
 | F047 | S35 | Build contract-shaped storefront identity and policy mocks | planned | F046 | [F047 Spec](front/F047-shop-profile-policies-mock.md) |
 | F048 | S36 | Build contract-shaped cart expiry mocks | planned | F047 | [F048 Spec](front/F048-shop-cart-expiry-mock.md) |

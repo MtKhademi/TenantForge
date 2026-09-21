@@ -24,6 +24,7 @@ import { OrderTrackingPage } from './pages/shop/storefront/OrderTrackingPage'
 import { PaymentResultPage } from './pages/shop/storefront/PaymentResultPage'
 import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
 import { SandboxBankPage } from './pages/shop/storefront/SandboxBankPage'
+import { StorefrontCatalogPage } from './pages/shop/storefront/StorefrontCatalogPage'
 import { StorefrontLayout } from './pages/shop/storefront/StorefrontLayout'
 import { TenantHome } from './pages/TenantHome'
 import { TenantScopePage } from './pages/TenantScopePage'
@@ -131,7 +132,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/shop/:tenantId" element={<StorefrontLayout />}>
-          <Route index element={<CategoryPage />} />
+          <Route index element={<StorefrontCatalogPage />} />
           <Route path="categories/:categorySlug" element={<CategoryPage />} />
           <Route path="products/:productSlug" element={<ProductDetailPage />} />
           <Route path="cart" element={<CartPage />} />

@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { mockShopDiscoveryClient } from './mockShopDiscoveryClient'
 import { mockShopMediaClient } from './mockShopMediaClient'
+import type { ShopDiscoveryClient } from './ShopDiscoveryClient'
 import type { ShopMediaClient } from './ShopMediaClient'
 
 /**
@@ -9,7 +11,7 @@ import type { ShopMediaClient } from './ShopMediaClient'
  */
 export type ShopClients = {
   media: ShopMediaClient // F044 mock  -> F054 HTTP
-  // F045 adds:  discovery: ShopDiscoveryClient        -> F055 HTTP
+  discovery: ShopDiscoveryClient // F045 mock -> F055 HTTP
   // F046 adds:  categories: ShopCategoryClient        -> F056 HTTP
   // F047 adds:  profile: ShopProfileClient            -> F057 HTTP
   // F048 adds:  cartLease: ShopCartLeaseClient        -> F058 HTTP
@@ -20,7 +22,7 @@ export type ShopClients = {
 }
 
 export function createShopClients(): ShopClients {
-  return { media: mockShopMediaClient }
+  return { media: mockShopMediaClient, discovery: mockShopDiscoveryClient }
 }
 
 const ShopClientsContext = createContext<ShopClients | null>(null)
@@ -47,19 +49,32 @@ export function useShopClients(): ShopClients {
   return clients
 }
 
-/** Renders the dev-only switcher once its chunk has loaded (dev builds only). */
+/**
+ * Renders the dev-only mock scenario switchers once their chunks have loaded
+ * (dev builds only). Each capability's switcher is loaded independently so a
+ * single capability's chunk never blocks the others.
+ */
 function DevScenarioToolbar() {
-  const [Switcher, setSwitcher] = useState<ComponentType | null>(null)
+  const [MediaSwitcher, setMediaSwitcher] = useState<ComponentType | null>(null)
+  const [DiscoverySwitcher, setDiscoverySwitcher] = useState<ComponentType | null>(null)
 
   useEffect(() => {
     let cancelled = false
     void import('../DevMediaScenarioSwitcher').then((module) => {
-      if (!cancelled) setSwitcher(() => module.DevMediaScenarioSwitcher)
+      if (!cancelled) setMediaSwitcher(() => module.DevMediaScenarioSwitcher)
+    })
+    void import('../DevDiscoveryScenarioSwitcher').then((module) => {
+      if (!cancelled) setDiscoverySwitcher(() => module.DevDiscoveryScenarioSwitcher)
     })
     return () => {
       cancelled = true
     }
   }, [])
 
-  return Switcher ? <Switcher /> : null
+  return (
+    <>
+      {MediaSwitcher ? <MediaSwitcher /> : null}
+      {DiscoverySwitcher ? <DiscoverySwitcher /> : null}
+    </>
+  )
 }

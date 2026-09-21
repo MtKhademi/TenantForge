@@ -33,9 +33,9 @@ src/web/src/
   features/<area>/        # data access + types + context for one capability
   pages/                  # platform and tenant pages
   pages/shop/admin/       # CategoriesPage, ProductsPage, ShippingRatesPage, CouponsPage
-  pages/shop/storefront/  # StorefrontLayout, CategoryPage, ProductDetailPage, CartPage,
-                          # CheckoutPage, OrderReviewPage, SandboxBankPage,
-                          # PaymentResultPage, OrderTrackingPage
+   pages/shop/storefront/  # StorefrontLayout, StorefrontCatalogPage, CategoryPage,
+                           # ProductDetailPage, CartPage, CheckoutPage, OrderReviewPage,
+                           # SandboxBankPage, PaymentResultPage, OrderTrackingPage
   lib/utils.ts            # cn() class merge
   test/                   # vitest setup — off limits, see Ownership
 ```
@@ -95,10 +95,15 @@ Read the nearest existing adapter before writing a new one.
 
 `src/web/src/features/shop/contracts/` holds Zod wire contracts and
 `src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
-mounts one `ShopClientsProvider` around all routes; F044 binds its `media` slot
-to `mockShopMediaClient`, and F054 replaces only that slot with HTTP. Mock Shop
-scenario controls are development-only and selected through the provider, never
-by importing fixtures into pages. See `docs/design/shop/frontend-contract-boundary.md`.
+mounts one `ShopClientsProvider` around all routes; each bound slot is replaced
+individually by its connect task (F054 → `media`, F055 → `discovery`). Bound
+so far: `media` → `mockShopMediaClient` (F044) and `discovery` →
+`mockShopDiscoveryClient` (F045). Mock Shop scenario controls are development-only
+and selected through the provider, never by importing fixtures into pages. Each
+capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx` that the
+provider's dev-only `DevScenarioToolbar` loads independently; new capabilities
+add their own switcher and position it so it does not overlap another switcher's
+fixed corner. See `docs/design/shop/frontend-contract-boundary.md`.
 
 ## Authentication and permissions
 
@@ -158,11 +163,20 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
    proxy handles this, direct `fetch` to `localhost:5000` does not.
 5. The app is RTL by default. Use logical properties (`ms-`/`me-`,
    `start`/`end`), not `left`/`right`.
-6. `/shop/:tenantId` already renders `CategoryPage` as its `index` route. Check
+6. `/shop/:tenantId` renders `StorefrontCatalogPage` as its `index` route (since
+   F045); `categories/:categorySlug` still renders `CategoryPage`. Check
    `src/web/src/App.tsx` before claiming a route is free.
 7. Backend `ShopPaymentAttempt` redirect URLs are not all absolute. Treat any
    gateway redirect as untrusted input and validate scheme and host before
    navigating.
+8. On WSL/NTFS the Vite dev server can serve stale code after edits (HMR misses
+   the change): if a page does not reflect a change you know is on disk, restart
+   the dev server before debugging the code.
+9. In the mock-first Shop batch, the dev-only scenario toolbars are `position:
+   fixed` at the viewport bottom. On short pages they hit-test over content, so
+   Playwright pointer clicks (even `force: true`) are intercepted; browser
+   evidence scripts dispatch a DOM `el.click()` inside `evaluate()` instead.
+   Production builds never contain the toolbars (`import.meta.env.DEV`).
 
 ## Decisions future tasks must preserve
 

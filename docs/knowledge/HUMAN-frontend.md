@@ -47,9 +47,11 @@ adapter, not rewriting the screen.
 - invitation creation and a pending-invitation list with expiry times;
 - a tenant audit log;
 - Shop administration: categories, products, product galleries, shipping rates and coupons;
-- a Shop storefront: category browsing with product thumbnails, product detail
-  galleries, cart, checkout, order review, a sandbox bank page, a payment result
-  page and guest order tracking.
+- a Shop storefront: an all-products catalog with search, category and sale
+  filters, four sort orders and pagination (still backed by the F045 mock),
+  category browsing with product thumbnails, product detail galleries, cart,
+  checkout, order review, a sandbox bank page, a payment result page and guest
+  order tracking.
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -65,10 +67,14 @@ adapter and touches no component.
 adapter or Shop client. That is what makes mock-first delivery possible and
 keeps error handling, timeouts and token attachment in one place per capability.
 
-**New Shop capabilities use a client provider.** The Shop media mock defines the
-same contract shape that the later HTTP client will use. Admin product galleries
-and storefront images consume `useShopClients().media`, so connecting the real
-media API later should replace the provider slot rather than redesigning the UI.
+**New Shop capabilities use a client provider.** Each Shop capability exposes a
+client interface that its mock and later HTTP implementation both satisfy. The
+provider binds one slot per capability — `media` (product galleries) and
+`discovery` (the all-products catalog) are bound today, each to its mock client.
+Screens consume `useShopClients()`; connecting a real API later replaces exactly
+one provider slot and never touches the screen. The all-products catalog's
+filter state lives in the URL, so a filtered view is refreshable and
+back/forward-reproducible.
 
 **Typed errors, not error strings.** Adapters throw
 `ApiUnavailableError`, `SessionExpiredError`, validation, forbidden and
