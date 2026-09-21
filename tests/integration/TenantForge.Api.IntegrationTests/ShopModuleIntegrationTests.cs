@@ -17,7 +17,7 @@ namespace TenantForge.Api.IntegrationTests;
 /// Shop tables: every task that adds a Shop table must add it here in the
 /// same change (B025: the six catalog tables; B028: the two cart tables;
 /// B029: shop_shipping_rates and shop_coupons; B031: shop_orders and
-/// shop_order_items; B032: shop_payment_attempts).
+/// shop_order_items; B032: shop_payment_attempts; B036: shop_product_images).
 ///
 /// Shop:ShopDb deliberately points at the SAME physical database as IAM:IamDb
 /// (a named B025 decision — later Shop admin tasks read IAM membership with
@@ -33,6 +33,7 @@ public sealed class ShopModuleIntegrationTests(ShopDbFixture db)
         "shop_categories",
         "shop_products",
         "shop_product_variants",
+        "shop_product_images",
         "shop_size_guide_cells",
         "shop_size_guide_columns",
         "shop_size_guide_rows",

@@ -28,6 +28,9 @@ artifacts/
 appsettings.Development.local.json
 secrets.json
 
+# Local development file storage (e.g. Shop:MediaRoot)
+.local/
+
 # Editors and operating systems
 .idea/
 .vscode/*

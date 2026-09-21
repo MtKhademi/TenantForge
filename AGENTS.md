@@ -207,6 +207,28 @@ one that failed, is reported as such and never as a success.
 - Future modules that gain the same kind of living handbook follow this same
   read-first/impact-gate shape.
 
+## Living Shop knowledge
+
+- `docs/modules/SHOP.md` is the current, searchable handbook for the Shop
+  module. Any task that reads or changes `src/modules/shop/**`, or changes a
+  Shop contract living in `TenantForge.BuildingBlocks`/the API host, reads
+  `docs/modules/SHOP.md` first during discovery, then verifies the relevant
+  facts against current code — the handbook summarizes code, it does not
+  replace it.
+- Before moving to review, classify the actual diff against `SHOP.md`'s
+  change-impact checklist (its final section). When a documented fact
+  changed (routes, request/response shapes, configuration, composition,
+  domain invariants, persistence, tenant/auth rules, product media,
+  inventory reservation, sandbox payment, tests or limitations), update
+  `SHOP.md` in the same task and validate it against code.
+- Otherwise state the exact declaration in self-review and the PR body:
+  `SHOP.md impact: none — <specific reason>`. A vague "docs not needed" is
+  not accepted; review blocks a production Shop diff that has neither a
+  `SHOP.md` edit nor a defensible no-impact statement.
+- Historical learning notes and source slices explain why a past change
+  happened; they never override the current handbook or current code when
+  the two disagree.
+
 ## Living BuildingBlocks knowledge
 
 - `docs/building-blocks/README.md` is the current, searchable handbook for

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
@@ -20,7 +21,7 @@ internal static class ProductMediaFeature
         endpoints.MapPost("/api/tenants/{tenantId}/shop/products/{productId}/images", async (
             string tenantId,
             string productId,
-            UploadProductImageRequest request,
+            [FromForm] UploadProductImageRequest request,
             ClaimsPrincipal principal,
             ShopDbContext db,
             ShopImageValidator validator,
@@ -124,6 +125,22 @@ internal static class ProductMediaFeature
                 .Where(image => image.TenantId == access.TenantId && image.ProductId == productTsid)
                 .ToListAsync(ct);
             if (images.Count != requestedIds.Count || images.Select(image => image.Id).Except(requestedIds).Any()) return Results.NotFound();
+
+            // The unique (ProductId, DisplayOrder) index is checked immediately
+            // by PostgreSQL, not deferred to commit. A reorder that is not a
+            // pure compaction (for example, swapping two positions) would
+            // otherwise collide mid-update, because EF issues the row UPDATEs
+            // in an order this code does not control. Moving every row to a
+            // negative, guaranteed-unique placeholder first (no existing row
+            // ever has a negative DisplayOrder) and saving, then assigning the
+            // real 0-based positions and saving again, keeps every
+            // intermediate state collision-free while staying inside the same
+            // transaction.
+            for (var index = 0; index < requestedIds.Count; index++)
+            {
+                images.Single(image => image.Id == requestedIds[index]).MoveToTemporarySlot(-(index + 1));
+            }
+            await db.SaveChangesAsync(ct);
 
             for (var index = 0; index < requestedIds.Count; index++)
             {

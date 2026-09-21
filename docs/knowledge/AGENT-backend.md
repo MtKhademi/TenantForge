@@ -117,6 +117,15 @@ Copy the nearest existing feature in the same module before inventing a shape.
   `ShopAuthorization`. Delivered permission keys today:
   `Shop.Catalog.Manage`, `Shop.Shipping.Manage`. The tenant Owner role
   bypasses the permission check.
+- Product media (`ShopProductImage`, `features/media/`) never trusts a
+  client's filename or `Content-Type`: `ShopImageValidator` decodes the
+  actual bytes with `SixLabors.ImageSharp` (pinned `3.1.11`), accepts only
+  JPEG/PNG/WebP, rejects animated/multi-frame/oversized input, strips
+  EXIF/ICC/XMP, and re-encodes to WebP before anything reaches disk.
+  `IShopMediaStorage`/`LocalShopMediaStorage` stage a file, commit it to its
+  final path only after the owning DB transaction succeeds, and require
+  `Shop:MediaRoot` (an absolute, writable directory validated at activation —
+  fail closed, same as `Shop:ShopDb`).
 - New permission keys are registered by the module's
   `IPermissionCatalogContributor` (`IamPermissionCatalogContributor`,
   `ShopPermissionCatalogContributor`) and aggregated in `Program.cs`. The
@@ -187,6 +196,15 @@ dotnet.exe ef migrations add <Name> \
    `TenantId` column — filter through `ShopOrder`.
 7. Adding a permission key in the backend without adding it to the frontend
    catalog (or the reverse) silently breaks the permission matrix.
+8. Adding a new *required* module config key (e.g. `Shop:MediaRoot`) breaks
+   every narrow hand-built `WebApplicationFactory` fixture that sets its own
+   in-memory config instead of using the shared `ApiFactory` — grep for other
+   fixtures supplying `Shop:ShopDb`/`IAM:IamDb` directly and add the new key
+   there too, then re-run the **full** suite (not just the new feature's
+   filtered tests) before calling a slice done.
+9. `ShopModuleIntegrationTests.ExpectedShopTables` is a hand-maintained exact
+   table roster. Every new Shop table must be added there in the same task or
+   the startup-contract tests fail.
 
 ## Decisions future tasks must preserve
 
@@ -207,6 +225,7 @@ area, then classify the diff against its change-impact checklist before review:
 | Task touches | Read first | Declaration if nothing changed |
 | --- | --- | --- |
 | `src/modules/iam/**` or an IAM contract in BuildingBlocks/the host | `docs/modules/IAM.md` | `IAM.md impact: none — <specific reason>` |
+| `src/modules/shop/**` or a Shop contract in BuildingBlocks/the host | `docs/modules/SHOP.md` | `SHOP.md impact: none — <specific reason>` |
 | `src/building-blocks/**`, a reference to it, or `IModuleConfig`/`TsidId` | `docs/building-blocks/README.md` | `BuildingBlocks docs impact: none — <specific reason>` |
 | `src/modules/iam/TenantForge.Modules.Iam.Contract/**` or a reference to it | `docs/contracts/iam.md` | `IAM Contract docs impact: none — <specific reason>` |
 

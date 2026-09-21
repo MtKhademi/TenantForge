@@ -62,7 +62,10 @@ contract and the permission catalog contracts.
 **Shop**
 
 - tenant-scoped category and product administration;
-- a public storefront catalog;
+- product image galleries: upload, reorder and delete, with real image
+  decoding/validation and safe local storage;
+- a public storefront catalog, including each product's ordered image
+  gallery;
 - persistent carts;
 - shipping rates and coupons;
 - a checkout summary, order creation and guest order lookup;
@@ -104,6 +107,15 @@ actually appear.
 **No speculative endpoints.** An endpoint is added only when a current or
 immediately dependent frontend task consumes it.
 
+**Product media never trusts what the client claims.** An uploaded image's
+actual bytes are decoded (not its filename or `Content-Type` header) to
+confirm it really is JPEG/PNG/WebP, is a single still frame, and is within
+size/dimension limits. The accepted image is always stripped of EXIF/GPS
+metadata and re-encoded to WebP before it is stored. A file is only made
+visible to readers after the database row that references it has committed
+successfully, so the filesystem and the database can never disagree about
+which images exist.
+
 ## Running and verifying it
 
 ```bash
@@ -135,6 +147,7 @@ Full environment notes are in `docs/architecture.md`.
 
 - `docs/architecture.md` — system shape and testing strategy
 - `docs/modules/IAM.md` — the searchable IAM handbook
+- `docs/modules/SHOP.md` — the searchable Shop handbook
 - `docs/building-blocks/README.md` — BuildingBlocks handbook and admission rule
 - `docs/contracts/iam.md` — IAM's public HTTP surface
 - `docs/design/shop/` — Shop contracts and design notes

@@ -39,6 +39,14 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
 
     private readonly string _contentRoot = Path.Combine(Path.GetTempPath(), "tenantforge-iam-tests", Guid.NewGuid().ToString("N"));
 
+    /// <summary>
+    /// B036: the exact directory the host was configured to use as
+    /// Shop:MediaRoot. Test classes read this to assert filesystem side
+    /// effects (staged-file cleanup, committed files) without duplicating
+    /// LocalShopMediaStorage's own path logic.
+    /// </summary>
+    public string ShopMediaRoot => Path.Combine(_contentRoot, "shop-media");
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Directory.CreateDirectory(_contentRoot);
