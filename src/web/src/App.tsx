@@ -5,6 +5,7 @@ import { DashboardShell } from './components/shell/DashboardShell'
 import { SessionLoadingScreen } from './components/shell/SessionLoadingScreen'
 import { SecondaryButton } from './components/ui/Button'
 import { useAuth } from './features/auth/AuthContext'
+import { ShopClientsProvider } from './features/shop/clients/ShopClientsProvider'
 import { TenantScopeProvider, useTenantScope } from './features/tenants/TenantScopeContext'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -126,43 +127,45 @@ function ProtectedLayout() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/shop/:tenantId" element={<StorefrontLayout />}>
-        <Route index element={<CategoryPage />} />
-        <Route path="categories/:categorySlug" element={<CategoryPage />} />
-        <Route path="products/:productSlug" element={<ProductDetailPage />} />
-        <Route path="cart" element={<CartPage />} />
-        <Route path="checkout" element={<CheckoutPage />} />
-        <Route path="order-review" element={<OrderReviewPage />} />
-        <Route path="bank" element={<SandboxBankPage />} />
-        <Route path="payment-result" element={<PaymentResultPage />} />
-        <Route path="track-order" element={<OrderTrackingPage />} />
-      </Route>
-      <Route element={<ProtectedLayout />}>
-        <Route path="/" element={<HomeRoute />} />
-        <Route
-          path="/dashboard"
-          element={<RequirePlatformAdmin><DashboardPage /></RequirePlatformAdmin>}
-        />
-        <Route
-          path="/users"
-          element={<RequirePlatformAdmin><UsersPage /></RequirePlatformAdmin>}
-        />
-        <Route
-          path="/platform/tenants"
-          element={<RequirePlatformAdmin><TenantsPage /></RequirePlatformAdmin>}
-        />
-        <Route path="/t/:tenantId" element={<TenantScopePage />} />
-        <Route path="/t/:tenantId/roles" element={<RolesPage />} />
-        <Route path="/t/:tenantId/invitations" element={<InvitationsPage />} />
-        <Route path="/t/:tenantId/audit" element={<AuditLogPage />} />
-        <Route path="/t/:tenantId/shop/categories" element={<CategoriesPage />} />
-        <Route path="/t/:tenantId/shop/products" element={<ProductsPage />} />
-        <Route path="/t/:tenantId/shop/shipping-rates" element={<ShippingRatesPage />} />
-        <Route path="/t/:tenantId/shop/coupons" element={<CouponsPage />} />
-      </Route>
-      <Route path="*" element={<RedirectHome />} />
-    </Routes>
+    <ShopClientsProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/shop/:tenantId" element={<StorefrontLayout />}>
+          <Route index element={<CategoryPage />} />
+          <Route path="categories/:categorySlug" element={<CategoryPage />} />
+          <Route path="products/:productSlug" element={<ProductDetailPage />} />
+          <Route path="cart" element={<CartPage />} />
+          <Route path="checkout" element={<CheckoutPage />} />
+          <Route path="order-review" element={<OrderReviewPage />} />
+          <Route path="bank" element={<SandboxBankPage />} />
+          <Route path="payment-result" element={<PaymentResultPage />} />
+          <Route path="track-order" element={<OrderTrackingPage />} />
+        </Route>
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<HomeRoute />} />
+          <Route
+            path="/dashboard"
+            element={<RequirePlatformAdmin><DashboardPage /></RequirePlatformAdmin>}
+          />
+          <Route
+            path="/users"
+            element={<RequirePlatformAdmin><UsersPage /></RequirePlatformAdmin>}
+          />
+          <Route
+            path="/platform/tenants"
+            element={<RequirePlatformAdmin><TenantsPage /></RequirePlatformAdmin>}
+          />
+          <Route path="/t/:tenantId" element={<TenantScopePage />} />
+          <Route path="/t/:tenantId/roles" element={<RolesPage />} />
+          <Route path="/t/:tenantId/invitations" element={<InvitationsPage />} />
+          <Route path="/t/:tenantId/audit" element={<AuditLogPage />} />
+          <Route path="/t/:tenantId/shop/categories" element={<CategoriesPage />} />
+          <Route path="/t/:tenantId/shop/products" element={<ProductsPage />} />
+          <Route path="/t/:tenantId/shop/shipping-rates" element={<ShippingRatesPage />} />
+          <Route path="/t/:tenantId/shop/coupons" element={<CouponsPage />} />
+        </Route>
+        <Route path="*" element={<RedirectHome />} />
+      </Routes>
+    </ShopClientsProvider>
   )
 }

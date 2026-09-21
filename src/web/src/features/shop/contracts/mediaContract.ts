@@ -92,28 +92,3 @@ export type ReorderProductImagesRequest = {
 
 /** B036 hard cap: a gallery holds at most eight images. */
 export const MAX_GALLERY_IMAGES = 8
-
-/**
- * The media capability's non-success response, status-coded so the UI can
- * render the exact state named by B036 (validation 400, forbidden 403, missing
- * 404, stale gallery 409, gone 410, rate-limited 429). The later HTTP client
- * maps RFC7807 bodies onto this shape; the mock throws it directly. A shared
- * `ShopClientError` can be extracted only once a second capability needs it.
- */
-export class ShopMediaError extends Error {
-  readonly status: number
-  readonly fieldErrors: Record<string, string>
-  readonly retryAfterSeconds: number | null
-
-  constructor(
-    status: number,
-    message: string,
-    options: { fieldErrors?: Record<string, string>; retryAfterSeconds?: number } = {},
-  ) {
-    super(message)
-    this.name = 'ShopMediaError'
-    this.status = status
-    this.fieldErrors = options.fieldErrors ?? {}
-    this.retryAfterSeconds = options.retryAfterSeconds ?? null
-  }
-}

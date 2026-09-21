@@ -2,8 +2,11 @@ import { Package, RefreshCw, ShoppingBag, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ProductMediaImage } from '@/components/shop/ProductMediaImage'
 import { Button } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
+import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
+import type { ProductImage } from '@/features/shop/contracts/mediaContract'
 import { storefrontAdapter } from '@/features/shop/storefrontAdapter'
 import type { StorefrontCategory, StorefrontProductSummary } from '@/features/shop/storefrontTypes'
 
@@ -16,9 +19,11 @@ import type { StorefrontCategory, StorefrontProductSummary } from '@/features/sh
  */
 export function CategoryPage() {
   const { tenantId = '', categorySlug } = useParams<{ tenantId: string; categorySlug?: string }>()
+  const { media } = useShopClients()
   const [categories, setCategories] = useState<StorefrontCategory[] | null>(null)
   const [categoryError, setCategoryError] = useState(false)
   const [products, setProducts] = useState<StorefrontProductSummary[] | null>(null)
+  const [productImages, setProductImages] = useState<Record<string, ProductImage | null>>({})
   const [productError, setProductError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const retry = () => setReloadKey((key) => key + 1)
@@ -62,6 +67,28 @@ export function CategoryPage() {
       cancelled = true
     }
   }, [tenantId, categorySlug, reloadKey])
+
+  useEffect(() => {
+    if (!products || products.length === 0) {
+      setProductImages({})
+      return
+    }
+    const controller = new AbortController()
+    setProductImages({})
+    void Promise.all(
+      products.map(async (product) => {
+        try {
+          const withGallery = await media.getProduct(tenantId, product.id, controller.signal)
+          return [product.id, withGallery.images[0] ?? null] as const
+        } catch {
+          return [product.id, null] as const
+        }
+      }),
+    ).then((entries) => {
+      if (!controller.signal.aborted) setProductImages(Object.fromEntries(entries))
+    })
+    return () => controller.abort()
+  }, [media, products, tenantId])
 
   if (!categorySlug) {
     return (
@@ -157,13 +184,25 @@ export function CategoryPage() {
 
       {products !== null && products.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-          {products.map((product) => (
+          {products.map((product) => {
+            const thumbnail = productImages[product.id]
+            return (
             <Link
               key={product.id}
               to={`/shop/${tenantId}/products/${product.slug}`}
               className="group overflow-hidden rounded-xl border border-border bg-surface shadow-soft transition-colors hover:bg-muted focus-visible:bg-muted"
             >
-              <div className="aspect-square bg-muted" aria-hidden="true" />
+              {thumbnail ? (
+                <ProductMediaImage
+                  image={thumbnail}
+                  className="aspect-square"
+                  showBrokenHint={false}
+                />
+              ) : (
+                <div className="flex aspect-square items-center justify-center bg-muted text-muted-foreground" role="img" aria-label={`تصویر ${product.name}`}>
+                  <Package aria-hidden="true" className="size-8" />
+                </div>
+              )}
               <div className="space-y-1 p-4">
                 <p className="font-semibold">{product.name}</p>
                 <div className="flex items-baseline gap-2">
@@ -176,7 +215,8 @@ export function CategoryPage() {
                 </div>
               </div>
             </Link>
-          ))}
+            )
+          })}
         </div>
       )}
     </section>

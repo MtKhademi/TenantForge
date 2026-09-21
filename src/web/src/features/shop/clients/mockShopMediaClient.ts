@@ -1,13 +1,13 @@
 import { ApiUnavailableError } from '@/features/auth/authTypes'
+import { ShopClientError } from '../contracts/shopContract'
 import {
   MAX_GALLERY_IMAGES,
-  ShopMediaError,
   shopProductWithGallerySchema,
   type ProductGallery,
   type ShopProductWithGallery,
 } from '../contracts/mediaContract'
+import { delay } from './shopFetch'
 import {
-  delay,
   encodeImageAsWebP,
   readImageFile,
   type ShopMediaClient,
@@ -146,6 +146,7 @@ function seededNumber(seed: number, index: number, min: number, span: number): n
   value ^= value >>> 13
   value = Math.imul(value, 0x5bd1e995)
   value ^= value >>> 15
+  value >>>= 0
   return min + (value % span)
 }
 
@@ -180,7 +181,7 @@ function fixtureContentUrl(productId: string, imageNumber: number): string {
 }
 
 function brokenContentUrl(): string {
-  return 'data:image/webp;base64,AAAAmock-broken-image-content'
+  return 'data:image/png;base64,bm90LWFuLWltYWdl'
 }
 
 // The mock's protected-byte route returns stored bytes as a Blob without any
@@ -263,7 +264,16 @@ function seedGallery(
       height,
       contentUrl,
     }
-    contentBlobs.set(image.id, dataUrlToBlob(contentUrl))
+    try {
+      contentBlobs.set(
+        image.id,
+        contentUrl.startsWith(brokenContentUrl())
+          ? new Blob(['not-an-image'], { type: 'image/png' })
+          : dataUrlToBlob(contentUrl),
+      )
+    } catch {
+      contentBlobs.set(image.id, new Blob(['not-an-image'], { type: 'image/png' }))
+    }
     return image
   })
   if (count > 0) product.galleryVersion = 2
@@ -320,7 +330,7 @@ function getOrCreateEntry(tenantId: string, productId: string): GalleryState {
   if (scenario.key === 'eightImage') imageCount = MAX_GALLERY_IMAGES
   const entry = seedGallery(product, imageCount, (index) =>
     index === 0 && scenario.key === 'brokenImage'
-      ? brokenContentUrl()
+      ? `${brokenContentUrl()}?product=${encodeURIComponent(productId)}&image=${index}`
       : fixtureContentUrl(productId, index),
   )
   // The seed's tenantId is cosmetic in the mock; keep the caller's tenant so
@@ -340,8 +350,21 @@ function assertNotAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw abortError()
 }
 
-function scenarioError(status: number, message: string, options: ConstructorParameters<typeof ShopMediaError>[2] = {}): ShopMediaError {
-  return new ShopMediaError(status, message, options)
+function scenarioError(
+  status: number,
+  message: string,
+  options: { fieldErrors?: Record<string, string>; retryAfterSeconds?: number } = {},
+): ShopClientError {
+  const errors = options.fieldErrors
+    ? Object.fromEntries(Object.entries(options.fieldErrors).map(([key, value]) => [key, [value]]))
+    : undefined
+  return new ShopClientError({
+    status,
+    title: message,
+    detail: message,
+    errors,
+    retryAfterSeconds: options.retryAfterSeconds,
+  })
 }
 
 function assertScenarioAllows(key: 'read' | 'upload' | 'mutate'): void {
@@ -486,7 +509,7 @@ export const mockShopMediaClient: ShopMediaClient = {
   },
 
   async reorder(tenantId, productId, body, signal) {
-    assertScenarioAllows('mutate', body.expectedGalleryVersion)
+    assertScenarioAllows('mutate')
     await delay(MUTATION_LATENCY_MS, signal)
     assertNotAborted(signal)
     const entry = getEntry(tenantId, productId)
@@ -504,7 +527,7 @@ export const mockShopMediaClient: ShopMediaClient = {
   },
 
   async remove(tenantId, productId, imageId, expectedGalleryVersion, signal) {
-    assertScenarioAllows('mutate', expectedGalleryVersion)
+    assertScenarioAllows('mutate')
     await delay(MUTATION_LATENCY_MS, signal)
     assertNotAborted(signal)
     const entry = getEntry(tenantId, productId)
