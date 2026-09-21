@@ -2,7 +2,7 @@
 description: Implements and teaches the smallest backend required by the active TenantForge slice. Use for .NET API, IAM, persistence, tenancy, authorization and integration tests. Never advances beyond the current visible UI contract.
 mode: primary
 temperature: 0.15
-steps: 35
+steps: 200
 permission:
   read: allow
   edit: allow

@@ -2,7 +2,7 @@
 description: Builds and visually verifies the active TenantForge React slice. Use for frontend scaffolding, pages, components, responsive states, accessibility and browser QA. Never changes backend behavior or invents future screens.
 mode: primary
 temperature: 0.35
-steps: 30
+steps: 200
 permission:
   read: allow
   edit: allow
