@@ -66,6 +66,10 @@ contract and the permission catalog contracts.
   decoding/validation and safe local storage;
 - a public storefront catalog, including each product's ordered image
   gallery;
+- storefront discovery: an anonymous all-products list with name search,
+  category/sale filtering and four deterministic sort orders, showing a
+  per-product "card price" (lowest in-stock variant price), an on-sale flag
+  and a sold-out state — without ever exposing SKUs or raw stock counts;
 - persistent carts;
 - shipping rates and coupons;
 - a checkout summary, order creation and guest order lookup;

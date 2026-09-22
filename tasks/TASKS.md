@@ -137,7 +137,7 @@ one valid Spec link.
 | B034 | S31 | Shared permission catalog contract (BuildingBlocks) and IAM migration | done | — | — |
 | B035 | S31 | Shop permission enforcement (Shop.Catalog.Manage / Shop.Shipping.Manage) | done | B034 | — |
 | B036 | S32 | Persist and serve safe product galleries | done | B035 | — |
-| B037 | S33 | Add storefront search, sorting and sale discovery | planned | B036 | [B037 Spec](backend/B037-shop-storefront-discovery.md) |
+| B037 | S33 | Add storefront search, sorting and sale discovery | done | B036 | — |
 | B038 | S34 | Support one level of storefront subcategories | planned | B037 | [B038 Spec](backend/B038-shop-category-hierarchy.md) |
 | B039 | S35 | Add tenant storefront identity and policy content | planned | B036, B035 | [B039 Spec](backend/B039-shop-profile-policies.md) |
 | B040 | S36 | Expire abandoned carts and release reserved stock | planned | B031 | [B040 Spec](backend/B040-shop-cart-reservation-expiry.md) |
