@@ -15,7 +15,9 @@ internal sealed class ShopPermissionCatalogContributor : IPermissionCatalogContr
         [
             new(ShopAuthorization.CatalogManagePermission, "مدیریت دسته‌بندی‌ها و محصولات", "اجازه ایجاد و ویرایش دسته‌بندی‌ها و محصولات فروشگاه.", "write"),
             new(ShopAuthorization.ShippingManagePermission, "مدیریت ارسال و تخفیف‌ها", "اجازه تعیین نرخ‌های ارسال و ایجاد یا غیرفعال‌کردن کدهای تخفیف.", "write"),
-            new(ShopAuthorization.SettingsManagePermission, "مدیریت هویت فروشگاه", "اجازه ویرایش نام فروشگاه، اطلاعات پشتیبانی و صفحات سیاست‌های مشتری.", "write")
+            new(ShopAuthorization.SettingsManagePermission, "مدیریت هویت فروشگاه", "اجازه ویرایش نام فروشگاه، اطلاعات پشتیبانی و صفحات سیاست‌های مشتری.", "write"),
+            new(ShopAuthorization.OrdersViewPermission, "مشاهده سفارش‌ها", "اجازه مشاهده فهرست و جزئیات سفارش‌های مشتری‌ها.", "read"),
+            new(ShopAuthorization.OrdersManagePermission, "مدیریت وضعیت سفارش‌ها", "اجازه تغییر وضعیت سفارش‌ها (تحویل یا لغو).", "write")
         ])
     ];
 }

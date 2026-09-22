@@ -77,6 +77,11 @@ internal sealed class ShopOrderMap : IEntityTypeConfiguration<ShopOrder>
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(order => order.Version)
+            .HasColumnName("version")
+            .HasDefaultValue(1)
+            .IsRequired();
+
         builder.HasIndex(order => order.OrderNumber)
             .IsUnique()
             .HasDatabaseName("ix_shop_orders_order_number");

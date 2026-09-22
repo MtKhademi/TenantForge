@@ -39,12 +39,28 @@ internal static class ShopAuthorization
     /// </summary>
     internal const string SettingsManagePermission = "Shop.Settings.Manage";
 
-    /// <summary>The three keys Shop owns — see ShopPermissionCatalogContributor.</summary>
+    /// <summary>
+    /// B042: gates the tenant's order list and detail reads (GET
+    /// /api/tenants/{tenantId}/shop/orders[/{orderId}]). Same
+    /// Owner-bypass/assigned-role-key rule as the other Shop keys.
+    /// </summary>
+    internal const string OrdersViewPermission = "Shop.Orders.View";
+
+    /// <summary>
+    /// B042: reserved for B043's order status actions. Registered in the
+    /// catalog now so F050's UI and role authoring can reference it, but
+    /// B042 does not enforce it anywhere.
+    /// </summary>
+    internal const string OrdersManagePermission = "Shop.Orders.Manage";
+
+    /// <summary>The five keys Shop owns — see ShopPermissionCatalogContributor.</summary>
     internal static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
     {
         CatalogManagePermission,
         ShippingManagePermission,
-        SettingsManagePermission
+        SettingsManagePermission,
+        OrdersViewPermission,
+        OrdersManagePermission
     };
 
     /// <summary>

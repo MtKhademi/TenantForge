@@ -65,6 +65,7 @@ public static class ShopModule
         endpoints.MapOrderCreationFeature();
         endpoints.MapPaymentsFeature();
         endpoints.MapOrderLookupFeature();
+        endpoints.MapAdminOrdersFeature();
         endpoints.MapProfilesFeature();
     }
 
