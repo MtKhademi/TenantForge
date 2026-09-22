@@ -1,4 +1,4 @@
-import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, ShoppingBag, Users, UsersRound } from 'lucide-react'
+import { Building2, IdCard, KeyRound, LayoutDashboard, MailPlus, ScrollText, ShieldCheck, Shield, ShoppingBag, Store, Users, UsersRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link, useLocation, useMatch } from 'react-router-dom'
@@ -92,6 +92,11 @@ const navSections: ShellNavSection[] = [
       { id: 'shop-products', label: 'محصولات فروشگاه', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/products', requires: [SHOP_CATALOG_MANAGE_KEY] },
       { id: 'shop-shipping', label: 'نرخ‌های ارسال', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/shipping-rates', requires: [SHOP_SHIPPING_MANAGE_KEY] },
       { id: 'shop-coupons', label: 'کدهای تخفیف', icon: ShoppingBag, href: '/t/', tenantScopedSuffix: '/shop/coupons', requires: [SHOP_SHIPPING_MANAGE_KEY] },
+      // S35 (F047): the admin identity/policies settings destination. F057 will
+      // bind it to the delivered `Shop.Settings.Manage` key (B039) — the key
+      // constant does not exist yet, so the item is un-gated in this mock
+      // phase; the page still renders the 403 state the client surfaces.
+      { id: 'shop-profile', label: 'هویت و سیاست‌های فروشگاه', icon: Store, href: '/t/', tenantScopedSuffix: '/shop/profile' },
     ],
   },
 ]

@@ -15,10 +15,12 @@ import { RolesPage } from './pages/RolesPage'
 import { CategoriesPage } from './pages/shop/admin/CategoriesPage'
 import { CouponsPage } from './pages/shop/admin/CouponsPage'
 import { ProductsPage } from './pages/shop/admin/ProductsPage'
+import { ShopProfilePage } from './pages/shop/admin/ShopProfilePage'
 import { ShippingRatesPage } from './pages/shop/admin/ShippingRatesPage'
 import { CartPage } from './pages/shop/storefront/CartPage'
 import { CategoryPage } from './pages/shop/storefront/CategoryPage'
 import { CheckoutPage } from './pages/shop/storefront/CheckoutPage'
+import { PolicyPage } from './pages/shop/storefront/PolicyPage'
 import { OrderReviewPage } from './pages/shop/storefront/OrderReviewPage'
 import { OrderTrackingPage } from './pages/shop/storefront/OrderTrackingPage'
 import { PaymentResultPage } from './pages/shop/storefront/PaymentResultPage'
@@ -141,6 +143,13 @@ export default function App() {
           <Route path="bank" element={<SandboxBankPage />} />
           <Route path="payment-result" element={<PaymentResultPage />} />
           <Route path="track-order" element={<OrderTrackingPage />} />
+          {/* S35 (F047): the five plain-text policy/about pages. One reusable
+              component, one route each, a different profile field each. */}
+          <Route path="about" element={<PolicyPage field="about" />} />
+          <Route path="shipping" element={<PolicyPage field="shipping" />} />
+          <Route path="payment" element={<PolicyPage field="payment" />} />
+          <Route path="returns" element={<PolicyPage field="returns" />} />
+          <Route path="privacy" element={<PolicyPage field="privacy" />} />
         </Route>
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<HomeRoute />} />
@@ -164,6 +173,8 @@ export default function App() {
           <Route path="/t/:tenantId/shop/products" element={<ProductsPage />} />
           <Route path="/t/:tenantId/shop/shipping-rates" element={<ShippingRatesPage />} />
           <Route path="/t/:tenantId/shop/coupons" element={<CouponsPage />} />
+          {/* S35 (F047): admin storefront identity + policies settings form. */}
+          <Route path="/t/:tenantId/shop/profile" element={<ShopProfilePage />} />
         </Route>
         <Route path="*" element={<RedirectHome />} />
       </Routes>

@@ -32,10 +32,12 @@ src/web/src/
   components/shop/        # shared Shop UI such as ProductGalleryEditor/ProductMediaImage
   features/<area>/        # data access + types + context for one capability
   pages/                  # platform and tenant pages
-  pages/shop/admin/       # CategoriesPage, ProductsPage, ShippingRatesPage, CouponsPage
-   pages/shop/storefront/  # StorefrontLayout, StorefrontCatalogPage, CategoryPage,
-                           # ProductDetailPage, CartPage, CheckoutPage, OrderReviewPage,
-                           # SandboxBankPage, PaymentResultPage, OrderTrackingPage
+   pages/shop/admin/       # CategoriesPage, ProductsPage, ShippingRatesPage, CouponsPage,
+                            # ShopProfilePage (F047)
+    pages/shop/storefront/  # StorefrontLayout, StorefrontCatalogPage, CategoryPage,
+                            # ProductDetailPage, CartPage, CheckoutPage, OrderReviewPage,
+                            # SandboxBankPage, PaymentResultPage, OrderTrackingPage,
+                            # PolicyPage (F047 — one reusable policy/about page)
   lib/utils.ts            # cn() class merge
   test/                   # vitest setup — off limits, see Ownership
 ```
@@ -97,16 +99,27 @@ Read the nearest existing adapter before writing a new one.
 `src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
 mounts one `ShopClientsProvider` around all routes; each bound slot is replaced
 individually by its connect task (F054 → `media`, F055 → `discovery`,
-F056 → `categories`). Bound so far: `media` → `mockShopMediaClient` (F044),
-`discovery` → `mockShopDiscoveryClient` (F045) and `categories` →
-`mockShopCategoryClient` (F046). Mock Shop scenario controls are development-only
+F056 → `categories`, F057 → `profile`). Bound so far: `media` →
+`mockShopMediaClient` (F044), `discovery` → `mockShopDiscoveryClient` (F045),
+`categories` → `mockShopCategoryClient` (F046) and `profile` →
+`mockShopProfileClient` (F047). Mock Shop scenario controls are development-only
 and selected through the provider, never by importing fixtures into pages. Each
 capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx` that the
 provider's dev-only `DevScenarioToolbar` loads independently; new capabilities
 add their own switcher and position it so it does not overlap another switcher's
 fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
-categories: `bottom-[4.75rem] start-4`). See
-`docs/design/shop/frontend-contract-boundary.md`.
+categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`).
+See `docs/design/shop/frontend-contract-boundary.md`.
+
+The `profile` slot (B039/F047) is the first client that also feeds the
+**anonymous storefront layout**: `StorefrontLayout` and the five `PolicyPage`
+routes consume `profile.getPublic`, while the admin `ShopProfilePage` consumes
+`getAdmin`/`save`. `getPublic` resolves to `null` for a missing or unpublished
+profile (the anonymous 404) — the layout and every policy page render the SAME
+neutral "not yet open" fallback for that null, so real content and the fallback
+never mix on different surfaces. Publication gates only the profile/policy
+surfaces, never the catalog (B039), so the catalog, category bar and cart keep
+working for an unpublished store.
 
 `CategoryPage` (storefront) is deliberately mixed until F055/F056: the grouped
 nav bar in `StorefrontLayout`, the max-two-level breadcrumb and the admin
@@ -127,6 +140,10 @@ expected console noise on anonymous storefront routes.
   (`SHOP_CATALOG_MANAGE_KEY = 'Shop.Catalog.Manage'`,
   `SHOP_SHIPPING_MANAGE_KEY = 'Shop.Shipping.Manage'`). Adding a key means
   updating both files, and the backend must already expose it.
+- `Shop.Settings.Manage` (the profile-page key, B039) is **not** in this mirror
+  yet — it is added by F057 once the backend delivers the key. Until then the
+  `هویت و سیاست‌های فروشگاه` nav item renders un-gated (F047 mock phase) and the
+  page still surfaces the client's 403 state.
 - **Hiding a control is presentation, never authorization.** Still render the
   403 state the task names.
 
@@ -195,9 +212,23 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
    `VITE_API_PROXY_TARGET=http://127.0.0.1:5000 npm run dev -- --host 127.0.0.1
    --port 5173 --strictPort` (the API binds 127.0.0.1 in this setup).
 11. In Playwright, assigning `select.value` inside `evaluate()` does NOT fire
-   React's `onChange`, so a react-hook-form field stays stale (e.g. a mock
-   scenario keyed on a non-null `parentCategoryId` never triggers). Use
-   `page.selectOption()` (fires the proper events) for controlled `<select>`s.
+    React's `onChange`, so a react-hook-form field stays stale (e.g. a mock
+    scenario keyed on a non-null `parentCategoryId` never triggers). Use
+    `page.selectOption()` (fires the proper events) for controlled `<select>`s.
+12. Admin settings pages that `form.reset()` a just-loaded profile (e.g.
+    `ShopProfilePage`, F047) race a Playwright `page.fill()`: the form renders
+    the instant the skeleton resolves, but the reset that seeds the loaded
+    values lands a frame later and clobbers a fill issued in that window (the
+    value reverts to the seed). In a browser-evidence script, first wait until
+    the name field holds the seeded value (proof the reset ran), then fill, and
+    re-fill once if the value does not stick.
+13. When browser evidence hits a PROTECTED page with a real session, the URL's
+    `tenantId` must be a tenant the signed-in account actually belongs to, or
+    the page's tenant-scope `GET /api/tenants/{id}/me/permissions` 403s and the
+    console is no longer clean. Mock Shop clients ignore `tenantId` by design,
+    so any valid member tenant exercises the same mock UI (the F046/F047 demos
+    use `0RM4B8A9M008Q`).
+
 
 ## Decisions future tasks must preserve
 
