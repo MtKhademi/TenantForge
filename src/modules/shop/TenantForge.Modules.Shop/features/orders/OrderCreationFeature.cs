@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Orders;
@@ -17,7 +18,10 @@ internal static class OrderCreationFeature
         endpoints.MapPost("/api/shop/{tenantId}/orders", async (
             string tenantId,
             CreateOrderRequest request,
-            ShopDbContext db) =>
+            ShopDbContext db,
+            IShopCartExpiryService expiryService,
+            TimeProvider timeProvider,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
             if (!TsidId.TryParse(request.CartId, out var cartTsid)) return Results.NotFound();
@@ -26,17 +30,33 @@ internal static class OrderCreationFeature
             if (string.IsNullOrWhiteSpace(request.CustomerName)) errors["customerName"] = ["Customer name is required."];
             if (string.IsNullOrWhiteSpace(request.CustomerPhone)) errors["customerPhone"] = ["Customer phone is required."];
 
-            await using var transaction = await db.Database.BeginTransactionAsync();
+            var lease = await expiryService.EnsureActiveAsync(tenantTsid, cartTsid, ct);
+            if (lease.Cart is null) return Results.NotFound();
+            if (CartsFeature.IsExpired(lease)) return CartsFeature.CartExpiredProblem();
+            if (lease.Outcome == CartLeaseOutcome.Converted) return Results.NotFound();
+
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+            var cart = await db.Carts
+                .FromSqlRaw("""
+                    SELECT *
+                    FROM shop_carts
+                    WHERE tenant_id = {0} AND id = {1}
+                    FOR UPDATE
+                    """, tenantTsid.ToLong(), cartTsid.ToLong())
+                .SingleOrDefaultAsync(ct);
+            if (cart is null) return Results.NotFound();
+            if (cart.Status == ShopCartStatus.Expired) return CartsFeature.CartExpiredProblem();
+            if (cart.Status == ShopCartStatus.Converted) return Results.NotFound();
 
             // Consuming the cart atomically here (rather than after building
             // the order) is what protects against a double order from the
-            // same cart: a second concurrent call finds no cart items left
+            // same cart: a second concurrent call finds no active cart items left
             // and returns 404, exactly like the cart was never checked out.
-            var cartItems = await db.CartItems.Where(item => item.CartId == cartTsid).ToListAsync();
-            var cartExists = await db.Carts.AnyAsync(cart => cart.Id == cartTsid && cart.TenantId == tenantTsid);
-            if (!cartExists || cartItems.Count == 0)
+            var cartItems = await db.CartItems.Where(item => item.CartId == cartTsid).ToListAsync(ct);
+            if (cartItems.Count == 0)
             {
-                await transaction.RollbackAsync();
+                await transaction.RollbackAsync(ct);
                 return Results.NotFound();
             }
 
@@ -82,11 +102,11 @@ internal static class OrderCreationFeature
 
             if (errors.Count > 0)
             {
-                await transaction.RollbackAsync();
+                await transaction.RollbackAsync(ct);
                 return Results.ValidationProblem(errors);
             }
 
-            var now = DateTimeOffset.UtcNow;
+            var now = timeProvider.GetUtcNow();
             var orderNumber = await GenerateUniqueOrderNumberAsync(db, now);
             var trackingCode = GenerateTrackingCode();
 
@@ -112,10 +132,11 @@ internal static class OrderCreationFeature
             // again. Removing the cart items here only finalizes the
             // consumption; it does not touch stock.
             db.CartItems.RemoveRange(cartItems);
+            cart.MarkConverted(now);
 
             try
             {
-                await db.SaveChangesAsync();
+                await db.SaveChangesAsync(ct);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -128,7 +149,7 @@ internal static class OrderCreationFeature
                 return Results.NotFound();
             }
 
-            await transaction.CommitAsync();
+            await transaction.CommitAsync(ct);
 
             return Results.Created($"/api/shop/{tenantId}/orders/{TsidId.Format(order.Id)}", new OrderCreatedResponse(
                 TsidId.Format(order.Id), order.OrderNumber, order.TrackingCode, order.Status.ToString(),

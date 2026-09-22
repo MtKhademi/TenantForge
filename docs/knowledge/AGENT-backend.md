@@ -143,6 +143,7 @@ Copy the nearest existing feature in the same module before inventing a shape.
 - Migrations live in `infrastructure/Migrations/` and are applied at startup by
   the module's activation phase.
 - Use `TimeProvider` as the injectable clock, never `DateTime.UtcNow` inline.
+- Shop cart leases are server-owned: cart create/read responses include `expiresAtUtc`, successful add/update/delete extends the lease, reads do not, expired active carts return `410 shop_cart_expired`, and successful order creation marks the cart `Converted` instead of deleting the cart row.
 - Handle races with a row lock plus a database constraint, not a bare
   `AnyAsync` check.
 

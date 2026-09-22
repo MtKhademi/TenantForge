@@ -96,7 +96,10 @@ internal sealed class UnsafeSeedApiFactory(IamDbFixture db) : Microsoft.AspNetCo
             // Shop shares the same database as IAM; the host now runs
             // UseShopModuleAsync, so the connection value must be present even
             // though this test's failure is raised earlier by IAM validation.
-            ["Shop:ShopDb"] = db.ConnectionString
+            ["Shop:ShopDb"] = db.ConnectionString,
+            ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media"),
+            ["Shop:CartReservationMinutes"] = "30",
+            ["Shop:CartCleanupIntervalSeconds"] = "3600"
         };
 
         builder.ConfigureAppConfiguration((_, configuration) =>

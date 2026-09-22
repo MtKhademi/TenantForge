@@ -62,6 +62,22 @@ public sealed class ShopModuleIntegrationTests(ShopDbFixture db)
         Assert.Contains("required", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("Shop:CartReservationMinutes", "4", "5 through 1440")]
+    [InlineData("Shop:CartCleanupIntervalSeconds", "29", "30 through 3600")]
+    public void InvalidCartLeaseConfiguration_FailsClosedAtStartup(string key, string value, string expectedMessage)
+    {
+        using var factory = new ShopInvalidCartLeaseApiFactory(db.ConnectionString, key, value);
+
+        var exception = Assert.ThrowsAny<Exception>(() =>
+        {
+            using var _ = factory.CreateClient();
+        });
+
+        Assert.Contains(key, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task FreshStartup_CreatesExactlyTheSixCatalogTablesAndOwnHistoryTable()
     {
@@ -163,6 +179,44 @@ public sealed class ShopModuleIntegrationTests(ShopDbFixture db)
 /// Shop:ShopDb, used only to prove the Shop activation seam fails closed at
 /// startup rather than serving traffic with an unconfigured database.
 /// </summary>
+internal sealed class ShopInvalidCartLeaseApiFactory(string connectionString, string invalidKey, string invalidValue)
+    : WebApplicationFactory<Program>, IDisposable
+{
+    private readonly string _contentRoot = Path.Combine(Path.GetTempPath(), "tenantforge-shop-tests", Guid.NewGuid().ToString("N"));
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        Directory.CreateDirectory(_contentRoot);
+        builder.UseContentRoot(_contentRoot);
+        builder.UseEnvironment("Development");
+
+        var values = new Dictionary<string, string?>
+        {
+            ["IAM:IamDb"] = connectionString,
+            ["IAM:Auth:SigningKey"] = "dev-only-tenantforge-signing-key-do-not-use-32b",
+            ["Shop:ShopDb"] = connectionString,
+            ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media"),
+            ["Shop:CartCleanupIntervalSeconds"] = "3600",
+            [invalidKey] = invalidValue
+        };
+
+        builder.ConfigureAppConfiguration((_, configuration) =>
+            configuration.AddInMemoryCollection(values));
+    }
+
+    public new void Dispose()
+    {
+        base.Dispose();
+        try
+        {
+            Directory.Delete(_contentRoot, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
+}
+
 internal sealed class ShopFailClosedApiFactory(string connectionString)
     : WebApplicationFactory<Program>, IDisposable
 {

@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using TenantForge.Modules.Shop;
 using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
@@ -13,22 +16,35 @@ internal static class CartsFeature
 {
     public static IEndpointRouteBuilder MapCartsFeature(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/api/shop/{tenantId}/carts", async (string tenantId, ShopDbContext db) =>
+        endpoints.MapPost("/api/shop/{tenantId}/carts", async (
+            string tenantId,
+            ShopDbContext db,
+            TimeProvider timeProvider,
+            IConfiguration configuration,
+            IHostEnvironment environment,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
 
-            var cart = ShopCart.Create(tenantTsid, DateTimeOffset.UtcNow);
+            var now = timeProvider.GetUtcNow();
+            var leaseDuration = TimeSpan.FromMinutes(ShopConfig.GetCartReservationMinutes(environment, configuration));
+            var cart = ShopCart.Create(tenantTsid, now, now.Add(leaseDuration));
             db.Carts.Add(cart);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
 
-            return Results.Created($"/api/shop/{tenantId}/carts/{TsidId.Format(cart.Id)}", new CreateCartResponse(TsidId.Format(cart.Id)));
+            return Results.Created($"/api/shop/{tenantId}/carts/{TsidId.Format(cart.Id)}", new CreateCartResponse(TsidId.Format(cart.Id), cart.ExpiresAtUtc));
         });
 
         endpoints.MapPost("/api/shop/{tenantId}/carts/{cartId}/items", async (
             string tenantId,
             string cartId,
             AddCartItemRequest request,
-            ShopDbContext db) =>
+            ShopDbContext db,
+            IShopCartExpiryService expiryService,
+            TimeProvider timeProvider,
+            IConfiguration configuration,
+            IHostEnvironment environment,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
             if (!TsidId.TryParse(cartId, out var cartTsid)) return Results.NotFound();
@@ -40,8 +56,10 @@ internal static class CartsFeature
                 });
             }
 
-            var cartExists = await db.Carts.AnyAsync(cart => cart.Id == cartTsid && cart.TenantId == tenantTsid);
-            if (!cartExists) return Results.NotFound();
+            var lease = await expiryService.EnsureActiveAsync(tenantTsid, cartTsid, ct);
+            if (lease.Cart is null) return Results.NotFound();
+            if (IsExpired(lease)) return CartExpiredProblem();
+            if (lease.Outcome == CartLeaseOutcome.Converted) return Results.NotFound();
 
             var variant = await db.ProductVariants.AsNoTracking()
                 .Join(db.Products.AsNoTracking().Where(product => product.TenantId == tenantTsid && product.IsActive),
@@ -72,9 +90,10 @@ internal static class CartsFeature
                 existingItem.SetQuantity(existingItem.Quantity + request.Quantity);
             }
 
-            await db.SaveChangesAsync();
+            lease.Cart.ExtendLease(timeProvider.GetUtcNow(), TimeSpan.FromMinutes(ShopConfig.GetCartReservationMinutes(environment, configuration)));
+            await db.SaveChangesAsync(ct);
 
-            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid));
+            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
         });
 
         endpoints.MapPatch("/api/shop/{tenantId}/carts/{cartId}/items/{itemId}", async (
@@ -82,7 +101,12 @@ internal static class CartsFeature
             string cartId,
             string itemId,
             UpdateCartItemRequest request,
-            ShopDbContext db) =>
+            ShopDbContext db,
+            IShopCartExpiryService expiryService,
+            TimeProvider timeProvider,
+            IConfiguration configuration,
+            IHostEnvironment environment,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
             if (!TsidId.TryParse(cartId, out var cartTsid) || !TsidId.TryParse(itemId, out var itemTsid))
@@ -98,10 +122,12 @@ internal static class CartsFeature
                 });
             }
 
-            var cartExists = await db.Carts.AnyAsync(cart => cart.Id == cartTsid && cart.TenantId == tenantTsid);
-            if (!cartExists) return Results.NotFound();
+            var lease = await expiryService.EnsureActiveAsync(tenantTsid, cartTsid, ct);
+            if (lease.Cart is null) return Results.NotFound();
+            if (IsExpired(lease)) return CartExpiredProblem();
+            if (lease.Outcome == CartLeaseOutcome.Converted) return Results.NotFound();
 
-            var item = await db.CartItems.SingleOrDefaultAsync(item => item.Id == itemTsid && item.CartId == cartTsid);
+            var item = await db.CartItems.SingleOrDefaultAsync(item => item.Id == itemTsid && item.CartId == cartTsid, ct);
             if (item is null) return Results.NotFound();
 
             var delta = request.Quantity - item.Quantity;
@@ -120,16 +146,22 @@ internal static class CartsFeature
             }
 
             item.SetQuantity(request.Quantity);
-            await db.SaveChangesAsync();
+            lease.Cart.ExtendLease(timeProvider.GetUtcNow(), TimeSpan.FromMinutes(ShopConfig.GetCartReservationMinutes(environment, configuration)));
+            await db.SaveChangesAsync(ct);
 
-            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid));
+            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
         });
 
         endpoints.MapDelete("/api/shop/{tenantId}/carts/{cartId}/items/{itemId}", async (
             string tenantId,
             string cartId,
             string itemId,
-            ShopDbContext db) =>
+            ShopDbContext db,
+            IShopCartExpiryService expiryService,
+            TimeProvider timeProvider,
+            IConfiguration configuration,
+            IHostEnvironment environment,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
             if (!TsidId.TryParse(cartId, out var cartTsid) || !TsidId.TryParse(itemId, out var itemTsid))
@@ -137,10 +169,12 @@ internal static class CartsFeature
                 return Results.NotFound();
             }
 
-            var cartExists = await db.Carts.AnyAsync(cart => cart.Id == cartTsid && cart.TenantId == tenantTsid);
-            if (!cartExists) return Results.NotFound();
+            var lease = await expiryService.EnsureActiveAsync(tenantTsid, cartTsid, ct);
+            if (lease.Cart is null) return Results.NotFound();
+            if (IsExpired(lease)) return CartExpiredProblem();
+            if (lease.Outcome == CartLeaseOutcome.Converted) return Results.NotFound();
 
-            var item = await db.CartItems.SingleOrDefaultAsync(item => item.Id == itemTsid && item.CartId == cartTsid);
+            var item = await db.CartItems.SingleOrDefaultAsync(item => item.Id == itemTsid && item.CartId == cartTsid, ct);
             if (item is null) return Results.NotFound();
 
             // Release the reservation before removing the row.
@@ -149,27 +183,40 @@ internal static class CartsFeature
                 .ExecuteUpdateAsync(setters => setters.SetProperty(v => v.StockQuantity, v => v.StockQuantity + item.Quantity));
 
             db.CartItems.Remove(item);
-            await db.SaveChangesAsync();
+            lease.Cart.ExtendLease(timeProvider.GetUtcNow(), TimeSpan.FromMinutes(ShopConfig.GetCartReservationMinutes(environment, configuration)));
+            await db.SaveChangesAsync(ct);
 
-            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid));
+            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
         });
 
-        endpoints.MapGet("/api/shop/{tenantId}/carts/{cartId}", async (string tenantId, string cartId, ShopDbContext db) =>
+        endpoints.MapGet("/api/shop/{tenantId}/carts/{cartId}", async (
+            string tenantId,
+            string cartId,
+            ShopDbContext db,
+            IShopCartExpiryService expiryService,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
             if (!TsidId.TryParse(cartId, out var cartTsid)) return Results.NotFound();
 
-            var cartExists = await db.Carts.AnyAsync(cart => cart.Id == cartTsid && cart.TenantId == tenantTsid);
-            if (!cartExists) return Results.NotFound();
+            var lease = await expiryService.EnsureActiveAsync(tenantTsid, cartTsid, ct);
+            if (lease.Cart is null) return Results.NotFound();
+            if (IsExpired(lease)) return CartExpiredProblem();
+            if (lease.Outcome == CartLeaseOutcome.Converted) return Results.NotFound();
 
-            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid));
+            return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
         });
 
         return endpoints;
     }
 
-    private static async Task<CartResponse> BuildCartResponseAsync(ShopDbContext db, Tsid tenantId, Tsid cartId)
+    private static async Task<CartResponse> BuildCartResponseAsync(ShopDbContext db, Tsid tenantId, Tsid cartId, CancellationToken ct)
     {
+        var expiresAtUtc = await db.Carts.AsNoTracking()
+            .Where(cart => cart.Id == cartId && cart.TenantId == tenantId)
+            .Select(cart => cart.ExpiresAtUtc)
+            .SingleAsync(ct);
+
         var rows = await db.CartItems.AsNoTracking()
             .Where(item => item.CartId == cartId)
             .Join(db.ProductVariants.AsNoTracking(), item => item.ProductVariantId, variant => variant.Id,
@@ -182,11 +229,20 @@ internal static class CartsFeature
                     $"{row.variant.Color} / {row.variant.Size}",
                     row.item.Quantity,
                     row.item.UnitPriceSnapshot))
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var subTotal = rows.Sum(row => row.UnitPrice * row.Quantity);
-        return new CartResponse(TsidId.Format(cartId), rows, subTotal);
+        return new CartResponse(TsidId.Format(cartId), rows, subTotal, expiresAtUtc);
     }
+
+    internal static bool IsExpired(CartLeaseResult lease) =>
+        lease.Outcome is CartLeaseOutcome.JustExpired or CartLeaseOutcome.AlreadyExpired;
+
+    internal static IResult CartExpiredProblem() => Results.Problem(
+        type: "shop_cart_expired",
+        title: "Cart expired",
+        detail: "The cart reservation has expired. Start a new cart before continuing.",
+        statusCode: StatusCodes.Status410Gone);
 
     private static IResult InsufficientStockProblem() => Results.Problem(
         title: "Insufficient stock",
