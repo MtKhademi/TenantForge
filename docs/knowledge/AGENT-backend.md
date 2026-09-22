@@ -115,8 +115,9 @@ Copy the nearest existing feature in the same module before inventing a shape.
   authenticated but failing the `isPlatformAdmin` claim → 403.
 - Tenant-scoped Shop routes check membership and permission through
   `ShopAuthorization`. Delivered permission keys today:
-  `Shop.Catalog.Manage`, `Shop.Shipping.Manage`. The tenant Owner role
-  bypasses the permission check.
+  `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage`
+  (gates `PUT …/shop/profile`). The tenant Owner role bypasses the permission
+  check.
 - Product media (`ShopProductImage`, `features/media/`) never trusts a
   client's filename or `Content-Type`: `ShopImageValidator` decodes the
   actual bytes with `SixLabors.ImageSharp` (pinned `3.1.11`), accepts only
@@ -226,7 +227,15 @@ dotnet.exe ef migrations add <Name> \
     {1} FOR UPDATE", …)` inside the transaction, then the guard check and
     `SaveChangesAsync` (B038's reparent guard uses this for `shop_categories`).
     A bare `AnyAsync` before the write does not close the race.
-14. Shop categories are exactly two levels (root + one child, B038). Public
+14. Adding a Shop (or any module) permission key breaks two **hand-maintained
+   exact rosters** in `RolePermissionIntegrationTests.cs` — the aggregated
+   `/api/permissions/catalog` key list and the Owner's resolved
+   `/me/permissions` union — because an Owner's union is *every* registered
+   module's known keys, not just the module under test. Update both lists in
+   the same task (they are ordered; insert the new key in sort order), and the
+   `ShopModuleIntegrationTests.ExpectedShopTables` roster if a table was added
+   too. A full-suite run is what catches a missed roster.
+15. Shop categories are exactly two levels (root + one child, B038). Public
     visibility is "effective activity": a category shows on **every** public
     route (list, by-slug, all-products, detail, media bytes) only while it and
     its root are `IsActive` — always route public eligibility through

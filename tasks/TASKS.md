@@ -139,7 +139,7 @@ one valid Spec link.
 | B036 | S32 | Persist and serve safe product galleries | done | B035 | — |
 | B037 | S33 | Add storefront search, sorting and sale discovery | done | B036 | — |
 | B038 | S34 | Support one level of storefront subcategories | done | B037 | — |
-| B039 | S35 | Add tenant storefront identity and policy content | planned | B036, B035 | [B039 Spec](backend/B039-shop-profile-policies.md) |
+| B039 | S35 | Add tenant storefront identity and policy content | done | B036, B035 | — |
 | B040 | S36 | Expire abandoned carts and release reserved stock | planned | B031 | [B040 Spec](backend/B040-shop-cart-reservation-expiry.md) |
 | B041 | S37 | Add enforceable coupon limits and atomic redemption | planned | B040, B029 | [B041 Spec](backend/B041-shop-coupon-rules.md) |
 | B042 | S38 | Expose tenant order list and detail for operators | planned | B035, B033 | [B042 Spec](backend/B042-shop-admin-orders.md) |

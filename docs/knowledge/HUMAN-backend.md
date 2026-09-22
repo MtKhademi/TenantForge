@@ -76,6 +76,10 @@ contract and the permission catalog contracts.
 - shipping rates and coupons;
 - a checkout summary, order creation and guest order lookup;
 - a sandbox payment gateway;
+- a tenant storefront identity (store name, tagline, support phone, Instagram)
+  and customer policy pages (about, shipping, payment, returns, privacy) that
+  the storefront header/footer can publish, saved with an optimistic-concurrency
+  version so two editors cannot silently overwrite each other;
 - Shop permission keys published through the shared catalog and enforced on
   every tenant-scoped route.
 
@@ -118,6 +122,15 @@ two simultaneous requests cannot both win.
 against a real PostgreSQL instance through Testcontainers, covering both the
 allowed and the denied path, because that is where tenant isolation bugs
 actually appear.
+
+**Concurrency is owned, not inferred.** The storefront profile (and product
+galleries) use an explicit version number the client echoes back: a save is
+applied only when it matches the row's current version, otherwise the client
+gets a `409` saying to reload. The profile keeps exactly one row per tenant by
+a database unique index, so two people saving the first draft at the same
+moment resolve to one winner and one conflict — never a silent overwrite. The
+conflict carries a stable `type` (`stale_version`) so the frontend can react
+to it by name instead of parsing a message.
 
 **No speculative endpoints.** An endpoint is added only when a current or
 immediately dependent frontend task consumes it.

@@ -215,13 +215,20 @@ type SaveShopProfileRequest = Omit<ShopProfileDto, 'id' | 'tenantId' | 'version'
 }
 ```
 
-| Method | Route | Success |
-|---|---|---|
-| GET | `/api/tenants/{tenantId}/shop/profile` | `200 ShopProfileResponse` |
-| PUT | same | `200 ShopProfileResponse` |
-| GET | `/api/shop/{tenantId}/profile` | `200 PublicShopProfileResponse`; unpublished/missing is `404` |
+| Method | Route | Auth | Success |
+|---|---|---|---|
+| GET | `/api/tenants/{tenantId}/shop/profile` | JWT + membership | `200 ShopProfileResponse` (`profile: null` before the first save) |
+| PUT | same | JWT + `Shop.Settings.Manage` | `200 ShopProfileResponse` |
+| GET | `/api/shop/{tenantId}/profile` | anonymous | `200 PublicShopProfileResponse`; unpublished/missing is `404` |
 
-Stale create/update is `409`.
+Validation: field validation `400` (`name`/`tagline`/`supportPhone` required;
+over-length `name`(100)/`tagline`(180)/`supportPhone`(30)/`aboutText`(4000)/
+policy fields(6000); `supportPhone` allows only digits, spaces, `+`, `-`,
+`(`, `)`; `instagramUrl` must be HTTPS on `instagram.com` or a
+`*.instagram.com` subdomain). Permission denied `403`. A stale create or
+update (mismatched or missing `expectedVersion`, or the losing side of a
+concurrent first-create) is `409` with RFC 7807 `type: "stale_version"`. The
+tenant is always taken from the authenticated route context, never the body.
 
 ## S36 / B040 — cart reservation lease
 

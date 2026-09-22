@@ -64,16 +64,16 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
             .OrderBy(key => key)
             .ToList();
 
-        // B035: the catalog aggregates every registered module contributor —
-        // IAM's four keys plus Shop's two (the second real consumer of the
-        // B034 BuildingBlocks contributor/aggregator seam) — into one
-        // cross-module union.
+        // B035/B039: the catalog aggregates every registered module
+        // contributor — IAM's four keys plus Shop's three (B039 adds
+        // Shop.Settings.Manage) — into one cross-module union.
         Assert.Equal([
             "IAM.Audit.View",
             "IAM.Invitations.Create",
             "IAM.Invitations.View",
             "IAM.Roles.Manage",
             "Shop.Catalog.Manage",
+            "Shop.Settings.Manage",
             "Shop.Shipping.Manage"
         ], keys);
     }
@@ -229,16 +229,18 @@ public class RolePermissionIntegrationTests(RolePermissionDbFixture db) : IDispo
         Authorize(memberClient, tenant.MemberAccountId);
 
         var ownerPermissions = await ownerClient.GetFromJsonAsync<JsonElement>($"/api/tenants/{TsidId.Format(tenant.TenantId)}/me/permissions");
-        // B035: an Owner's resolved union spans every registered module's
-        // known keys — IAM's four plus Shop's two (the second contributor
-        // added by B035) — not just IAM's own. A plain Member still resolves
-        // nothing (no role grant) and is denied the permission-gated reads.
+        // B035/B039: an Owner's resolved union spans every registered
+        // module's known keys — IAM's four plus Shop's three (B039 adds
+        // Shop.Settings.Manage) — not just IAM's own. A plain Member still
+        // resolves nothing (no role grant) and is denied the permission-
+        // gated reads.
         Assert.Equal([
             "IAM.Audit.View",
             "IAM.Invitations.Create",
             "IAM.Invitations.View",
             "IAM.Roles.Manage",
             "Shop.Catalog.Manage",
+            "Shop.Settings.Manage",
             "Shop.Shipping.Manage"
         ], ownerPermissions.GetProperty("permissions").EnumerateArray().Select(item => item.GetString()).OrderBy(item => item).ToList());
 
