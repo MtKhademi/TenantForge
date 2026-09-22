@@ -58,7 +58,14 @@ adapter, not rewriting the screen.
   both levels; the storefront groups each root's children under it in the
   navigation bar and shows at most two breadcrumb levels (root, then child).
   This is still backed by the F046 mock, and the data model deliberately has no
-  third level.
+  third level;
+- store identity and policies: an admin "identity and policies" settings form
+  (name, tagline, support phone, Instagram, and the five customer-facing
+  texts — about, shipping, payment, returns, privacy) with live character
+  counters, a published toggle and a live storefront preview; the storefront
+  header and footer show the store's name, tagline, phone and Instagram, and
+  five policy pages render the stored text as plain text with line breaks
+  preserved. This is still backed by the F047 mock (connected in F057).
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -77,12 +84,20 @@ keeps error handling, timeouts and token attachment in one place per capability.
 **New Shop capabilities use a client provider.** Each Shop capability exposes a
 client interface that its mock and later HTTP implementation both satisfy. The
 provider binds one slot per capability — `media` (product galleries),
-`discovery` (the all-products catalog) and `categories` (the category
-hierarchy) are bound today, each to its mock client. Screens consume
-`useShopClients()`; connecting a real API later replaces exactly one provider
-slot and never touches the screen. The all-products catalog's filter state
+`discovery` (the all-products catalog), `categories` (the category hierarchy)
+and `profile` (store identity and policies) are bound today, each to its mock
+client. Screens consume `useShopClients()`; connecting a real API later
+replaces exactly one provider slot and never touches the screen. The all-products catalog's filter state
 lives in the URL, so a filtered view is refreshable and back/forward-
 reproducible.
+
+**Publishing a store only hides its identity, not its goods.** The "publish"
+toggle controls whether the storefront shows the store's name, tagline, contact
+details and policy pages. An unpublished (or not-yet-created) store shows one
+neutral "this store is not yet open" state in the header, the footer and on
+every policy page — the same fallback everywhere, never real content on one
+surface and a placeholder on another. The product catalog, cart and checkout
+keep working regardless, so existing storefront URLs stay usable during rollout.
 
 **Categories are deliberately two levels deep.** A category is either a root or
 a direct child of a root — there is no grandchild. The admin page is a flat,
