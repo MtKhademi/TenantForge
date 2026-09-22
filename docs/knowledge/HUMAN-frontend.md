@@ -46,12 +46,19 @@ adapter, not rewriting the screen.
 - permission-aware navigation for invitations and audit logs;
 - invitation creation and a pending-invitation list with expiry times;
 - a tenant audit log;
-- Shop administration: categories, products, product galleries, shipping rates and coupons;
+- Shop administration: categories, products, product galleries, shipping rates and
+  coupons;
 - a Shop storefront: an all-products catalog with search, category and sale
   filters, four sort orders and pagination (still backed by the F045 mock),
   category browsing with product thumbnails, product detail galleries, cart,
   checkout, order review, a sandbox bank page, a payment result page and guest
-  order tracking.
+  order tracking;
+- one level of subcategories: the admin category page shows each root with its
+  direct children indented beneath it and lets you create, edit and deactivate
+  both levels; the storefront groups each root's children under it in the
+  navigation bar and shows at most two breadcrumb levels (root, then child).
+  This is still backed by the F046 mock, and the data model deliberately has no
+  third level.
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -69,12 +76,23 @@ keeps error handling, timeouts and token attachment in one place per capability.
 
 **New Shop capabilities use a client provider.** Each Shop capability exposes a
 client interface that its mock and later HTTP implementation both satisfy. The
-provider binds one slot per capability — `media` (product galleries) and
-`discovery` (the all-products catalog) are bound today, each to its mock client.
-Screens consume `useShopClients()`; connecting a real API later replaces exactly
-one provider slot and never touches the screen. The all-products catalog's
-filter state lives in the URL, so a filtered view is refreshable and
-back/forward-reproducible.
+provider binds one slot per capability — `media` (product galleries),
+`discovery` (the all-products catalog) and `categories` (the category
+hierarchy) are bound today, each to its mock client. Screens consume
+`useShopClients()`; connecting a real API later replaces exactly one provider
+slot and never touches the screen. The all-products catalog's filter state
+lives in the URL, so a filtered view is refreshable and back/forward-
+reproducible.
+
+**Categories are deliberately two levels deep.** A category is either a root or
+a direct child of a root — there is no grandchild. The admin page is a flat,
+two-level list (not a generic tree component) for that reason, and the parent
+selector can only ever offer active roots, so the invalid shapes (a third
+level, an inactive parent, a parent with children being moved) are answered by
+the client with the backend's own error codes rather than by the UI guessing.
+"Effective activity" means a child is publicly visible only while both it and
+its root are active, so deactivating a root quietly hides its children from the
+storefront.
 
 **Typed errors, not error strings.** Adapters throw
 `ApiUnavailableError`, `SessionExpiredError`, validation, forbidden and

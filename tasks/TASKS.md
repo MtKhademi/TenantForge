@@ -78,7 +78,7 @@ one valid Spec link.
 | F043 | S31 | Gate Shop nav items on the new Shop permission keys | done | F042, B035 | — |
 | F044 | S32 | Build contract-shaped product gallery and storefront image mocks | done | F043 | — |
 | F045 | S33 | Build contract-shaped storefront discovery mocks | done | F044 | — |
-| F046 | S34 | Build contract-shaped nested category mocks | planned | F045 | [F046 Spec](front/F046-shop-category-hierarchy-mock.md) |
+| F046 | S34 | Build contract-shaped nested category mocks | done | F045 | — |
 | F047 | S35 | Build contract-shaped storefront identity and policy mocks | planned | F046 | [F047 Spec](front/F047-shop-profile-policies-mock.md) |
 | F048 | S36 | Build contract-shaped cart expiry mocks | planned | F047 | [F048 Spec](front/F048-shop-cart-expiry-mock.md) |
 | F049 | S37 | Build contract-shaped advanced coupon mocks | planned | F048 | [F049 Spec](front/F049-shop-coupon-rules-mock.md) |
