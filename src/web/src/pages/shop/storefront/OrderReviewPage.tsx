@@ -1,39 +1,60 @@
-import { useEffect, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { placeOrderAndInitiatePayment } from '@/features/shop/orderAdapter'
-import { loadOrderDraft, savePlacedOrder, type OrderDraft } from '@/features/shop/orderDraftState'
+import {
+  loadOrderDraft,
+  savePlacedOrder,
+  type OrderDraft,
+} from '@/features/shop/orderDraftState'
+import { useCartLease } from '@/features/shop/useCartLease'
+import { CartLeaseCountdown, CartLeaseRecovery } from '@/features/shop/CartLeaseUi'
+import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
+import { CartLeaseExpired } from '@/features/shop/contracts/cartLeaseContract'
 
 /**
- * S29 order review (F039, connected): shows the shopper what they are about
- * to buy and pay for — the address/coupon inputs and computed summary the
- * checkout page collected (carried by `orderDraftState`). With no draft
- * (direct visit, stale link) it redirects back to checkout. The "place order"
- * action calls B031's order-creation endpoint (which revalidates shipping and
- * coupon, snapshots the cart and generates the order number / tracking code),
- * immediately initiates a B032 sandbox payment, stores the placed-order
- * carrier, and navigates to the sandbox bank page only after both calls
- * succeed. A stock-race failure (the cart consumed between the checkout
- * summary and order creation) surfaces as a clear error, not a broken page.
+ * S29 order review (F039, connected) + S36 reservation lease (F048, mock
+ * phase).
+ *
+ * B040 makes order creation verify the cart lease first. In this mock phase
+ * the page reads the stored cart through the shared `useCartLease` hook
+ * (backed by the B040 mock now, the HTTP client after F058) and surfaces the
+ * reservation countdown next to the review header:
+ *
+ * - a `410 shop_cart_expired` (thrown as `CartLeaseExpired`) — on the read,
+ *   or when order creation itself rejects — swaps the page to the shared
+ *   recovery panel, clearing ONLY this tenant's cart id and order draft;
+ * - a missing/empty cart is the neutral empty state and a network failure is
+ *   the unavailable state with a retry — neither is an expiry;
+ * - the countdown is display-only: no polling, no auto-extend.
+ *
+ * The review content itself (the address/coupon inputs and computed summary
+ * the checkout page collected, carried by `orderDraftState` — now per-tenant)
+ * and the "place order" action (B031 order creation + B032 sandbox payment)
+ * are unchanged: with no draft (direct visit, stale link) it redirects back
+ * to checkout; a stock-race or other failure surfaces as a clear error.
  */
 export function OrderReviewPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
+  const { cartLease } = useShopClients()
+  const { state, reload, markLocalExpiry, forceExpired } = useCartLease(tenantId, cartLease)
+
   const [draft, setDraft] = useState<OrderDraft | null | undefined>(undefined)
   const [isPlacing, setIsPlacing] = useState(false)
   const [placeError, setPlaceError] = useState<string | null>(null)
 
   useEffect(() => {
-    setDraft(loadOrderDraft())
-  }, [])
+    setDraft(loadOrderDraft(tenantId))
+  }, [tenantId])
 
-  async function handlePlaceOrder() {
+  const handlePlaceOrder = useCallback(async () => {
     if (!draft) return
     setIsPlacing(true)
     setPlaceError(null)
     try {
       const { order, payment } = await placeOrderAndInitiatePayment(tenantId, draft)
-      savePlacedOrder({
+      savePlacedOrder(tenantId, {
         orderId: order.orderId,
         orderNumber: order.orderNumber,
         trackingCode: order.trackingCode,
@@ -41,18 +62,83 @@ export function OrderReviewPage() {
       })
       navigate(`/shop/${tenantId}/bank`)
     } catch (error) {
+      if (error instanceof CartLeaseExpired) {
+        // The lease died between the review load and order creation: the
+        // server is authoritative here, so flip to recovery unconditionally
+        // (clears only this tenant's cart id and order draft).
+        forceExpired()
+        return
+      }
       setPlaceError(error instanceof Error ? error.message : 'خطایی رخ داد.')
     } finally {
       setIsPlacing(false)
     }
-  }
+  }, [draft, tenantId, navigate, forceExpired])
+
+  // ---- draft / lease gated render ----
 
   if (draft === undefined) return null
   if (draft === null) return <Navigate to={`/shop/${tenantId}/checkout`} replace />
 
+  if (state.kind === 'expired') {
+    return (
+      <section aria-label="بررسی نهایی سفارش" className="max-w-xl space-y-4">
+        <h1 className="text-2xl font-semibold">بررسی نهایی سفارش</h1>
+        <CartLeaseRecovery tenantId={tenantId} />
+      </section>
+    )
+  }
+
+  if (state.kind === 'empty' || state.kind === 'notFound') {
+    return (
+      <section aria-label="بررسی نهایی سفارش" className="max-w-xl space-y-4 text-center">
+        <h1 className="text-2xl font-semibold">بررسی نهایی سفارش</h1>
+        <p className="text-lg font-semibold">سبد خرید شما خالی است</p>
+        <p className="text-sm text-muted-foreground">برای ادامه سفارش، ابتدا محصولی به سبد اضافه کنید.</p>
+        <div className="pt-1">
+          <Link to={`/shop/${tenantId}`}>
+            <Button type="button">بازگشت به فروشگاه</Button>
+          </Link>
+        </div>
+      </section>
+    )
+  }
+
+  if (state.kind === 'loading' || state.kind === 'unavailable') {
+    return (
+      <section aria-label="بررسی نهایی سفارش" className="max-w-xl space-y-4" aria-busy={state.kind === 'loading'}>
+        <h1 className="text-2xl font-semibold">بررسی نهایی سفارش</h1>
+        {state.kind === 'unavailable' ? (
+          <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-5">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">اتصال برقرار نشد</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                در این لحظه به فروشگاه دسترسی نداریم. کمی بعد دوباره تلاش کنید.
+              </p>
+              <div className="pt-1">
+                <Button type="button" onClick={() => reload()}>
+                  تلاش دوباره
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4" aria-hidden="true">
+            <div className="h-24 animate-pulse rounded-xl bg-muted" />
+            <div className="h-32 animate-pulse rounded-xl bg-muted" />
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  // state.kind === 'ok'
   return (
     <section aria-label="بررسی نهایی سفارش" className="max-w-xl space-y-6">
-      <h1 className="text-2xl font-semibold">بررسی نهایی سفارش</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">بررسی نهایی سفارش</h1>
+        <CartLeaseCountdown expiresAtUtc={state.cart.expiresAtUtc} onExpiry={markLocalExpiry} />
+      </div>
 
       <div className="rounded-xl border border-border bg-surface p-5 shadow-soft">
         <p className="font-semibold">{draft.customerName}</p>

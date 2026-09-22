@@ -94,7 +94,7 @@ export async function placeOrderAndInitiatePayment(
   tenantId: string,
   draft: OrderDraft,
 ): Promise<{ order: OrderCreatedResponse; payment: InitiatePaymentResponse }> {
-  const cartId = getCartId()
+  const cartId = getCartId(tenantId)
   if (!cartId) throw new OrderCreationFailedError()
 
   const orderRequest: CreateOrderRequest = {
@@ -112,7 +112,7 @@ export async function placeOrderAndInitiatePayment(
   if (!orderResponse.ok) throw new OrderCreationFailedError()
   const order = (await readJson(orderResponse)) as OrderCreatedResponse
 
-  clearCartId()
+  clearCartId(tenantId)
 
   const paymentResponse = await postJson(`/api/shop/${tenantId}/orders/${order.orderId}/payments/initiate`, {})
   if (!paymentResponse.ok) throw new ApiUnavailableError()

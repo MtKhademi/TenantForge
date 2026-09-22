@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { mockShopCartLeaseClient } from './mockShopCartLeaseClient'
 import { mockShopCategoryClient } from './mockShopCategoryClient'
 import { mockShopDiscoveryClient } from './mockShopDiscoveryClient'
 import { mockShopMediaClient } from './mockShopMediaClient'
 import { mockShopProfileClient } from './mockShopProfileClient'
+import type { ShopCartLeaseClient } from './ShopCartLeaseClient'
 import type { ShopCategoryClient } from './ShopCategoryClient'
 import type { ShopDiscoveryClient } from './ShopDiscoveryClient'
 import type { ShopMediaClient } from './ShopMediaClient'
@@ -18,7 +20,7 @@ export type ShopClients = {
   discovery: ShopDiscoveryClient // F045 mock -> F055 HTTP
   categories: ShopCategoryClient // F046 mock -> F056 HTTP
   profile: ShopProfileClient // F047 mock -> F057 HTTP
-  // F048 adds:  cartLease: ShopCartLeaseClient        -> F058 HTTP
+  cartLease: ShopCartLeaseClient // F048 mock -> F058 HTTP
   // F049 adds:  coupons: ShopCouponClient             -> F059 HTTP
   // F050 adds:  orders: ShopOrdersClient              -> F060 HTTP
   // F051 adds:  orderOperations: ShopOrderOperationsClient -> F061 HTTP
@@ -31,6 +33,7 @@ export function createShopClients(): ShopClients {
     discovery: mockShopDiscoveryClient,
     categories: mockShopCategoryClient,
     profile: mockShopProfileClient,
+    cartLease: mockShopCartLeaseClient,
   }
 }
 
@@ -68,6 +71,7 @@ function DevScenarioToolbar() {
   const [DiscoverySwitcher, setDiscoverySwitcher] = useState<ComponentType | null>(null)
   const [CategorySwitcher, setCategorySwitcher] = useState<ComponentType | null>(null)
   const [ProfileSwitcher, setProfileSwitcher] = useState<ComponentType | null>(null)
+  const [CartLeaseSwitcher, setCartLeaseSwitcher] = useState<ComponentType | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -83,6 +87,9 @@ function DevScenarioToolbar() {
     void import('../DevProfileScenarioSwitcher').then((module) => {
       if (!cancelled) setProfileSwitcher(() => module.DevProfileScenarioSwitcher)
     })
+    void import('../DevCartLeaseScenarioSwitcher').then((module) => {
+      if (!cancelled) setCartLeaseSwitcher(() => module.DevCartLeaseScenarioSwitcher)
+    })
     return () => {
       cancelled = true
     }
@@ -94,6 +101,7 @@ function DevScenarioToolbar() {
       {DiscoverySwitcher ? <DiscoverySwitcher /> : null}
       {CategorySwitcher ? <CategorySwitcher /> : null}
       {ProfileSwitcher ? <ProfileSwitcher /> : null}
+      {CartLeaseSwitcher ? <CartLeaseSwitcher /> : null}
     </>
   )
 }

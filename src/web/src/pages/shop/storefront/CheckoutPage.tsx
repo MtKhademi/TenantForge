@@ -1,26 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWatch, useForm } from 'react-hook-form'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
-import { fetchCheckoutSummary, CheckoutValidationError, type CheckoutSummaryResponse } from '@/features/shop/checkoutAdapter'
+import {
+  fetchCheckoutSummary,
+  CheckoutValidationError,
+  type CheckoutSummaryResponse,
+} from '@/features/shop/checkoutAdapter'
+import { useCartLease } from '@/features/shop/useCartLease'
 import { saveOrderDraft } from '@/features/shop/orderDraftState'
+import { CartLeaseCountdown, CartLeaseRecovery } from '@/features/shop/CartLeaseUi'
+import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
 
 /**
- * S28 checkout (F037): the public storefront checkout page, connected to
- * B030's real, compute-only checkout-summary endpoint via `checkoutAdapter`.
- * An address form (province, city, address line, postal code) and a
- * coupon-code field drive a debounced (300ms) recompute of the live order
- * summary (subtotal, discount, shipping, grand total) so rapid typing does
- * not fire one request per keystroke. The API's distinct errors — an empty
- * cart (`EmptyCartError`, the 404) and an unshippable province or invalid
- * coupon (`CheckoutValidationError`, the 400) — surface as a plain message
- * in the summary panel instead of a silently-wrong total. No order is
- * created here; the "continue" action saves the checkout inputs and the
- * computed summary into `orderDraftState` (F038) and navigates to
- * `/order-review`, where the review → bank → result flow picks them up.
+ * S28 checkout (F037) + S36 reservation lease (F048, mock phase).
+ *
+ * B040 makes the checkout summary verify the cart lease before pricing. In
+ * this mock phase that verification runs through the shared `useCartLease`
+ * hook (backed by the B040 mock now, the HTTP client after F058): the page
+ * reads the stored cart on mount and the summary panel carries the
+ * reservation countdown.
+ *
+ * - a `410 shop_cart_expired` (or the local countdown reaching zero) swaps the
+ *   whole page to the shared recovery panel, clearing ONLY this tenant's cart
+ *   id and order draft — other tenants' stored carts are untouched;
+ * - a missing/empty cart is the neutral empty state and a network failure is
+ *   the unavailable state with a retry — neither is an expiry;
+ * - the countdown is display-only: no polling, no auto-extend.
+ *
+ * The address/coupon form and the debounced (300ms) recompute of the live
+ * order summary (B030, real API via `checkoutAdapter`) are unchanged; the
+ * "continue" action saves the checkout inputs and computed summary into
+ * `orderDraftState` (now per-tenant) and navigates to `/order-review`.
  */
 const checkoutSchema = z.object({
   customerName: z.string().min(1, 'نام الزامی است.'),
@@ -36,6 +50,8 @@ type CheckoutFormValues = z.infer<typeof checkoutSchema>
 export function CheckoutPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
+  const { cartLease } = useShopClients()
+  const { state, reload, markLocalExpiry } = useCartLease(tenantId, cartLease)
   const { register, control, getValues, formState: { errors } } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
@@ -43,6 +59,7 @@ export function CheckoutPage() {
       shippingAddressLine: '', shippingPostalCode: '', couponCode: '',
     },
   })
+
   const [summary, setSummary] = useState<CheckoutSummaryResponse | null>(null)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   // `useWatch` (not the render-phase `watch` helper) is the project idiom
@@ -101,6 +118,61 @@ export function CheckoutPage() {
     void recompute()
   }, [recompute, province, city, addressLine, postalCode, couponCode])
 
+  // ---- lease-gated render ----
+
+  if (state.kind === 'expired') {
+    return (
+      <section aria-label="تسویه حساب" className="space-y-4">
+        <h1 className="text-2xl font-semibold">تسویه حساب</h1>
+        <CartLeaseRecovery tenantId={tenantId} />
+      </section>
+    )
+  }
+
+  if (state.kind === 'empty' || state.kind === 'notFound') {
+    return (
+      <section aria-label="تسویه حساب" className="space-y-4 text-center">
+        <h1 className="text-2xl font-semibold">تسویه حساب</h1>
+        <p className="text-lg font-semibold">سبد خرید شما خالی است</p>
+        <p className="text-sm text-muted-foreground">برای ادامه تسویه حساب، ابتدا محصولی به سبد اضافه کنید.</p>
+        <div className="pt-1">
+          <Link to={`/shop/${tenantId}`}>
+            <Button type="button">بازگشت به فروشگاه</Button>
+          </Link>
+        </div>
+      </section>
+    )
+  }
+
+  if (state.kind === 'loading' || state.kind === 'unavailable') {
+    return (
+      <section aria-label="تسویه حساب" className="space-y-4" aria-busy={state.kind === 'loading'}>
+        <h1 className="text-2xl font-semibold">تسویه حساب</h1>
+        {state.kind === 'unavailable' ? (
+          <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-5">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">اتصال برقرار نشد</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                در این لحظه به فروشگاه دسترسی نداریم. کمی بعد دوباره تلاش کنید.
+              </p>
+              <div className="pt-1">
+                <Button type="button" onClick={() => reload()}>
+                  تلاش دوباره
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4" aria-hidden="true">
+            <div className="h-8 w-56 animate-pulse rounded-md bg-muted" />
+            <div className="h-64 animate-pulse rounded-xl bg-muted" />
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  // state.kind === 'ok'
   return (
     <section aria-label="تسویه حساب" className="grid gap-8 md:grid-cols-2">
       <form className="space-y-4" noValidate>
@@ -137,7 +209,10 @@ export function CheckoutPage() {
       </form>
 
       <div className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-soft">
-        <h2 className="text-lg font-semibold">خلاصه سفارش</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">خلاصه سفارش</h2>
+          <CartLeaseCountdown expiresAtUtc={state.cart.expiresAtUtc} onExpiry={markLocalExpiry} />
+        </div>
         {summaryError && <p role="alert" className="text-sm font-semibold text-destructive">{summaryError}</p>}
         {summary && (
           <dl className="space-y-2 text-sm">
@@ -154,7 +229,7 @@ export function CheckoutPage() {
           onClick={() => {
             if (!summary) return
             const values = getValues()
-            saveOrderDraft({
+            saveOrderDraft(tenantId, {
               customerName: values.customerName,
               customerPhone: values.customerPhone,
               shippingProvince: values.shippingProvince,

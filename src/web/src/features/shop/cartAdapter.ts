@@ -33,7 +33,7 @@ async function createCart(tenantId: string): Promise<string> {
   const response = await request(`/api/shop/${tenantId}/carts`, { method: 'POST' })
   if (!response.ok) throw new ApiUnavailableError()
   const body = (await readJson(response)) as { cartId: string }
-  setCartId(body.cartId)
+  setCartId(tenantId, body.cartId)
   return body.cartId
 }
 
@@ -43,7 +43,7 @@ async function createCart(tenantId: string): Promise<string> {
  * goes through this first.
  */
 async function ensureCartId(tenantId: string): Promise<string> {
-  const stored = getCartId()
+  const stored = getCartId(tenantId)
   if (stored) return stored
   return createCart(tenantId)
 }
@@ -69,7 +69,7 @@ export const cartAdapter = {
       body: JSON.stringify({ productVariantId, quantity }),
     })
     if (response.status === 404) {
-      clearCartId()
+      clearCartId(tenantId)
       const freshCartId = await createCart(tenantId)
       const retry = await request(`/api/shop/${tenantId}/carts/${freshCartId}/items`, {
         method: 'POST',
@@ -98,11 +98,11 @@ export const cartAdapter = {
   },
 
   async getCart(tenantId: string): Promise<CartResponse | null> {
-    const cartId = getCartId()
+    const cartId = getCartId(tenantId)
     if (!cartId) return null
     const response = await request(`/api/shop/${tenantId}/carts/${cartId}`)
     if (response.status === 404) {
-      clearCartId()
+      clearCartId(tenantId)
       return null
     }
     return parseCartResponse(response)
