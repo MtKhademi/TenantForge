@@ -43,6 +43,26 @@ internal sealed class ShopCouponMap : IEntityTypeConfiguration<ShopCoupon>
             .HasColumnType("numeric(12,2)")
             .IsRequired();
 
+        builder.Property(coupon => coupon.MinimumSubtotal)
+            .HasColumnName("minimum_subtotal")
+            .HasColumnType("numeric(12,2)")
+            .IsRequired();
+
+        builder.Property(coupon => coupon.MaximumDiscountAmount)
+            .HasColumnName("maximum_discount_amount")
+            .HasColumnType("numeric(12,2)");
+
+        builder.Property(coupon => coupon.RedemptionLimit)
+            .HasColumnName("redemption_limit");
+
+        builder.Property(coupon => coupon.RedeemedCount)
+            .HasColumnName("redeemed_count")
+            .IsRequired();
+
+        builder.Property(coupon => coupon.Version)
+            .HasColumnName("version")
+            .IsRequired();
+
         builder.Property(coupon => coupon.IsActive)
             .HasColumnName("is_active")
             .IsRequired();

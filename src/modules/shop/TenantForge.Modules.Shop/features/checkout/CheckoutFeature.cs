@@ -6,6 +6,7 @@ using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Carts;
+using TenantForge.Modules.Shop.Features.Coupons;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Checkout;
@@ -19,6 +20,7 @@ internal static class CheckoutFeature
             CheckoutSummaryRequest request,
             ShopDbContext db,
             IShopCartExpiryService expiryService,
+            TimeProvider timeProvider,
             CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
@@ -60,19 +62,29 @@ internal static class CheckoutFeature
             decimal discountAmount = 0;
             if (!string.IsNullOrWhiteSpace(request.CouponCode))
             {
+                // B041: preview mode — Evaluate is pure and never writes. The
+                // lookup is tenant-first, so a null result is coupon_not_found,
+                // identical for "does not exist" and "belongs to another tenant"
+                // (nothing is leaked either way).
                 var normalizedCode = request.CouponCode.Trim().ToUpperInvariant();
                 var coupon = await db.Coupons.AsNoTracking()
                     .SingleOrDefaultAsync(coupon => coupon.TenantId == tenantTsid && coupon.NormalizedCode == normalizedCode);
 
-                if (coupon is null || !coupon.IsActive || coupon.ExpiresAtUtc < DateTimeOffset.UtcNow)
+                if (coupon is null)
                 {
-                    errors["couponCode"] = ["This coupon code is not valid."];
+                    errors["couponCode"] = [ShopCouponPolicy.MessageFor(ShopCouponPolicy.CouponNotFound)];
                 }
                 else
                 {
-                    discountAmount = coupon.DiscountType == ShopDiscountType.Percentage
-                        ? Math.Round(subTotal * coupon.DiscountValue / 100m, 2)
-                        : Math.Min(coupon.DiscountValue, subTotal);
+                    var evaluation = ShopCouponPolicy.Evaluate(coupon, subTotal, timeProvider.GetUtcNow());
+                    if (!evaluation.IsValid)
+                    {
+                        errors["couponCode"] = [ShopCouponPolicy.MessageFor(evaluation.ErrorCode!)];
+                    }
+                    else
+                    {
+                        discountAmount = evaluation.DiscountAmount;
+                    }
                 }
             }
 
