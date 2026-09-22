@@ -26,11 +26,13 @@ never a permission request.
 
 ## Session length management (applies throughout)
 
-Monitor token usage across phases. When usage exceeds roughly 120K tokens, run
-`/compact` to compress the session context, then immediately resume the
-currently `in_progress` todo. Compaction is routine session hygiene: it never
-pauses for user approval and is not one of the two blocking approval gates
-above.
+Monitor token usage continuously, including mid-phase — between individual
+tool calls or todos, not just at phase boundaries. As soon as usage crosses
+150K tokens at any point during execution, stop after the current tool call,
+run `/compact` to compress the session context, then immediately resume the
+currently `in_progress` todo from exactly where it left off. Compaction is
+routine session hygiene: it never pauses for user approval and is not one of
+the two blocking approval gates above.
 
 ---
 
@@ -176,7 +178,12 @@ Before approval, do not edit product or task files, install packages or run
 build commands. Do not split the plan into several permission questions.
 
 After approval: call `todowrite` with the approved sequence and change only the
-active ledger row from `planned` to `in_progress`.
+active ledger row from `planned` to `in_progress`. Then, before starting
+Phase 5, run `/compact` exactly once to compress the context accumulated
+during discovery and planning, and immediately resume the first
+`in_progress` todo afterward. This compaction is unconditional — it runs
+regardless of current token usage — and is not one of the two blocking
+approval gates.
 
 ## Phase 5 — Implement
 
