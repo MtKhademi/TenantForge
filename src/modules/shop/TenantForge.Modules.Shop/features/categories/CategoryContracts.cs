@@ -1,8 +1,8 @@
 namespace TenantForge.Modules.Shop.Features.Categories;
 
-public sealed record CreateCategoryRequest(string? Name, string? Slug, int DisplayOrder);
+public sealed record CreateCategoryRequest(string? Name, string? Slug, int DisplayOrder, string? ParentCategoryId);
 
-public sealed record UpdateCategoryRequest(string? Name, string? Slug, int DisplayOrder, bool IsActive);
+public sealed record UpdateCategoryRequest(string? Name, string? Slug, int DisplayOrder, bool IsActive, string? ParentCategoryId);
 
 public sealed record CategoryResponse(
     string Id,
@@ -10,7 +10,8 @@ public sealed record CategoryResponse(
     string Name,
     string Slug,
     int DisplayOrder,
-    bool IsActive);
+    bool IsActive,
+    string? ParentCategoryId);
 
 public sealed record CategoryListResponse(
     IReadOnlyList<CategoryResponse> Categories,

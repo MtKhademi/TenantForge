@@ -214,6 +214,24 @@ dotnet.exe ef migrations add <Name> \
 11. In LINQ, `OrderBy` after `OrderBy` **replaces** the first ordering; use
     `ThenBy`/`ThenByDescending` to keep a primary ordering (e.g. sold-out-last)
     stable across the chosen secondary sort.
+12. To build a translatable `Where` predicate dynamically (a reusable rule
+    applied to several routes), capture the source `IQueryable` in a
+    normally-written lambda and return it as
+    `Expression<Func<T, bool>>` (see `CategoryVisibility.For` in
+    `features/categories/`) — EF Core translates the captured queryable into a
+    correlated `EXISTS`. A hand-built `Expression.Constant`/`Expression.Call`
+    tree is **not** translated and 500s at query-translation time.
+13. Close check-then-write races with a row lock held across the write:
+    `db.Set.FromSqlRaw("SELECT * FROM <table> WHERE tenant_id = {0} AND id =
+    {1} FOR UPDATE", …)` inside the transaction, then the guard check and
+    `SaveChangesAsync` (B038's reparent guard uses this for `shop_categories`).
+    A bare `AnyAsync` before the write does not close the race.
+14. Shop categories are exactly two levels (root + one child, B038). Public
+    visibility is "effective activity": a category shows on **every** public
+    route (list, by-slug, all-products, detail, media bytes) only while it and
+    its root are `IsActive` — always route public eligibility through
+    `CategoryVisibility`; a root's slug includes its direct children's
+    products, a child's slug only its own.
 
 ## Decisions future tasks must preserve
 

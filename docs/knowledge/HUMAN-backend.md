@@ -61,7 +61,9 @@ contract and the permission catalog contracts.
 
 **Shop**
 
-- tenant-scoped category and product administration;
+- tenant-scoped category and product administration, including one level of
+  subcategories: a category can be a root or a direct child of a root (never
+  deeper), and the public storefront groups children under their root;
 - product image galleries: upload, reorder and delete, with real image
   decoding/validation and safe local storage;
 - a public storefront catalog, including each product's ordered image
@@ -102,6 +104,15 @@ treated as a control.
 **BuildingBlocks has an admission rule.** A type only moves there once it has
 proven cross-module value. This is deliberate friction — it stops the project
 from growing a `Common` bucket that everything depends on.
+
+**"Effective" visibility is one shared rule, and check-then-write is
+race-safe.** A storefront category is only public while it *and* its root are
+active — one rule, applied by every public read (category list, product
+filtering, product detail, image bytes) so a deactivated root cannot leak a
+child through one route while hiding it from another. The rule that a parent
+which already has children can never itself become a child is enforced with a
+row lock held across the check and the write, not a read-then-hope check, so
+two simultaneous requests cannot both win.
 
 **Integration tests over unit mocks.** Security-sensitive behavior is tested
 against a real PostgreSQL instance through Testcontainers, covering both the

@@ -12,11 +12,19 @@ internal sealed class ShopCategory
     public int DisplayOrder { get; private set; }
     public bool IsActive { get; private set; } = true;
 
+    /// <summary>
+    /// B038: the id of this category's direct root parent, or null for a root.
+    /// Maximum depth is root + one direct child; a root that already has
+    /// children can never itself become a child (enforced in the feature, not
+    /// here — this property is a plain state holder).
+    /// </summary>
+    public Tsid? ParentCategoryId { get; private set; }
+
     private ShopCategory()
     {
     }
 
-    public static ShopCategory Create(Tsid tenantId, string name, string slug, int displayOrder)
+    public static ShopCategory Create(Tsid tenantId, string name, string slug, int displayOrder, Tsid? parentTsid = null)
     {
         if (TsidId.IsDefault(tenantId))
         {
@@ -40,15 +48,17 @@ internal sealed class ShopCategory
             Name = name.Trim(),
             Slug = slug.Trim().ToLowerInvariant(),
             DisplayOrder = displayOrder,
-            IsActive = true
+            IsActive = true,
+            ParentCategoryId = parentTsid
         };
     }
 
-    public void Update(string name, string slug, int displayOrder, bool isActive)
+    public void Update(string name, string slug, int displayOrder, bool isActive, Tsid? parentTsid)
     {
         Name = name.Trim();
         Slug = slug.Trim().ToLowerInvariant();
         DisplayOrder = displayOrder;
         IsActive = isActive;
+        ParentCategoryId = parentTsid;
     }
 }
