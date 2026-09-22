@@ -366,3 +366,21 @@ public sealed class ShopProfileDbFixture : IamDbFixtureBase
 public sealed class ShopProfileIsolatedCollection : ICollectionFixture<ShopProfileDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B041's coupon-rules tests (enforceable minimums,
+/// discount caps, redemption limits, atomic redemption, admin update
+/// concurrency, and cross-tenant isolation). Kept off the other Shop databases
+/// so their row-count and cart/order assertions stay stable.
+/// </summary>
+public sealed class ShopCouponRulesDbFixture : IamDbFixtureBase
+{
+    public ShopCouponRulesDbFixture() : base("tenantforge_shop_coupon_rules_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopCouponRulesIsolatedCollection))]
+public sealed class ShopCouponRulesIsolatedCollection : ICollectionFixture<ShopCouponRulesDbFixture>
+{
+}

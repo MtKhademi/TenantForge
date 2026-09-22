@@ -19,11 +19,12 @@ mismatch and verify before trusting either.
 9. [Endpoint catalog](#9-endpoint-catalog)
 10. [Product media](#10-product-media)
 11. [Inventory reservation](#11-inventory-reservation)
-12. [Sandbox payment](#12-sandbox-payment)
-13. [Storefront profile and policies](#13-storefront-profile-and-policies)
-14. [Test map and commands](#14-test-map-and-commands)
-15. [Current limitations](#15-current-limitations)
-16. [Change-impact checklist](#16-change-impact-checklist)
+12. [Coupon rules](#12-coupon-rules)
+13. [Sandbox payment](#13-sandbox-payment)
+14. [Storefront profile and policies](#14-storefront-profile-and-policies)
+15. [Test map and commands](#15-test-map-and-commands)
+16. [Current limitations](#16-current-limitations)
+17. [Change-impact checklist](#17-change-impact-checklist)
 
 ## 1. Purpose and non-goals
 
@@ -49,7 +50,7 @@ Shop explicitly does **not** own:
 - cloud object storage, video, image-cropping UI or CDN signing for product
   media (see [Section 10](#10-product-media));
 - real payment-gateway integration (only an in-app sandbox exists — see
-  [Section 12](#12-sandbox-payment));
+  [Section 13](#13-sandbox-payment));
 - customer accounts (every Shop-facing flow outside the authenticated admin
   routes is deliberately anonymous, matching a guest-first storefront).
 
@@ -65,7 +66,7 @@ Shop explicitly does **not** own:
 | Permission model | `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage` — tenant Owner bypass, or an assigned `TenantRole` carrying the key (IAM-owned role storage, Shop-owned check) — see [Section 8](#8-tenantauth-rules) |
 | Test project | `tests/integration/TenantForge.Api.IntegrationTests/TenantForge.Api.IntegrationTests.csproj` |
 | Local SDK/runtime notes | No Linux `dotnet`; use `dotnet.exe` — see `docs/architecture.md#local-development-environment-wsl--windows-net-sdk` |
-| Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 16](#16-change-impact-checklist) |
+| Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 17](#17-change-impact-checklist) |
 
 ## 3. Dependency and composition boundary
 
@@ -138,17 +139,17 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Product media | `src/modules/shop/TenantForge.Modules.Shop/features/media/` | `ProductMediaFeature`, `ProductMediaContracts`, `IShopMediaStorage`/`LocalShopMediaStorage`, `ShopImageValidator` — see [Section 10](#10-product-media) |
 | Public storefront reads | `src/modules/shop/TenantForge.Modules.Shop/features/storefront/` | `StorefrontCatalogFeature`, `StorefrontContracts` — the first anonymous endpoints in TenantForge |
 | Shipping-rate admin | `src/modules/shop/TenantForge.Modules.Shop/features/shipping/` | `ShippingRatesFeature`, `ShippingRateContracts` |
-| Coupon admin | `src/modules/shop/TenantForge.Modules.Shop/features/coupons/` | `CouponsFeature`, `CouponContracts` |
+| Coupon admin | `src/modules/shop/TenantForge.Modules.Shop/features/coupons/` | `CouponsFeature`, `CouponContracts`, `ShopCouponPolicy` (the single pure owner of every coupon rule) — see [Section 12](#12-coupon-rules) |
 | Cart | `src/modules/shop/TenantForge.Modules.Shop/features/carts/` | `CartsFeature`, `CartContracts` — see [Section 11](#11-inventory-reservation) |
 | Checkout summary | `src/modules/shop/TenantForge.Modules.Shop/features/checkout/` | `CheckoutFeature`, `CheckoutContracts` (read/compute-only) |
 | Order creation | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` | `OrderCreationFeature`, `OrderContracts`, `OrderLookupFeature`, `OrderLookupContracts` |
-| Sandbox payment | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway` — see [Section 12](#12-sandbox-payment) |
-| Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 13](#13-storefront-profile-and-policies) |
+| Sandbox payment | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway` — see [Section 13](#13-sandbox-payment) |
+| Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 14](#14-storefront-profile-and-policies) |
 | Pagination | `src/modules/shop/TenantForge.Modules.Shop/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` (Shop's own copy — not shared with IAM's) |
 | Persistence context/maps | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/` | `ShopDbContext`, `*Map.cs`, `ShopTsidValueConverter` |
 | Migrations | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` | Chronological schema history, see [Section 7](#7-persistence) |
 | Integration test fixtures | `tests/integration/TenantForge.Api.IntegrationTests/ApiFactory.cs`, `IamDbFixture.cs` | `WebApplicationFactory` setup, per-suite Postgres fixtures (Shop uses its own isolated collections) |
-| Focused test classes | `tests/integration/TenantForge.Api.IntegrationTests/Shop*.cs` | See [Section 14](#14-test-map-and-commands) |
+| Focused test classes | `tests/integration/TenantForge.Api.IntegrationTests/Shop*.cs` | See [Section 15](#15-test-map-and-commands) |
 | Persistent HTTP contract reference | `docs/design/shop/http-contracts.md` | The wire-shape source of truth per slice, kept in step with delivered code |
 | BuildingBlocks permissions seam | `src/building-blocks/TenantForge.BuildingBlocks/Permissions/` | `IPermissionCatalogContributor`, `PermissionGroup`, `PermissionDescriptor`, `IAggregatedPermissionCatalog` |
 
@@ -184,13 +185,13 @@ are `internal` (not reachable outside the module).
 | `ShopProductVariant.cs` | `Tsid Id` | `ProductId` | `StockQuantity` decremented atomically on cart-add, released on cart removal — see [Section 11](#11-inventory-reservation); `PriceOverride` optional, falls back to the product's `BasePrice` |
 | `ShopSizeGuideColumn.cs`/`ShopSizeGuideRow.cs`/`ShopSizeGuideCell.cs` | `Tsid Id` each | → `ShopProduct`/`ShopSizeGuideRow` | Replaced wholesale on every product update (no partial edit) |
 | `ShopShippingRate.cs` | `Tsid Id` | none | One rate per `(TenantId, ProvinceName)` |
-| `ShopCoupon.cs` | `Tsid Id` | none | `Code`/`NormalizedCode` (upper-cased) unique per tenant; `DiscountType` is `Percentage` or `FixedAmount`; `Deactivate()` is the only state-removal path (no hard delete) |
+| `ShopCoupon.cs` | `Tsid Id` | none | `Code`/`NormalizedCode` (upper-cased) unique per tenant; `DiscountType` is `Percentage` or `FixedAmount`; `Deactivate()` is the only state-removal path (no hard delete); B041 adds `MinimumSubtotal` (≥0), `MaximumDiscountAmount` (nullable, caps the discount), `RedemptionLimit` (nullable, `null`=unlimited, else `1..1,000,000`), `RedeemedCount` (≥0, only ever incremented atomically at order creation) and a client-managed `Version` (starts at `0`, bumped on every admin save incl. deactivate) — see [Section 12](#12-coupon-rules) |
 | `ShopCart.cs` | `Tsid Id` | optional `CouponId` | Anonymous — ownership is by opaque cart id alone, no account link; `Status` is `Active`/`Converted`/`Expired`, `LastTouchedAtUtc` and `ExpiresAtUtc` define the server-owned reservation lease, and `ClosedAtUtc` is set when the cart is converted or expired |
 | `ShopCartItem.cs` | `Tsid Id` | `CartId`, `ProductVariantId` | `UnitPriceSnapshot` frozen at add-time; `Quantity` must stay positive |
 | `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot |
 | `ShopOrderItem.cs` | `Tsid Id` | `OrderId` | Snapshots product name/variant label/unit price at order-creation time — never a live join back to the catalog |
 | `ShopPaymentAttempt.cs` | `Tsid Id` | `OrderId` (no `TenantId` column — filter through `ShopOrder` when tenant-scoping is required) | `Status` (`Initiated`/`Succeeded`/`Failed`); `TryResolve` is idempotent — a second callback for an already-resolved attempt returns `false` and changes nothing |
-| `ShopProfile.cs` | `Tsid Id` | `TenantId` (unique — exactly one profile row per tenant, enforced by a unique index, not a relationship) | All text is plain text (never HTML); every field is trimmed on the outside only, internal newlines preserved; `InstagramUrl` (nullable) must be HTTPS on `instagram.com`/a subdomain; `SupportPhone` is a conservative display allowlist (digits, spaces, `+`, `-`, `(`, `)`); `Version` is a client-managed optimistic-concurrency counter (starts at `1`, not a DB rowversion); `IsPublished` gates only the public profile/policy reads, never the catalog — see [Section 13](#13-storefront-profile-and-policies) |
+| `ShopProfile.cs` | `Tsid Id` | `TenantId` (unique — exactly one profile row per tenant, enforced by a unique index, not a relationship) | All text is plain text (never HTML); every field is trimmed on the outside only, internal newlines preserved; `InstagramUrl` (nullable) must be HTTPS on `instagram.com`/a subdomain; `SupportPhone` is a conservative display allowlist (digits, spaces, `+`, `-`, `(`, `)`); `Version` is a client-managed optimistic-concurrency counter (starts at `1`, not a DB rowversion); `IsPublished` gates only the public profile/policy reads, never the catalog — see [Section 14](#14-storefront-profile-and-policies) |
 
 ## 7. Persistence
 
@@ -204,7 +205,13 @@ Migration order (`infrastructure/Migrations/`, chronological):
 `InitialShopCatalog` → `AddShopCart` → `AddShopShippingRatesAndCoupons` →
 `AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia` →
 `AddShopCategoryHierarchy` → `AddShopProfile` →
-`AddShopCartReservationExpiry`. `AddShopCartReservationExpiry` adds
+`AddShopCartReservationExpiry` → `AddShopCouponRules`. `AddShopCouponRules` adds
+five columns to `shop_coupons` — `minimum_subtotal` (numeric, default `0`),
+`maximum_discount_amount` (numeric, nullable), `redemption_limit` (int,
+nullable), `redeemed_count` (int, default `0`) and `version` (int, default
+`0`) — backfilling every existing row to the Spec's defaults (unlimited, zero
+redeemed, version zero) so pre-B041 coupons keep working unchanged.
+`AddShopCartReservationExpiry` adds
 `status`, `last_touched_at_utc`, `expires_at_utc` and nullable
 `closed_at_utc` to `shop_carts`, backfills existing carts as `Active` with a
 30-minute lease from migration time, and creates
@@ -282,7 +289,7 @@ endpoint.
 | Permission key | Gated mutating endpoints |
 | --- | --- |
 | `Shop.Catalog.Manage` | `POST/PUT /api/tenants/{tenantId}/shop/categories*`, `POST/PUT /api/tenants/{tenantId}/shop/products*`, every product-media mutation (`POST`/`PUT`/`DELETE` under `.../images*`) |
-| `Shop.Shipping.Manage` | `POST /api/tenants/{tenantId}/shop/shipping-rates`, `POST /api/tenants/{tenantId}/shop/coupons` |
+| `Shop.Shipping.Manage` | `POST /api/tenants/{tenantId}/shop/shipping-rates`, `POST`/`PUT /api/tenants/{tenantId}/shop/coupons*`, `PATCH …/coupons/{couponId}/deactivate` |
 | `Shop.Settings.Manage` | `PUT /api/tenants/{tenantId}/shop/profile` (the admin profile read is membership-only, like every other read-only admin route) |
 
 Public/anonymous routes enforce tenant isolation only through the
@@ -294,7 +301,7 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 
 ## 9. Endpoint catalog
 
-33 routes, one row per literal `Map*` call in
+34 routes, one row per literal `Map*` call in
 `src/modules/shop/TenantForge.Modules.Shop/features/**`.
 
 | Method & path | Purpose | Auth | Feature file |
@@ -317,8 +324,9 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `GET /api/shop/{tenantId}/products/{productSlug}` | Product detail (variants, size guide, gallery); `404` if the owning category is not effectively active | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/shipping-rates` | List shipping rates | Membership | `shipping/ShippingRatesFeature.cs` |
 | `POST /api/tenants/{tenantId}/shop/shipping-rates` | Set a province's shipping rate | `Shop.Shipping.Manage` | `shipping/ShippingRatesFeature.cs` |
-| `POST /api/tenants/{tenantId}/shop/coupons` | Create a coupon | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
+| `POST /api/tenants/{tenantId}/shop/coupons` | Create a coupon (carries `minimumSubtotal`, `maximumDiscountAmount`, `redemptionLimit`) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/coupons` | List coupons | Membership | `coupons/CouponsFeature.cs` |
+| `PUT /api/tenants/{tenantId}/shop/coupons/{couponId}` | Update a coupon (optimistic concurrency via `expectedVersion` → `409 stale_version`; `redemptionLimit` below `redeemedCount` → `400`) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `PATCH /api/tenants/{tenantId}/shop/coupons/{couponId}/deactivate` | Deactivate a coupon (the only state-removal path — no hard delete) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `POST /api/shop/{tenantId}/carts` | Create an anonymous cart and return its server-owned `expiresAtUtc` lease | Anonymous | `carts/CartsFeature.cs` |
 | `POST /api/shop/{tenantId}/carts/{cartId}/items` | Add/merge an item, reserving live stock and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
@@ -436,12 +444,71 @@ lease length. Successful add/update/delete mutations extend
 .EnsureActiveAsync` locks a cart before checkout/order/cart-read work and, when
 an active cart is due, atomically marks it `Expired`, restores grouped variant
 stock, removes cart item rows and commits. The background
-`ShopCartCleanupWorker` calls `ExpireDueAsync` in deterministic `(status,
-expires_at_utc, id)` batches; converted carts are ignored. Expired carts return
-RFC 7807 `410 Gone` with `type: "shop_cart_expired"` on cart, checkout-summary
-and order-creation routes.
+ `ShopCartCleanupWorker` calls `ExpireDueAsync` in deterministic `(status,
+ expires_at_utc, id)` batches; converted carts are ignored. Expired carts return
+ RFC 7807 `410 Gone` with `type: "shop_cart_expired"` on cart, checkout-summary
+ and order-creation routes.
 
-## 12. Sandbox payment
+## 12. Coupon rules
+
+Introduced by B041. A coupon can now carry a minimum subtotal, a maximum
+discount cap and a total redemption limit, and every rule is centralized in one
+pure owner, `ShopCouponPolicy`
+(`src/modules/shop/TenantForge.Modules.Shop/features/coupons/ShopCouponPolicy.cs`),
+so the two call sites (checkout preview and order consumption) cannot drift.
+
+- **Fields** (`ShopCoupon`): `MinimumSubtotal` (decimal, ≥ 0),
+  `MaximumDiscountAmount` (nullable decimal, ≥ 0 when set — caps the computed
+  discount), `RedemptionLimit` (nullable int — `null` means unlimited; a set
+  value must be `1..1,000,000`), `RedeemedCount` (int, ≥ 0), and `Version`
+  (client-managed optimistic-concurrency counter, starts at `0`, bumped on every
+  admin save including deactivate). Constraints are enforced in validation code;
+  the Shop module uses no database check constraints, so the Spec's "also as a
+  database constraint if the module already uses them" clause does not apply.
+- **`ShopCouponPolicy.Evaluate(coupon, subtotal, nowUtc)`** is the single rule
+  owner. It is **pure**: it reads the already-loaded coupon and returns a
+  `CouponEvaluation` (valid flag, computed `DiscountAmount`, and a stable
+  `ErrorCode`). It never writes. The `coupon_not_found` case is **not** produced
+  by `Evaluate` — the caller looks the coupon up with a tenant-first predicate
+  and, when the lookup is null, returns `coupon_not_found` itself, so "does not
+  exist" and "belongs to another tenant" are indistinguishable on the wire
+  (non-leaking). The other rules are checked in a fixed order, stopping at the
+  first failure, returning exactly one of: `coupon_inactive`, `coupon_expired`
+  (strictly past `ExpiresAtUtc`), `coupon_minimum_not_met`
+  (`subtotal < MinimumSubtotal`), `coupon_limit_reached`
+  (`RedemptionLimit` set and `RedeemedCount >= RedemptionLimit`).
+- **Discount computation** (only when every gate passes): the raw discount is
+  the percentage (`subtotal * DiscountValue / 100`, rounded to 2dp) or the fixed
+  amount; it is then clamped down first to `MaximumDiscountAmount` (when set)
+  and then never past `subtotal` itself — the applied discount can never exceed
+  the goods.
+- **Preview vs consume** lives in the caller, not in `Evaluate`:
+  - checkout summary (`POST …/checkout/summary`) calls `Evaluate` in preview
+    mode and renders the result. It writes nothing and never increments
+    `RedeemedCount`.
+  - order creation (`POST …/orders`) calls `Evaluate` **again inside its
+    existing transaction**, after the cart `FOR UPDATE` lock, on a coupon row
+    loaded **tracked and locked `FOR UPDATE`** (lock order cart → coupon,
+    consistent, so no deadlock). On a valid result it calls
+    `coupon.RecordRedemption()` — exactly one increment, under the lock — and
+    creates the order with the computed discount. Two concurrent checkouts for
+    the last slot serialize on the row lock: the winner commits, the loser
+    re-reads the bumped count, fails `coupon_limit_reached`, rolls back, and its
+    cart is left active so it can retry without the coupon.
+- **Rejected-coupon response**: on the anonymous checkout/order routes a failed
+  evaluation surfaces as a `400 ValidationProblem` with a `couponCode` field
+  error carrying the exact stable code in parentheses
+  (e.g. `(coupon_limit_reached)`); the first three reasons keep the historical
+  "not valid" phrasing so B030/B031 tests stay green.
+- **Admin update** (`PUT /api/tenants/{tenantId}/shop/coupons/{couponId}`,
+  gated by `Shop.Shipping.Manage`): requires an `ExpectedVersion` matching the
+  stored `Version` or it is a `409` RFC 7807 `type=stale_version`. It rejects a
+  `redemptionLimit` below the current `RedeemedCount` (a `400` naming the field),
+  and the code/discount-type immutability after redemption is structural — the
+  request carries neither field, so neither can change. Deactivation
+  (`PATCH …/deactivate`) is always allowed and also bumps `Version`.
+
+## 13. Sandbox payment
 
 `IShopPaymentGateway` (`features/payments/IShopPaymentGateway.cs`) is the
 only seam a real provider would implement. `SandboxPaymentGateway` is the
@@ -453,7 +520,7 @@ already-resolved attempt changes nothing and reports failure. There is no
 stored card data and no gateway webhook signature scheme beyond what the
 sandbox needs to demonstrate the seam is real.
 
-## 13. Storefront profile and policies
+## 14. Storefront profile and policies
 
 Introduced by B039. A tenant publishes its store identity and customer
 policy pages — `ShopProfile` (one row per tenant, `shop_profiles`) holds
@@ -494,7 +561,7 @@ lower-cased, and the suffix check anchors on the dot so
 `instagram.com.evil.example` is rejected). Any violation is a `400`
 `ValidationProblem` naming the field.
 
-## 14. Test map and commands
+## 15. Test map and commands
 
 | Test class | Protects |
 | --- | --- |
@@ -510,6 +577,8 @@ lower-cased, and the suffix check anchors on the dot so
 | `ShopPaymentIntegrationTests.cs` | Sandbox initiate/callback, idempotent resolution |
 | `ShopOrderLookupIntegrationTests.cs` | Guest lookup contract, non-leaking generic not-found |
 | `ShopProfileIntegrationTests.cs` | B039 storefront profile: admin GET null-empty-state, create→update→GET round-trip with version bump, stale-version `409 stale_version`, concurrent first-create race (one `200`, one `409`, one row), tenant isolation (A cannot read/write B), `Shop.Settings.Manage` denial + role grant + Owner bypass, outside-trim / preserved-newlines / over-length validation, phone allowlist, Instagram URL rules (non-HTTPS / wrong host / look-alike domain), public `404` for missing/unpublished/malformed-id, public `200` shape with no `version`/`id`/`tenantId`/`updatedAtUtc`, and publication NOT gating the storefront catalog |
+| `ShopCouponRulesIntegrationTests.cs` | B041 coupon rules: `ShopCouponPolicy` ordered reason codes (`coupon_inactive`/`_expired`/`_minimum_not_met`/`_limit_reached` + the caller's `coupon_not_found`) with the exact stable code surfaced in the `couponCode` field error, percentage discount capped at `maximumDiscountAmount` (and never past the subtotal), checkout summary never incrementing `RedeemedCount`, order creation incrementing by exactly one and storing the evaluated discount, a forced downstream DB failure rolling the redemption back, the concurrent last-redemption race (one 201 with the discount, one 400 `coupon_limit_reached`, total +1, loser's cart left active), stale `expectedVersion` → `409 stale_version`, `redemptionLimit` below `redeemedCount` → `400` with no persisted change, and tenant B unable to read/update/redeem tenant A's coupon with a byte-identical `coupon_not_found` |
+| `ShopCouponRulesMigrationTests.cs` | B041 migration: a pre-`AddShopCouponRules` `shop_coupons` row backfills to `redemption_limit` NULL (unlimited), `redeemed_count` 0 and `version` 0, keeping its original fields so it stays usable |
 
 Commands:
 
@@ -524,7 +593,7 @@ for the WSL/Windows host-binding notes instead of repeating them here. The
 integration tests use Testcontainers; Docker must be running before any test
 command.
 
-## 15. Current limitations
+## 16. Current limitations
 
 Verified against current code (not aspirational):
 
@@ -537,7 +606,7 @@ Verified against current code (not aspirational):
   there is no login, no saved address book, no order history beyond the
   guest tracking-code lookup.
 - **Sandbox payment only** — no real gateway integration exists yet; see
-  [Section 12](#12-sandbox-payment).
+  [Section 13](#13-sandbox-payment).
 - **No full-text search engine, popularity/rating sort, recommendations,
   tags or faceted color/size filters** — B037's storefront discovery is
   name search + the four `newest`/`price-asc`/`price-desc`/`name` sorts only
@@ -546,12 +615,17 @@ Verified against current code (not aspirational):
 - **Category hierarchy is exactly two levels deep** — a root plus one direct
   child; grandchild creation is rejected (B038). There is no category
   deletion, no breadcrumbs deeper than two levels and no bulk reordering.
-- **No coupon usage limits, admin order operations or rate limiting** — these
-  remain unimplemented until their own later slice delivers them (see
-  `tasks/TASKS.md`'s Backend queue for current status; do not treat a
-  `planned` row as already-delivered behavior).
+- **No per-customer or product-specific coupons, no stacking, campaigns or
+  automatic promotions** — B041 delivers the tenant-wide minimum subtotal,
+  maximum-discount cap and total redemption limit only (see
+  [Section 12](#12-coupon-rules)); customer-scoped or item-scoped coupons remain
+  out of scope until their own slice.
+- **No admin order operations or rate limiting** — these remain unimplemented
+  until their own later slice delivers them (see `tasks/TASKS.md`'s Backend queue
+  for current status; do not treat a `planned` row as already-delivered
+  behavior).
 
-## 16. Change-impact checklist
+## 17. Change-impact checklist
 
 | Change | Mandatory SHOP.md sections |
 | --- | --- |
@@ -562,6 +636,7 @@ Verified against current code (not aspirational):
 | permission/membership/tenant rule | Tenant/auth rules; affected endpoint rows |
 | product media behavior | Product media |
 | inventory/stock behavior | Inventory reservation |
+| coupon rule/limit/redemption behavior | Coupon rules |
 | payment gateway behavior | Sandbox payment |
 | storefront profile/policy behavior | Storefront profile and policies |
 | test/verification path | Test map |
