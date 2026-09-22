@@ -30,6 +30,13 @@ internal sealed class ShopOrder
     public decimal GrandTotal { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// B042: optimistic-concurrency token for B043's order status actions.
+    /// Starts at 1 and is bumped by exactly the mutation task that changes
+    /// the order; B042 only persists and returns it, never bumps it.
+    /// </summary>
+    public int Version { get; private set; }
+
     private ShopOrder()
     {
     }
@@ -76,6 +83,9 @@ internal sealed class ShopOrder
     }
 
     public void MarkPaid() => Status = ShopOrderStatus.Paid;
+
+    /// <summary>B043's mutation path calls this exactly once per successful change.</summary>
+    public void BumpVersion() => Version++;
 
     public void MarkPaymentFailed()
     {

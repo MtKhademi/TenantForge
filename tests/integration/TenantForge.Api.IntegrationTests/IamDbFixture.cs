@@ -384,3 +384,21 @@ public sealed class ShopCouponRulesDbFixture : IamDbFixtureBase
 public sealed class ShopCouponRulesIsolatedCollection : ICollectionFixture<ShopCouponRulesDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B042's admin order-read tests (permission-gated
+/// list/detail, tenant isolation, filters, stable pagination, snapshot
+/// fidelity and the 20-attempt cap). Kept off the other Shop databases so
+/// their row-count and cart/order assertions stay stable.
+/// </summary>
+public sealed class ShopAdminOrdersDbFixture : IamDbFixtureBase
+{
+    public ShopAdminOrdersDbFixture() : base("tenantforge_shop_admin_orders_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopAdminOrdersIsolatedCollection))]
+public sealed class ShopAdminOrdersIsolatedCollection : ICollectionFixture<ShopAdminOrdersDbFixture>
+{
+}
