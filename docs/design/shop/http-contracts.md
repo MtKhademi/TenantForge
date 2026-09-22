@@ -120,8 +120,45 @@ absent/inactive in this tenant returns a generic `404`.
 
 ## S34 / B038 — category hierarchy
 
-Admin category responses add `parentCategoryId: string | null`. Create/update
-requests accept the same member; all existing members remain unchanged.
+Admin category contracts gain one member, `parentCategoryId: string | null`
+(a canonical 13-char TSID string; `null` = root):
+
+```ts
+type CreateCategoryRequest = {
+  name: string
+  slug: string
+  displayOrder: number
+  parentCategoryId?: string | null
+}
+type UpdateCategoryRequest = {
+  name: string
+  slug: string
+  displayOrder: number
+  isActive: boolean
+  parentCategoryId?: string | null
+}
+type CategoryResponse = {
+  id: string
+  tenantId: string
+  name: string
+  slug: string
+  displayOrder: number
+  isActive: boolean
+  parentCategoryId: string | null
+}
+```
+
+A supplied `parentCategoryId` must name an **active root** category of the
+same tenant (a parent that already has a parent is not a root). Every
+violation — missing, malformed, other tenant, inactive, not a root, or the
+category's own id — returns `400` with the RFC 7807 field error
+`errors.parentCategoryId: ["Select an active root category."]`. Maximum depth
+is root + one direct child. A category that already has children can never be
+re-parented under another category: that update returns `409 Conflict`
+(`title: "Reparent conflict"`) and changes nothing. A root may be deactivated
+while its children remain stored.
+
+The public category list now nests one level:
 
 ```ts
 type StorefrontCategoryResponse = {
@@ -136,9 +173,21 @@ type StorefrontCategoryListResponse = {
 }
 ```
 
-No new route: existing admin create/update/list and public category-list routes
-carry these additive members. Invalid parent is field validation `400`; unsafe
-reparenting is `409`.
+`categories` contains **roots only**, each ordered by `displayOrder` then id,
+with its direct children in the same order under `children` (`[]` for a root
+with none; children never carry their own `children` — always `[]`). A
+category is public only while it **and** its root are active ("effective
+activity"); a deactivated root removes the whole group from this list.
+
+No new route. Product filtering by category slug now resolves the hierarchy:
+a **root** slug's `GET /api/shop/{tenantId}/categories/{categorySlug}/products`
+(and the `categorySlug` filter on `GET /api/shop/{tenantId}/products`) returns
+products assigned to the root **plus** products assigned to its direct
+children; a **child** slug returns only that child's products. Product detail
+(`GET /api/shop/{tenantId}/products/{productSlug}`) and the public media-bytes
+route (`GET /api/shop/{tenantId}/media/{imageId}`) additionally return `404`
+when the owning category is not effectively active (pre-B038, detail ignored
+category state entirely).
 
 ## S35 / B039 — profile and policies
 

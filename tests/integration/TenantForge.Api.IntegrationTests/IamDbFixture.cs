@@ -329,3 +329,22 @@ public sealed class ShopProductMediaDbFixture : IamDbFixtureBase
 public sealed class ShopProductMediaIsolatedCollection : ICollectionFixture<ShopProductMediaDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B038's category-hierarchy tests (admin
+/// create/update with parents, effective public activity, nested public
+/// list, root/child product filtering, and the pre-B038 flat-row migration
+/// shape). Kept off prior Shop databases so their row-count assertions stay
+/// stable.
+/// </summary>
+public sealed class ShopCategoryHierarchyDbFixture : IamDbFixtureBase
+{
+    public ShopCategoryHierarchyDbFixture() : base("tenantforge_shop_category_hierarchy_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopCategoryHierarchyIsolatedCollection))]
+public sealed class ShopCategoryHierarchyIsolatedCollection : ICollectionFixture<ShopCategoryHierarchyDbFixture>
+{
+}

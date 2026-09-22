@@ -129,7 +129,7 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Shop configuration | `src/modules/shop/TenantForge.Modules.Shop/ShopConfig.cs` | `Shop:ShopDb`/`Shop:MediaRoot` keys, DI registrations, fail-closed validation |
 | Domain entities | `src/modules/shop/TenantForge.Modules.Shop/domain/` | `ShopCategory`, `ShopProduct`, `ShopProductImage`, `ShopProductVariant`, `ShopSizeGuideColumn/Row/Cell`, `ShopShippingRate`, `ShopCoupon`, `ShopCart`, `ShopCartItem`, `ShopOrder`, `ShopOrderItem`, `ShopPaymentAttempt` and their enums |
 | Authorization | `src/modules/shop/TenantForge.Modules.Shop/features/authorization/` | `ShopAuthorization` (membership + permission check via raw SQL against IAM's tables), `ShopPermissionCatalogContributor` (the `shop` catalog group) |
-| Category admin | `src/modules/shop/TenantForge.Modules.Shop/features/categories/` | `CategoriesFeature`, `CategoryContracts` |
+| Category admin | `src/modules/shop/TenantForge.Modules.Shop/features/categories/` | `CategoriesFeature` (create/list/update, the `ValidateParentAsync` eligibility rule and the reparent guard, a `FOR UPDATE` row lock so the guard + save are atomic), `CategoryContracts`, `CategoryVisibility` (the shared "effective public activity" predicate used by every public read) |
 | Product admin | `src/modules/shop/TenantForge.Modules.Shop/features/products/` | `ProductsFeature` (combined product + variants + size-guide authoring), `ProductContracts` |
 | Product media | `src/modules/shop/TenantForge.Modules.Shop/features/media/` | `ProductMediaFeature`, `ProductMediaContracts`, `IShopMediaStorage`/`LocalShopMediaStorage`, `ShopImageValidator` — see [Section 10](#10-product-media) |
 | Public storefront reads | `src/modules/shop/TenantForge.Modules.Shop/features/storefront/` | `StorefrontCatalogFeature`, `StorefrontContracts` — the first anonymous endpoints in TenantForge |
@@ -171,7 +171,7 @@ are `internal` (not reachable outside the module).
 
 | Entity | Identity | Key relationships | Invariants |
 | --- | --- | --- | --- |
-| `ShopCategory.cs` | `Tsid Id` | none (root aggregate per tenant) | `Slug` lower-cased; unique per tenant; `IsActive` excludes it from public storefront reads |
+| `ShopCategory.cs` | `Tsid Id` | optional self-FK `ParentCategoryId` (nullable; `Restrict` — a parent with children cannot be deleted/re-keyed) | `Slug` lower-cased; unique per tenant; `ParentCategoryId` is `null` for a root and otherwise names an active root of the same tenant (max depth root + one child); a category that has children can never itself become a child (feature-enforced `409`); public visibility is "effective activity" — `IsActive` AND, for children, the root's `IsActive` (see [Section 9](#9-endpoint-catalog)) |
 | `ShopProduct.cs` | `Tsid Id` | `CategoryId` | `Slug` lower-cased, unique per tenant; `GalleryVersion` (int, starts at `1`) — incremented exactly once per gallery mutation, used as an optimistic-concurrency guard on every upload/reorder/delete; `IsActive` excludes it from public storefront reads |
 | `ShopProductImage.cs` | `Tsid Id` | `ProductId` (cascade delete) | Server-generated `StorageKey` (never a client filename); `ContentType` fixed to `"image/webp"`; unique `(ProductId, DisplayOrder)`; non-unique `(TenantId, ProductId)`; no original filename or filesystem path stored — see [Section 10](#10-product-media) |
 | `ShopProductVariant.cs` | `Tsid Id` | `ProductId` | `StockQuantity` decremented atomically on cart-add, released on cart removal — see [Section 11](#11-inventory-reservation); `PriceOverride` optional, falls back to the product's `BasePrice` |
@@ -194,11 +194,18 @@ is the single PostgreSQL-backed context (Npgsql provider, configured in
 
 Migration order (`infrastructure/Migrations/`, chronological):
 `InitialShopCatalog` → `AddShopCart` → `AddShopShippingRatesAndCoupons` →
-`AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia`.
-`AddShopProductMedia` adds the `shop_product_images` table (unique
-`(product_id, display_order)`, unique `storage_key`, non-unique
-`(tenant_id, product_id)`) and the `shop_products.gallery_version` column
-(default `1`).
+`AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia` →
+`AddShopCategoryHierarchy`. `AddShopProductMedia` adds the
+`shop_product_images` table (unique `(product_id, display_order)`, unique
+`storage_key`, non-unique `(tenant_id, product_id)`) and the
+`shop_products.gallery_version` column (default `1`).
+`AddShopCategoryHierarchy` adds the nullable `shop_categories
+.parent_category_id` column, its self-FK to `shop_categories.id` with
+`DeleteBehavior.Restrict`, the supporting index
+`IX_shop_categories_parent_category_id`, and the lookup index
+`ix_shop_categories_tenant_parent_display_order`
+(`(tenant_id, parent_category_id, display_order)`). Existing rows keep
+`parent_category_id = NULL` (i.e. they remain roots); no IDs or slugs change.
 
 Every `Tsid`-typed column uses `ShopTsidValueConverter.Shared` with
 `.ValueGeneratedNever()` on primary keys — the same converter pattern IAM
@@ -270,9 +277,9 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 
 | Method & path | Purpose | Auth | Feature file |
 | --- | --- | --- | --- |
-| `POST /api/tenants/{tenantId}/shop/categories` | Create a category | `Shop.Catalog.Manage` | `categories/CategoriesFeature.cs` |
-| `GET /api/tenants/{tenantId}/shop/categories` | List categories (paginated) | Membership | `categories/CategoriesFeature.cs` |
-| `PUT /api/tenants/{tenantId}/shop/categories/{categoryId}` | Update a category | `Shop.Catalog.Manage` | `categories/CategoriesFeature.cs` |
+| `POST /api/tenants/{tenantId}/shop/categories` | Create a category (optional `parentCategoryId`; invalid parent → `400` field error) | `Shop.Catalog.Manage` | `categories/CategoriesFeature.cs` |
+| `GET /api/tenants/{tenantId}/shop/categories` | List categories flat (paginated), each row carrying `parentCategoryId` | Membership | `categories/CategoriesFeature.cs` |
+| `PUT /api/tenants/{tenantId}/shop/categories/{categoryId}` | Update a category (re-parenting a parent-with-children → `409`) | `Shop.Catalog.Manage` | `categories/CategoriesFeature.cs` |
 | `POST /api/tenants/{tenantId}/shop/products` | Create a product with variants + size guide | `Shop.Catalog.Manage` | `products/ProductsFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/products` | List products (paginated) | Membership | `products/ProductsFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/products/{productId}` | Fetch one product | Membership | `products/ProductsFeature.cs` |
@@ -282,10 +289,10 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `DELETE /api/tenants/{tenantId}/shop/products/{productId}/images/{imageId}` | Delete a gallery image | `Shop.Catalog.Manage` | `media/ProductMediaFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/products/{productId}/images/{imageId}/content` | Preview a draft/active image | Membership | `media/ProductMediaFeature.cs` |
 | `GET /api/shop/{tenantId}/media/{imageId}` | Serve a published image | Anonymous, active-only | `media/ProductMediaFeature.cs` |
-| `GET /api/shop/{tenantId}/categories` | List active categories | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
-| `GET /api/shop/{tenantId}/categories/{categorySlug}/products` | List active products in a category (paginated) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
-| `GET /api/shop/{tenantId}/products` | List active products with search/sort/sale-only (paginated) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
-| `GET /api/shop/{tenantId}/products/{productSlug}` | Product detail (variants, size guide, gallery) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
+| `GET /api/shop/{tenantId}/categories` | Public category list — **roots only**, each with ordered `children` (empty `[]` for a leaf); a category is public only while it **and** its root are active (effective activity) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
+| `GET /api/shop/{tenantId}/categories/{categorySlug}/products` | Active products in a category (paginated); a **root** slug includes its direct children's products, a **child** slug only its own | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
+| `GET /api/shop/{tenantId}/products` | List active products with search/sort/sale-only (paginated); `categorySlug` resolves the same way (root includes direct children) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
+| `GET /api/shop/{tenantId}/products/{productSlug}` | Product detail (variants, size guide, gallery); `404` if the owning category is not effectively active | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/shipping-rates` | List shipping rates | Membership | `shipping/ShippingRatesFeature.cs` |
 | `POST /api/tenants/{tenantId}/shop/shipping-rates` | Set a province's shipping rate | `Shop.Shipping.Manage` | `shipping/ShippingRatesFeature.cs` |
 | `POST /api/tenants/{tenantId}/shop/coupons` | Create a coupon | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
@@ -351,8 +358,10 @@ below.
   no-store`;
 - the public route (`GET /api/shop/{tenantId}/media/{imageId}`) joins
   image → product → category and serves only when all three are the same
-  tenant and both product and category are `IsActive`; sets
-  `X-Content-Type-Options: nosniff` and a one-year immutable
+  tenant, the product is `IsActive`, and the category is **effectively
+  active** (itself active, and — when it is a child — its root active; the
+  shared `CategoryVisibility` predicate, see [Section 9](#9-endpoint-catalog));
+  sets `X-Content-Type-Options: nosniff` and a one-year immutable
   `Cache-Control`, since a `StorageKey` never changes once assigned.
 
 The upload endpoint binds `IFormFile` through `[FromForm]` (multipart, not
@@ -410,6 +419,7 @@ sandbox needs to demonstrate the seam is real.
 | --- | --- |
 | `ShopModuleIntegrationTests.cs` | Composition seam, fail-closed startup, exact table roster, migration/history-table isolation from IAM |
 | `ShopCatalogAdminIntegrationTests.cs` | Category/product CRUD, tenant isolation, `Shop.Catalog.Manage` enforcement |
+| `ShopCategoryHierarchyIntegrationTests.cs` | B038 one-level category hierarchy: root+child create/update round-trip (persisted `parentCategoryId`), grandchild rejected (`400` `parentCategoryId`), foreign-tenant parent rejected, self-parent rejected, reparenting a parent-with-children rejected (`409`, nothing changes), deactivated root hides its active child (admin list still shows it; public list, by-slug products and all-products all drop it), public list nests roots with ordered `children` (empty `[]` for leaf roots), root slug = root+child products vs child slug = own only (on both product routes), pre-B038 flat rows migrate as roots (`parent_category_id` NULL, id/slug unchanged), and child media bytes 404 once the root is deactivated |
 | `ShopProductMediaIntegrationTests.cs` | Upload/reorder/delete round-trip, gallery-version conflicts, eight-image cap, real decode-based validation (fake MIME, SVG, corrupt, oversized, path-traversal filename, EXIF/GPS stripping), tenant/permission denial, protected-vs-public byte routes, staged-file cleanup on a forced DB commit failure, backward-compatible `Images: []` |
 | `ShopStorefrontCatalogIntegrationTests.cs` | Anonymous read contract, active-only filtering, malformed-id handling, and storefront discovery (all-products list): tenant isolation, inactive category/product exclusion, case-insensitive trimmed/truncated `q` search, `400` on unknown `sort`, cross-tenant `categorySlug` → `404`, all four sorts with an id tie-break, `saleOnly`, sold-out products ordered last with a `basePrice` fallback, thumbnail = first ordered image, and pagination totals reflecting the filtered set |
 | `ShopCartIntegrationTests.cs` | Cart create/add/remove/fetch, atomic stock reservation, concurrent-add race safety |
@@ -451,11 +461,13 @@ Verified against current code (not aspirational):
   name search + the four `newest`/`price-asc`/`price-desc`/`name` sorts only
   (see [Section 9](#9-endpoint-catalog) and `docs/design/shop/http-contracts.md`
   S33).
-- **No cross-category subcategory hierarchy, cart-reservation expiry,
-  coupon usage limits, admin order operations or rate limiting** — these
-  remain unimplemented until their own later slice delivers them (see
-  `tasks/TASKS.md`'s Backend queue for current status; do not treat a
-  `planned` row as already-delivered behavior).
+- **Category hierarchy is exactly two levels deep** — a root plus one direct
+  child; grandchild creation is rejected (B038). There is no category
+  deletion, no breadcrumbs deeper than two levels and no bulk reordering.
+- **No cart-reservation expiry, coupon usage limits, admin order operations
+  or rate limiting** — these remain unimplemented until their own later
+  slice delivers them (see `tasks/TASKS.md`'s Backend queue for current
+  status; do not treat a `planned` row as already-delivered behavior).
 
 ## 15. Change-impact checklist
 

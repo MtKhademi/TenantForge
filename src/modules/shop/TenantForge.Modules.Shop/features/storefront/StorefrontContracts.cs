@@ -2,7 +2,9 @@ using TenantForge.Modules.Shop.Features.Media;
 
 namespace TenantForge.Modules.Shop.Features.Storefront;
 
-public sealed record StorefrontCategoryResponse(string Id, string Name, string Slug, int DisplayOrder);
+public sealed record StorefrontCategoryResponse(
+    string Id, string Name, string Slug, int DisplayOrder,
+    IReadOnlyList<StorefrontCategoryResponse> Children);
 
 public sealed record StorefrontCategoryListResponse(IReadOnlyList<StorefrontCategoryResponse> Categories);
 

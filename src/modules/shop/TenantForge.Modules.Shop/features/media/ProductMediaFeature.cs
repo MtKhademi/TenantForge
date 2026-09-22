@@ -8,6 +8,7 @@ using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Authorization;
+using TenantForge.Modules.Shop.Features.Categories;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Media;
@@ -228,16 +229,21 @@ internal static class ProductMediaFeature
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid) || !TsidId.TryParse(imageId, out var imageTsid)) return Results.NotFound();
 
+            // B038: "effectively active" — a child category's media is public
+            // only while both the child and its root parent are active, so the
+            // public category rule and this byte route cannot disagree.
+            var publicCategories = db.Categories.AsNoTracking()
+                .Where(category => category.TenantId == tenantTsid)
+                .Where(CategoryVisibility.For(db.Categories));
+
             var image = await (
                 from productImage in db.ProductImages.AsNoTracking()
                 join product in db.Products.AsNoTracking() on productImage.ProductId equals product.Id
-                join category in db.Categories.AsNoTracking() on product.CategoryId equals category.Id
+                join category in publicCategories on product.CategoryId equals category.Id
                 where productImage.TenantId == tenantTsid
                     && productImage.Id == imageTsid
                     && product.TenantId == tenantTsid
-                    && category.TenantId == tenantTsid
                     && product.IsActive
-                    && category.IsActive
                 select productImage).SingleOrDefaultAsync(ct);
             if (image is null) return Results.NotFound();
 
