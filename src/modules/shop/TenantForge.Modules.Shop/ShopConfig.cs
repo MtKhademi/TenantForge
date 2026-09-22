@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using TenantForge.BuildingBlocks.Modules;
 using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Shop.Features.Authorization;
+using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Features.Media;
 using TenantForge.Modules.Shop.Infrastructure;
 
@@ -14,8 +15,16 @@ public sealed class ShopConfig : IModuleConfig
 {
     public string SectionName => "Shop";
 
+    internal const int DefaultCartReservationMinutes = 30;
+    internal const int MinCartReservationMinutes = 5;
+    internal const int MaxCartReservationMinutes = 1440;
+    internal const int MinCartCleanupIntervalSeconds = 30;
+    internal const int MaxCartCleanupIntervalSeconds = 3600;
+
     private string ShopConnectionStringPath => $"{SectionName}:ShopDb";
     private string MediaRootPath => $"{SectionName}:MediaRoot";
+    private string CartReservationMinutesPath => $"{SectionName}:CartReservationMinutes";
+    private string CartCleanupIntervalSecondsPath => $"{SectionName}:CartCleanupIntervalSeconds";
 
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
@@ -38,6 +47,9 @@ public sealed class ShopConfig : IModuleConfig
         services.AddScoped<Features.Payments.IShopPaymentGateway, Features.Payments.SandboxPaymentGateway>();
         services.AddScoped<IShopMediaStorage, LocalShopMediaStorage>();
         services.AddScoped<ShopImageValidator>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IShopCartExpiryService, ShopCartExpiryService>();
+        services.AddHostedService<ShopCartCleanupWorker>();
 
         // B035: Shop's own contribution to the shared permission catalog
         // (the second real contributor, after IAM's — see B034).
@@ -61,5 +73,37 @@ public sealed class ShopConfig : IModuleConfig
         }
 
         LocalShopMediaStorage.ValidateRoot(configuration);
+
+        _ = GetCartReservationMinutes(environment, configuration);
+        _ = GetCartCleanupIntervalSeconds(configuration);
+    }
+
+    internal static int GetCartReservationMinutes(IHostEnvironment environment, IConfiguration configuration)
+    {
+        var rawValue = configuration[$"Shop:CartReservationMinutes"];
+        if (string.IsNullOrWhiteSpace(rawValue) && environment.IsDevelopment())
+        {
+            return DefaultCartReservationMinutes;
+        }
+
+        if (!int.TryParse(rawValue, out var minutes) || minutes < MinCartReservationMinutes || minutes > MaxCartReservationMinutes)
+        {
+            throw new InvalidOperationException(
+                "The 'Shop:CartReservationMinutes' configuration value must be an integer from 5 through 1440.");
+        }
+
+        return minutes;
+    }
+
+    internal static int GetCartCleanupIntervalSeconds(IConfiguration configuration)
+    {
+        var rawValue = configuration[$"Shop:CartCleanupIntervalSeconds"];
+        if (!int.TryParse(rawValue, out var seconds) || seconds < MinCartCleanupIntervalSeconds || seconds > MaxCartCleanupIntervalSeconds)
+        {
+            throw new InvalidOperationException(
+                "The 'Shop:CartCleanupIntervalSeconds' configuration value must be an integer from 30 through 3600.");
+        }
+
+        return seconds;
     }
 }

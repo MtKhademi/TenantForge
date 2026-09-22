@@ -2,8 +2,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Iam.Domain;
+using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.Carts;
+using TenantForge.Modules.Shop.Infrastructure;
 using TSID.Creator.NET;
 using Xunit;
 
@@ -484,6 +488,136 @@ public sealed class ShopCartIntegrationTests(ShopCartDbFixture db) : IDisposable
         var fetched = await anonymous.GetAsync($"/api/shop/{tenantId}/carts/{cartId}");
         Assert.Equal(HttpStatusCode.OK, fetched.StatusCode);
     }
+
+    [Fact]
+    public async Task MutatingCart_ExtendsLeaseAndReadDoesNotExtendIt()
+    {
+        var (tenantId, member) = await NewTenantWithOwnerAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..14];
+        var categoryId = await CreateCategoryAsync(member, tenantId, "Lease", $"cat-{suffix}");
+        var (_, variant) = await CreateSingleVariantProductAsync(member, tenantId, categoryId, "Lease Item", $"lease-{suffix}", 5, 100m, null);
+        using var anonymous = CreateClient();
+        var cartId = await CreateCartAsync(anonymous, tenantId);
+        Assert.True(TsidId.TryParse(cartId, out var cartTsid));
+
+        await using (var shop = CreateShopContext())
+        {
+            var cart = await shop.Carts.SingleAsync(cart => cart.Id == cartTsid);
+            cart.ExtendLease(DateTimeOffset.UtcNow.AddMinutes(-20), TimeSpan.FromMinutes(30));
+            await shop.SaveChangesAsync();
+        }
+
+        var before = await GetCartRowAsync(cartTsid);
+        var added = await AddItemAsync(anonymous, tenantId, cartId, variant.Id, 1);
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        var afterMutation = await GetCartRowAsync(cartTsid);
+        Assert.True(afterMutation.LastTouchedAtUtc > before.LastTouchedAtUtc);
+        Assert.True(afterMutation.ExpiresAtUtc > before.ExpiresAtUtc);
+
+        _ = await GetCartAsync(anonymous, tenantId, cartId);
+        var afterRead = await GetCartRowAsync(cartTsid);
+        Assert.Equal(afterMutation.LastTouchedAtUtc, afterRead.LastTouchedAtUtc);
+        Assert.Equal(afterMutation.ExpiresAtUtc, afterRead.ExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task ExpireDue_RestoresStockOnce_RespectsBatchSize_AndTenantIsolation()
+    {
+        var (tenantA, memberA) = await NewTenantWithOwnerAsync();
+        var (tenantB, memberB) = await NewTenantWithOwnerAsync();
+        using var anonymous = CreateClient();
+        var suffix = Guid.NewGuid().ToString("N")[..14];
+        var catA = await CreateCategoryAsync(memberA, tenantA, "A", $"cat-a-{suffix}");
+        var catB = await CreateCategoryAsync(memberB, tenantB, "B", $"cat-b-{suffix}");
+        var (slugA, variantA) = await CreateSingleVariantProductAsync(memberA, tenantA, catA, "A", $"a-{suffix}", 10, 100m, null);
+        var (slugB, variantB) = await CreateSingleVariantProductAsync(memberB, tenantB, catB, "B", $"b-{suffix}", 10, 100m, null);
+        var cartA = await CreateCartAsync(anonymous, tenantA);
+        var cartB = await CreateCartAsync(anonymous, tenantB);
+        Assert.Equal(HttpStatusCode.OK, (await AddItemAsync(anonymous, tenantA, cartA, variantA.Id, 3)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await AddItemAsync(anonymous, tenantB, cartB, variantB.Id, 4)).StatusCode);
+        Assert.True(TsidId.TryParse(cartA, out var cartATsid));
+        Assert.True(TsidId.TryParse(cartB, out var cartBTsid));
+
+        await SetCartExpiryAsync(cartATsid, DateTimeOffset.UtcNow.AddMinutes(-5));
+        await SetCartExpiryAsync(cartBTsid, DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var service = new ShopCartExpiryService(CreateShopContext(), TimeProvider.System);
+        Assert.Equal(1, await service.ExpireDueAsync(batchSize: 1, CancellationToken.None));
+        Assert.Equal(1, await service.ExpireDueAsync(batchSize: 100, CancellationToken.None));
+        Assert.Equal(0, await service.ExpireDueAsync(batchSize: 100, CancellationToken.None));
+
+        Assert.Equal(10, (await ReadVariantStockAsync(anonymous, tenantA, slugA, variantA.Id)).StockQuantity);
+        Assert.Equal(10, (await ReadVariantStockAsync(anonymous, tenantB, slugB, variantB.Id)).StockQuantity);
+        Assert.Equal(ShopCartStatus.Expired, (await GetCartRowAsync(cartATsid)).Status);
+        Assert.Equal(ShopCartStatus.Expired, (await GetCartRowAsync(cartBTsid)).Status);
+    }
+
+    [Fact]
+    public async Task ExpiredCart_ReturnsGoneProblemOnCartCheckoutAndOrderRoutes()
+    {
+        var (tenantId, member) = await NewTenantWithOwnerAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..14];
+        var categoryId = await CreateCategoryAsync(member, tenantId, "Expired", $"cat-{suffix}");
+        var (_, variant) = await CreateSingleVariantProductAsync(member, tenantId, categoryId, "Expired Item", $"expired-{suffix}", 5, 100m, null);
+        await SetShippingRateAsync(member, tenantId);
+        using var anonymous = CreateClient();
+        var cartId = await CreateCartAsync(anonymous, tenantId);
+        Assert.Equal(HttpStatusCode.OK, (await AddItemAsync(anonymous, tenantId, cartId, variant.Id, 1)).StatusCode);
+        Assert.True(TsidId.TryParse(cartId, out var cartTsid));
+        await SetCartExpiryAsync(cartTsid, DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var get = await anonymous.GetAsync($"/api/shop/{tenantId}/carts/{cartId}");
+        await AssertCartExpiredProblemAsync(get);
+
+        var checkout = await anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/checkout/summary", new { cartId, shippingProvince = "Tehran", couponCode = (string?)null });
+        await AssertCartExpiredProblemAsync(checkout);
+
+        var order = await anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/orders", new
+        {
+            cartId,
+            customerName = "Customer",
+            customerPhone = "09120000000",
+            shippingProvince = "Tehran",
+            shippingCity = "Tehran",
+            shippingAddressLine = "Address",
+            shippingPostalCode = "12345",
+            couponCode = (string?)null
+        });
+        await AssertCartExpiredProblemAsync(order);
+    }
+
+    private ShopDbContext CreateShopContext() => new(
+        new DbContextOptionsBuilder<ShopDbContext>().UseNpgsql(db.ConnectionString).Options);
+
+    private async Task<(ShopCartStatus Status, DateTimeOffset LastTouchedAtUtc, DateTimeOffset ExpiresAtUtc)> GetCartRowAsync(Tsid cartId)
+    {
+        await using var shop = CreateShopContext();
+        return await shop.Carts
+            .Where(cart => cart.Id == cartId)
+            .Select(cart => new ValueTuple<ShopCartStatus, DateTimeOffset, DateTimeOffset>(cart.Status, cart.LastTouchedAtUtc, cart.ExpiresAtUtc))
+            .SingleAsync();
+    }
+
+    private async Task SetCartExpiryAsync(Tsid cartId, DateTimeOffset expiresAtUtc)
+    {
+        await using var shop = CreateShopContext();
+        var cart = await shop.Carts.SingleAsync(cart => cart.Id == cartId);
+        cart.ExtendLease(expiresAtUtc.AddMinutes(-30), TimeSpan.FromMinutes(30));
+        await shop.SaveChangesAsync();
+    }
+
+    private static async Task SetShippingRateAsync(HttpClient memberClient, string tenantId)
+    {
+        var response = await memberClient.PostAsJsonAsync($"/api/tenants/{tenantId}/shop/shipping-rates", new { provinceName = "Tehran", cost = 10m });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static async Task AssertCartExpiredProblemAsync(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("shop_cart_expired", document.RootElement.GetProperty("type").GetString());
+    }
 }
 
 internal sealed record CartVariantDto(string Id, string Color, string Size, int StockQuantity, decimal EffectivePrice);
@@ -494,4 +628,4 @@ internal sealed record CartProductDetailDto(
 internal sealed record CartItemDto(
     string Id, string ProductVariantId, string ProductName, string VariantLabel, int Quantity, decimal UnitPrice);
 
-internal sealed record CartDto(string CartId, IReadOnlyList<CartItemDto> Items, decimal SubTotal);
+internal sealed record CartDto(string CartId, IReadOnlyList<CartItemDto> Items, decimal SubTotal, DateTimeOffset ExpiresAtUtc);

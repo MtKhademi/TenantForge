@@ -355,7 +355,7 @@ public sealed class ShopOrderIntegrationTests(ShopOrderDbFixture db) : IDisposab
     }
 
     [Fact]
-    public async Task AfterASuccessfulOrder_TheCartHasNoItemsLeft()
+    public async Task AfterASuccessfulOrder_TheConvertedCartIsNoLongerReadableAsAnActiveCart()
     {
         var (tenantId, _, variant, _) = await SetupCatalogAsync(500000m);
 
@@ -366,9 +366,8 @@ public sealed class ShopOrderIntegrationTests(ShopOrderDbFixture db) : IDisposab
 
         Assert.Equal(HttpStatusCode.Created, (await PostOrderAsync(anonymous, tenantId, cartId)).StatusCode);
 
-        var cart = await GetCartAsync(anonymous, tenantId, cartId);
-        Assert.Empty(cart.Items);
-        Assert.Equal(0m, cart.SubTotal);
+        var convertedCart = await anonymous.GetAsync($"/api/shop/{tenantId}/carts/{cartId}");
+        Assert.Equal(HttpStatusCode.NotFound, convertedCart.StatusCode);
     }
 
     [Fact]

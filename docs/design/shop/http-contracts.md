@@ -244,9 +244,13 @@ type CartResponse = {
 }
 ```
 
-Existing cart, checkout-summary and order-creation routes return status `410`
-with `type: 'shop_cart_expired'` when the lease was released. No request accepts
-a client expiry value.
+Existing cart mutation responses and cart read responses include `expiresAtUtc`.
+Successful add/update/delete item mutations extend the lease; `GET` cart does
+not. Checkout summary and order creation first verify the cart lease. Existing
+cart, checkout-summary and order-creation routes return RFC 7807 status `410`
+with `type: 'shop_cart_expired'` when the lease was released. Successful order
+creation marks the cart converted; converted carts are no longer readable as an
+active cart. No request accepts a client expiry value.
 
 ## S37 / B041 — coupon rules
 

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Checkout;
@@ -16,13 +17,17 @@ internal static class CheckoutFeature
         endpoints.MapPost("/api/shop/{tenantId}/checkout/summary", async (
             string tenantId,
             CheckoutSummaryRequest request,
-            ShopDbContext db) =>
+            ShopDbContext db,
+            IShopCartExpiryService expiryService,
+            CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return Results.NotFound();
             if (!TsidId.TryParse(request.CartId, out var cartTsid)) return Results.NotFound();
 
-            var cartExists = await db.Carts.AnyAsync(cart => cart.Id == cartTsid && cart.TenantId == tenantTsid);
-            if (!cartExists) return Results.NotFound();
+            var lease = await expiryService.EnsureActiveAsync(tenantTsid, cartTsid, ct);
+            if (lease.Cart is null) return Results.NotFound();
+            if (CartsFeature.IsExpired(lease)) return CartsFeature.CartExpiredProblem();
+            if (lease.Outcome == CartLeaseOutcome.Converted) return Results.NotFound();
 
             var subTotal = await db.CartItems.AsNoTracking()
                 .Where(item => item.CartId == cartTsid)

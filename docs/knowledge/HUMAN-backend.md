@@ -72,7 +72,7 @@ contract and the permission catalog contracts.
   category/sale filtering and four deterministic sort orders, showing a
   per-product "card price" (lowest in-stock variant price), an on-sale flag
   and a sold-out state — without ever exposing SKUs or raw stock counts;
-- persistent carts;
+- persistent carts with server-owned reservation leases: abandoned carts expire, release reserved stock back to variants, and return a stable `410 shop_cart_expired` problem so the storefront can ask the shopper to start again;
 - shipping rates and coupons;
 - a checkout summary, order creation and guest order lookup;
 - a sandbox payment gateway;
@@ -131,6 +131,8 @@ a database unique index, so two people saving the first draft at the same
 moment resolve to one winner and one conflict — never a silent overwrite. The
 conflict carries a stable `type` (`stale_version`) so the frontend can react
 to it by name instead of parsing a message.
+
+**Cart stock leases are explicit.** Adding an item reserves stock immediately so checkout cannot oversell. That reservation now has a server-owned expiry; a row lock makes expiry and order creation race safely, so either the cart becomes an order or the stock is restored exactly once — never both.
 
 **No speculative endpoints.** An endpoint is added only when a current or
 immediately dependent frontend task consumes it.

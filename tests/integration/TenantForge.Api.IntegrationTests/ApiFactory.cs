@@ -65,7 +65,9 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
             // decision): every API-level host now runs UseShopModuleAsync,
             // which fail-closes on a missing Shop:ShopDb.
             ["Shop:ShopDb"] = db.ConnectionString,
-            ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media")
+            ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media"),
+            ["Shop:CartReservationMinutes"] = "30",
+            ["Shop:CartCleanupIntervalSeconds"] = "3600"
         };
 
         switch (seedMode)

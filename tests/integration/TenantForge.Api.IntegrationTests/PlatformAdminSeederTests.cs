@@ -210,7 +210,8 @@ internal sealed class DisabledAccountApiFactory(string connectionString, string 
             ["Shop:ShopDb"] = connectionString,
             // B036: ShopConfig.ValidateConfiguration now requires a writable
             // media root at every startup, including this narrow factory.
-            ["Shop:MediaRoot"] = Path.Combine(contentRoot, "shop-media")
+            ["Shop:MediaRoot"] = Path.Combine(contentRoot, "shop-media"),
+            ["Shop:CartCleanupIntervalSeconds"] = "3600"
             // No IAM:SeedAdmin: the account under test was inserted directly,
             // so seeding must stay disabled to avoid seeding an unrelated admin.
         };

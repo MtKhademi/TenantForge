@@ -105,7 +105,8 @@ await app.UseShopModuleAsync();
 
 - **`AddShopModule`** (registration, before `Build`) — adds every
   Shop-owned service to the container (`ShopDbContext`, the sandbox payment
-  gateway, `IShopMediaStorage`, `ShopImageValidator`,
+  gateway, `IShopMediaStorage`, `ShopImageValidator`, `TimeProvider.System`,
+  `IShopCartExpiryService`, `ShopCartCleanupWorker`,
   `ShopPermissionCatalogContributor`). No I/O, no pass/fail decision.
 - **`UseShopModuleAsync`** (activation, after `Build`) — runs once, in this
   deterministic order:
@@ -160,6 +161,8 @@ All keys are read by `ShopConfig`
 | --- | --- | --- | --- |
 | `Shop:ShopDb` | Shop | Always required | Startup throws `InvalidOperationException` (fail closed) if blank |
 | `Shop:MediaRoot` | Shop | Always required | Startup throws if blank, non-absolute, or the directory cannot be created/written (`LocalShopMediaStorage.ValidateRoot`) |
+| `Shop:CartReservationMinutes` | Shop | Required outside Development; Development defaults to `30` when blank | Startup throws unless the integer value is within `5..1440` inclusive |
+| `Shop:CartCleanupIntervalSeconds` | Shop | Always required | Startup throws unless the integer value is within `30..3600` inclusive |
 
 `Shop:ShopDb` deliberately points at the same physical database as
 `IAM:IamDb` (see [Section 3](#3-dependency-and-composition-boundary)); each
@@ -182,7 +185,7 @@ are `internal` (not reachable outside the module).
 | `ShopSizeGuideColumn.cs`/`ShopSizeGuideRow.cs`/`ShopSizeGuideCell.cs` | `Tsid Id` each | → `ShopProduct`/`ShopSizeGuideRow` | Replaced wholesale on every product update (no partial edit) |
 | `ShopShippingRate.cs` | `Tsid Id` | none | One rate per `(TenantId, ProvinceName)` |
 | `ShopCoupon.cs` | `Tsid Id` | none | `Code`/`NormalizedCode` (upper-cased) unique per tenant; `DiscountType` is `Percentage` or `FixedAmount`; `Deactivate()` is the only state-removal path (no hard delete) |
-| `ShopCart.cs` | `Tsid Id` | optional `CouponId` | Anonymous — ownership is by opaque cart id alone, no account link |
+| `ShopCart.cs` | `Tsid Id` | optional `CouponId` | Anonymous — ownership is by opaque cart id alone, no account link; `Status` is `Active`/`Converted`/`Expired`, `LastTouchedAtUtc` and `ExpiresAtUtc` define the server-owned reservation lease, and `ClosedAtUtc` is set when the cart is converted or expired |
 | `ShopCartItem.cs` | `Tsid Id` | `CartId`, `ProductVariantId` | `UnitPriceSnapshot` frozen at add-time; `Quantity` must stay positive |
 | `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot |
 | `ShopOrderItem.cs` | `Tsid Id` | `OrderId` | Snapshots product name/variant label/unit price at order-creation time — never a live join back to the catalog |
@@ -200,7 +203,13 @@ is the single PostgreSQL-backed context (Npgsql provider, configured in
 Migration order (`infrastructure/Migrations/`, chronological):
 `InitialShopCatalog` → `AddShopCart` → `AddShopShippingRatesAndCoupons` →
 `AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia` →
-`AddShopCategoryHierarchy` → `AddShopProfile`. `AddShopProfile` adds the
+`AddShopCategoryHierarchy` → `AddShopProfile` →
+`AddShopCartReservationExpiry`. `AddShopCartReservationExpiry` adds
+`status`, `last_touched_at_utc`, `expires_at_utc` and nullable
+`closed_at_utc` to `shop_carts`, backfills existing carts as `Active` with a
+30-minute lease from migration time, and creates
+`ix_shop_carts_status_expires_at_utc` for deterministic cleanup batches.
+`AddShopProfile` adds the
 `shop_profiles` table (one row per tenant: the text/policy fields,
 `is_published`, the client-managed `version` integer, and the
 `created_at_utc`/`updated_at_utc` timestamps) plus the unique index
@@ -311,13 +320,13 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `POST /api/tenants/{tenantId}/shop/coupons` | Create a coupon | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/coupons` | List coupons | Membership | `coupons/CouponsFeature.cs` |
 | `PATCH /api/tenants/{tenantId}/shop/coupons/{couponId}/deactivate` | Deactivate a coupon (the only state-removal path — no hard delete) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
-| `POST /api/shop/{tenantId}/carts` | Create an anonymous cart | Anonymous | `carts/CartsFeature.cs` |
-| `POST /api/shop/{tenantId}/carts/{cartId}/items` | Add/merge an item, reserving live stock | Anonymous | `carts/CartsFeature.cs` |
-| `PATCH /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Update an item's quantity (re-reserving or releasing stock) | Anonymous | `carts/CartsFeature.cs` |
-| `DELETE /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Remove an item, releasing stock | Anonymous | `carts/CartsFeature.cs` |
-| `GET /api/shop/{tenantId}/carts/{cartId}` | Fetch a cart with computed subtotal | Anonymous | `carts/CartsFeature.cs` |
-| `POST /api/shop/{tenantId}/checkout/summary` | Price a cart against an address + optional coupon | Anonymous | `checkout/CheckoutFeature.cs` |
-| `POST /api/shop/{tenantId}/orders` | Create an order from a validated cart, in one transaction | Anonymous | `orders/OrderCreationFeature.cs` |
+| `POST /api/shop/{tenantId}/carts` | Create an anonymous cart and return its server-owned `expiresAtUtc` lease | Anonymous | `carts/CartsFeature.cs` |
+| `POST /api/shop/{tenantId}/carts/{cartId}/items` | Add/merge an item, reserving live stock and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
+| `PATCH /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Update an item's quantity (re-reserving or releasing stock) and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
+| `DELETE /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Remove an item, releasing stock and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
+| `GET /api/shop/{tenantId}/carts/{cartId}` | Fetch an active cart with computed subtotal and `expiresAtUtc`; read does not extend the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
+| `POST /api/shop/{tenantId}/checkout/summary` | Price an active cart against an address + optional coupon; expired carts return `410 shop_cart_expired` | Anonymous | `checkout/CheckoutFeature.cs` |
+| `POST /api/shop/{tenantId}/orders` | Create an order from an active validated cart, mark the cart `Converted`, and leave the cart row as history | Anonymous | `orders/OrderCreationFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/{orderId}/payments/initiate` | Start a sandbox payment attempt | Anonymous | `payments/PaymentsFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/{orderId}/payments/callback` | Resolve a sandbox payment attempt | Anonymous | `payments/PaymentsFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/lookup` | Guest order lookup by tracking code + phone | Anonymous | `orders/OrderLookupFeature.cs` |
@@ -413,11 +422,24 @@ concurrent adds against the last unit resolve to exactly one `200` and one
 `409 Insufficient stock` — never negative stock. Removing or reducing an
 item releases the corresponding quantity back to the variant.
 
-Order creation (`OrderCreationFeature`, B031) does **not** decrement stock a
-second time — it snapshots the already-reserved cart into a `ShopOrder` plus
-one `ShopOrderItem` per line inside one transaction, generates `OrderNumber`
-and `TrackingCode`, and clears the cart. A double order from the same cart
-resolves to exactly one persisted order.
+Order creation (`OrderCreationFeature`) does **not** decrement stock a second
+time — it snapshots the already-reserved cart into a `ShopOrder` plus one
+`ShopOrderItem` per line inside one transaction, generates `OrderNumber` and
+`TrackingCode`, removes the cart items, marks the cart `Converted`, and keeps
+the cart row as history. A double order from the same cart resolves to exactly
+one persisted order.
+
+Cart reservation expiry (B040) is server-owned. `CreateCartResponse` and
+`CartResponse` include `expiresAtUtc`; no request body accepts a client clock or
+lease length. Successful add/update/delete mutations extend
+`LastTouchedAtUtc`/`ExpiresAtUtc`; a plain GET does not. `IShopCartExpiryService
+.EnsureActiveAsync` locks a cart before checkout/order/cart-read work and, when
+an active cart is due, atomically marks it `Expired`, restores grouped variant
+stock, removes cart item rows and commits. The background
+`ShopCartCleanupWorker` calls `ExpireDueAsync` in deterministic `(status,
+expires_at_utc, id)` batches; converted carts are ignored. Expired carts return
+RFC 7807 `410 Gone` with `type: "shop_cart_expired"` on cart, checkout-summary
+and order-creation routes.
 
 ## 12. Sandbox payment
 
@@ -481,7 +503,7 @@ lower-cased, and the suffix check anchors on the dot so
 | `ShopCategoryHierarchyIntegrationTests.cs` | B038 one-level category hierarchy: root+child create/update round-trip (persisted `parentCategoryId`), grandchild rejected (`400` `parentCategoryId`), foreign-tenant parent rejected, self-parent rejected, reparenting a parent-with-children rejected (`409`, nothing changes), deactivated root hides its active child (admin list still shows it; public list, by-slug products and all-products all drop it), public list nests roots with ordered `children` (empty `[]` for leaf roots), root slug = root+child products vs child slug = own only (on both product routes), pre-B038 flat rows migrate as roots (`parent_category_id` NULL, id/slug unchanged), and child media bytes 404 once the root is deactivated |
 | `ShopProductMediaIntegrationTests.cs` | Upload/reorder/delete round-trip, gallery-version conflicts, eight-image cap, real decode-based validation (fake MIME, SVG, corrupt, oversized, path-traversal filename, EXIF/GPS stripping), tenant/permission denial, protected-vs-public byte routes, staged-file cleanup on a forced DB commit failure, backward-compatible `Images: []` |
 | `ShopStorefrontCatalogIntegrationTests.cs` | Anonymous read contract, active-only filtering, malformed-id handling, and storefront discovery (all-products list): tenant isolation, inactive category/product exclusion, case-insensitive trimmed/truncated `q` search, `400` on unknown `sort`, cross-tenant `categorySlug` → `404`, all four sorts with an id tie-break, `saleOnly`, sold-out products ordered last with a `basePrice` fallback, thumbnail = first ordered image, and pagination totals reflecting the filtered set |
-| `ShopCartIntegrationTests.cs` | Cart create/add/remove/fetch, atomic stock reservation, concurrent-add race safety |
+| `ShopCartIntegrationTests.cs` | Cart create/add/remove/fetch, atomic stock reservation, concurrent-add race safety, lease extension/read non-extension, expiry stock restoration/idempotency/batch behavior, expired-cart `410 shop_cart_expired`, and tenant-isolated cleanup |
 | `ShopShippingCouponAdminIntegrationTests.cs` | Shipping-rate/coupon admin CRUD, `Shop.Shipping.Manage` enforcement |
 | `ShopCheckoutIntegrationTests.cs` | Checkout-summary pricing, unshippable-province handling, coupon application |
 | `ShopOrderIntegrationTests.cs` | Order creation, no double-decrement, concurrent-order race safety |
@@ -524,10 +546,10 @@ Verified against current code (not aspirational):
 - **Category hierarchy is exactly two levels deep** — a root plus one direct
   child; grandchild creation is rejected (B038). There is no category
   deletion, no breadcrumbs deeper than two levels and no bulk reordering.
-- **No cart-reservation expiry, coupon usage limits, admin order operations
-  or rate limiting** — these remain unimplemented until their own later
-  slice delivers them (see `tasks/TASKS.md`'s Backend queue for current
-  status; do not treat a `planned` row as already-delivered behavior).
+- **No coupon usage limits, admin order operations or rate limiting** — these
+  remain unimplemented until their own later slice delivers them (see
+  `tasks/TASKS.md`'s Backend queue for current status; do not treat a
+  `planned` row as already-delivered behavior).
 
 ## 16. Change-impact checklist
 
