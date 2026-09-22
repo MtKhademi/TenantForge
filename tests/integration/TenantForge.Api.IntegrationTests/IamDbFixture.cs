@@ -348,3 +348,21 @@ public sealed class ShopCategoryHierarchyDbFixture : IamDbFixtureBase
 public sealed class ShopCategoryHierarchyIsolatedCollection : ICollectionFixture<ShopCategoryHierarchyDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B039's tenant storefront profile/policy tests
+/// (admin create/update with optimistic concurrency, the unique-tenant race,
+/// permission enforcement and the anonymous public read). Kept off prior Shop
+/// databases so their row-count assumptions stay stable.
+/// </summary>
+public sealed class ShopProfileDbFixture : IamDbFixtureBase
+{
+    public ShopProfileDbFixture() : base("tenantforge_shop_profile_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopProfileIsolatedCollection))]
+public sealed class ShopProfileIsolatedCollection : ICollectionFixture<ShopProfileDbFixture>
+{
+}

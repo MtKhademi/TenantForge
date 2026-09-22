@@ -20,9 +20,10 @@ mismatch and verify before trusting either.
 10. [Product media](#10-product-media)
 11. [Inventory reservation](#11-inventory-reservation)
 12. [Sandbox payment](#12-sandbox-payment)
-13. [Test map and commands](#13-test-map-and-commands)
-14. [Current limitations](#14-current-limitations)
-15. [Change-impact checklist](#15-change-impact-checklist)
+13. [Storefront profile and policies](#13-storefront-profile-and-policies)
+14. [Test map and commands](#14-test-map-and-commands)
+15. [Current limitations](#15-current-limitations)
+16. [Change-impact checklist](#16-change-impact-checklist)
 
 ## 1. Purpose and non-goals
 
@@ -34,8 +35,10 @@ Shop owns:
 - anonymous cart, checkout-summary, order creation, sandbox payment and
   order-lookup flows;
 - tenant-scoped shipping-rate and coupon administration;
-- the `Shop.Catalog.Manage`/`Shop.Shipping.Manage` permission keys, enforced
-  by Shop's own authorization code.
+- the tenant storefront identity and customer policy pages (one profile per
+  tenant, published or draft);
+- the `Shop.Catalog.Manage`/`Shop.Shipping.Manage`/`Shop.Settings.Manage`
+  permission keys, enforced by Shop's own authorization code.
 
 Shop explicitly does **not** own:
 
@@ -59,10 +62,10 @@ Shop explicitly does **not** own:
 | Database/context | PostgreSQL via `TenantForge.Modules.Shop.Infrastructure.ShopDbContext`, same physical database as IAM but its own `__ShopMigrationsHistory` table |
 | Identifier representations | PostgreSQL `bigint` ↔ .NET `Tsid` ↔ HTTP canonical 13-char string — same seam IAM uses, `TenantForge.BuildingBlocks.Identifiers.TsidId` |
 | No `.Contract` project | Shop's HTTP request/response records live beside each feature (`features/<area>/<Area>Contracts.cs`), not in a separate project — no second .NET consumer has proved that boundary yet |
-| Permission model | `Shop.Catalog.Manage`, `Shop.Shipping.Manage` — tenant Owner bypass, or an assigned `TenantRole` carrying the key (IAM-owned role storage, Shop-owned check) — see [Section 8](#8-tenantauth-rules) |
+| Permission model | `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage` — tenant Owner bypass, or an assigned `TenantRole` carrying the key (IAM-owned role storage, Shop-owned check) — see [Section 8](#8-tenantauth-rules) |
 | Test project | `tests/integration/TenantForge.Api.IntegrationTests/TenantForge.Api.IntegrationTests.csproj` |
 | Local SDK/runtime notes | No Linux `dotnet`; use `dotnet.exe` — see `docs/architecture.md#local-development-environment-wsl--windows-net-sdk` |
-| Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 15](#15-change-impact-checklist) |
+| Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 16](#16-change-impact-checklist) |
 
 ## 3. Dependency and composition boundary
 
@@ -139,11 +142,12 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Checkout summary | `src/modules/shop/TenantForge.Modules.Shop/features/checkout/` | `CheckoutFeature`, `CheckoutContracts` (read/compute-only) |
 | Order creation | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` | `OrderCreationFeature`, `OrderContracts`, `OrderLookupFeature`, `OrderLookupContracts` |
 | Sandbox payment | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway` — see [Section 12](#12-sandbox-payment) |
+| Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 13](#13-storefront-profile-and-policies) |
 | Pagination | `src/modules/shop/TenantForge.Modules.Shop/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` (Shop's own copy — not shared with IAM's) |
 | Persistence context/maps | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/` | `ShopDbContext`, `*Map.cs`, `ShopTsidValueConverter` |
 | Migrations | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` | Chronological schema history, see [Section 7](#7-persistence) |
 | Integration test fixtures | `tests/integration/TenantForge.Api.IntegrationTests/ApiFactory.cs`, `IamDbFixture.cs` | `WebApplicationFactory` setup, per-suite Postgres fixtures (Shop uses its own isolated collections) |
-| Focused test classes | `tests/integration/TenantForge.Api.IntegrationTests/Shop*.cs` | See [Section 13](#13-test-map-and-commands) |
+| Focused test classes | `tests/integration/TenantForge.Api.IntegrationTests/Shop*.cs` | See [Section 14](#14-test-map-and-commands) |
 | Persistent HTTP contract reference | `docs/design/shop/http-contracts.md` | The wire-shape source of truth per slice, kept in step with delivered code |
 | BuildingBlocks permissions seam | `src/building-blocks/TenantForge.BuildingBlocks/Permissions/` | `IPermissionCatalogContributor`, `PermissionGroup`, `PermissionDescriptor`, `IAggregatedPermissionCatalog` |
 
@@ -183,6 +187,7 @@ are `internal` (not reachable outside the module).
 | `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot |
 | `ShopOrderItem.cs` | `Tsid Id` | `OrderId` | Snapshots product name/variant label/unit price at order-creation time — never a live join back to the catalog |
 | `ShopPaymentAttempt.cs` | `Tsid Id` | `OrderId` (no `TenantId` column — filter through `ShopOrder` when tenant-scoping is required) | `Status` (`Initiated`/`Succeeded`/`Failed`); `TryResolve` is idempotent — a second callback for an already-resolved attempt returns `false` and changes nothing |
+| `ShopProfile.cs` | `Tsid Id` | `TenantId` (unique — exactly one profile row per tenant, enforced by a unique index, not a relationship) | All text is plain text (never HTML); every field is trimmed on the outside only, internal newlines preserved; `InstagramUrl` (nullable) must be HTTPS on `instagram.com`/a subdomain; `SupportPhone` is a conservative display allowlist (digits, spaces, `+`, `-`, `(`, `)`); `Version` is a client-managed optimistic-concurrency counter (starts at `1`, not a DB rowversion); `IsPublished` gates only the public profile/policy reads, never the catalog — see [Section 13](#13-storefront-profile-and-policies) |
 
 ## 7. Persistence
 
@@ -195,7 +200,12 @@ is the single PostgreSQL-backed context (Npgsql provider, configured in
 Migration order (`infrastructure/Migrations/`, chronological):
 `InitialShopCatalog` → `AddShopCart` → `AddShopShippingRatesAndCoupons` →
 `AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia` →
-`AddShopCategoryHierarchy`. `AddShopProductMedia` adds the
+`AddShopCategoryHierarchy` → `AddShopProfile`. `AddShopProfile` adds the
+`shop_profiles` table (one row per tenant: the text/policy fields,
+`is_published`, the client-managed `version` integer, and the
+`created_at_utc`/`updated_at_utc` timestamps) plus the unique index
+`ix_shop_profiles_tenant_id` on `tenant_id` — the constraint that resolves a
+concurrent first-create to exactly one winner. `AddShopProductMedia` adds the
 `shop_product_images` table (unique `(product_id, display_order)`, unique
 `storage_key`, non-unique `(tenant_id, product_id)`) and the
 `shop_products.gallery_version` column (default `1`).
@@ -222,10 +232,12 @@ not through IAM's context or entities.
 **Two route families**:
 
 - `/api/tenants/{tenantId}/shop/...` — authenticated, tenant-scoped admin
-  routes (category/product/media/shipping-rate/coupon authoring).
+  routes (category/product/media/shipping-rate/coupon authoring, and the
+  storefront profile/policy read + save).
 - `/api/shop/{tenantId}/...` — anonymous, public routes (storefront reads,
   cart, checkout summary, order creation, payment initiate/callback, order
-  lookup). These were the first anonymous endpoints in TenantForge (B027).
+  lookup, and the public storefront profile). These were the first anonymous
+  endpoints in TenantForge (B027).
 
 **`ShopAuthorization.AuthorizeTenantAccessAsync`**
 (`src/modules/shop/TenantForge.Modules.Shop/features/authorization/ShopAuthorization.cs`)
@@ -251,9 +263,9 @@ array contains that key — resolved with a second raw-SQL query
 `iam_tenant_member_role_assignments`/`iam_tenant_roles`.
 
 **Permission catalog contribution**: `ShopPermissionCatalogContributor`
-registers one group (`"shop"`) with two keys,
-`Shop.Catalog.Manage` and `Shop.Shipping.Manage`, through
-`IPermissionCatalogContributor`. The host aggregates every registered
+registers one group (`"shop"`) with three keys,
+`Shop.Catalog.Manage`, `Shop.Shipping.Manage` and `Shop.Settings.Manage`,
+through `IPermissionCatalogContributor`. The host aggregates every registered
 contributor's groups into `IAggregatedPermissionCatalog`, served by IAM's
 `GET /api/permissions/catalog` — Shop does not expose its own catalog
 endpoint.
@@ -262,6 +274,7 @@ endpoint.
 | --- | --- |
 | `Shop.Catalog.Manage` | `POST/PUT /api/tenants/{tenantId}/shop/categories*`, `POST/PUT /api/tenants/{tenantId}/shop/products*`, every product-media mutation (`POST`/`PUT`/`DELETE` under `.../images*`) |
 | `Shop.Shipping.Manage` | `POST /api/tenants/{tenantId}/shop/shipping-rates`, `POST /api/tenants/{tenantId}/shop/coupons` |
+| `Shop.Settings.Manage` | `PUT /api/tenants/{tenantId}/shop/profile` (the admin profile read is membership-only, like every other read-only admin route) |
 
 Public/anonymous routes enforce tenant isolation only through the
 `{tenantId}` route segment and `IsActive`/status filters on the joined
@@ -272,7 +285,7 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 
 ## 9. Endpoint catalog
 
-29 routes, one row per literal `Map*` call in
+33 routes, one row per literal `Map*` call in
 `src/modules/shop/TenantForge.Modules.Shop/features/**`.
 
 | Method & path | Purpose | Auth | Feature file |
@@ -297,8 +310,10 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `POST /api/tenants/{tenantId}/shop/shipping-rates` | Set a province's shipping rate | `Shop.Shipping.Manage` | `shipping/ShippingRatesFeature.cs` |
 | `POST /api/tenants/{tenantId}/shop/coupons` | Create a coupon | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/coupons` | List coupons | Membership | `coupons/CouponsFeature.cs` |
+| `PATCH /api/tenants/{tenantId}/shop/coupons/{couponId}/deactivate` | Deactivate a coupon (the only state-removal path — no hard delete) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `POST /api/shop/{tenantId}/carts` | Create an anonymous cart | Anonymous | `carts/CartsFeature.cs` |
 | `POST /api/shop/{tenantId}/carts/{cartId}/items` | Add/merge an item, reserving live stock | Anonymous | `carts/CartsFeature.cs` |
+| `PATCH /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Update an item's quantity (re-reserving or releasing stock) | Anonymous | `carts/CartsFeature.cs` |
 | `DELETE /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Remove an item, releasing stock | Anonymous | `carts/CartsFeature.cs` |
 | `GET /api/shop/{tenantId}/carts/{cartId}` | Fetch a cart with computed subtotal | Anonymous | `carts/CartsFeature.cs` |
 | `POST /api/shop/{tenantId}/checkout/summary` | Price a cart against an address + optional coupon | Anonymous | `checkout/CheckoutFeature.cs` |
@@ -306,6 +321,9 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `POST /api/shop/{tenantId}/orders/{orderId}/payments/initiate` | Start a sandbox payment attempt | Anonymous | `payments/PaymentsFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/{orderId}/payments/callback` | Resolve a sandbox payment attempt | Anonymous | `payments/PaymentsFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/lookup` | Guest order lookup by tracking code + phone | Anonymous | `orders/OrderLookupFeature.cs` |
+| `GET /api/tenants/{tenantId}/shop/profile` | Read the tenant's storefront profile — `200 { profile: null }` before the first save | Membership | `profiles/ProfilesFeature.cs` |
+| `PUT /api/tenants/{tenantId}/shop/profile` | Create/update the profile (optimistic concurrency via `expectedVersion`) | `Shop.Settings.Manage` | `profiles/ProfilesFeature.cs` |
+| `GET /api/shop/{tenantId}/profile` | Public storefront profile — `404` when missing or unpublished | Anonymous, published-only | `profiles/ProfilesFeature.cs` |
 
 All errors use the repository's RFC 7807 Problem Details shape
 (`Results.Problem`/`ValidationProblem`) — no second error format exists in
@@ -413,7 +431,48 @@ already-resolved attempt changes nothing and reports failure. There is no
 stored card data and no gateway webhook signature scheme beyond what the
 sandbox needs to demonstrate the seam is real.
 
-## 13. Test map and commands
+## 13. Storefront profile and policies
+
+Introduced by B039. A tenant publishes its store identity and customer
+policy pages — `ShopProfile` (one row per tenant, `shop_profiles`) holds
+`name`, `tagline`, `support_phone`, `instagram_url` (nullable), `about_text`
+and the four policy texts (`shipping`/`payment`/`return`/`privacy`), plus
+`is_published`, a client-managed `version` counter and the
+`created_at_utc`/`updated_at_utc` timestamps.
+
+- **Admin read** (`GET /api/tenants/{tenantId}/shop/profile`,
+  membership-only) returns `200 { profile: null }` before the first save —
+  the empty state is a 200, never a 404.
+- **Admin save** (`PUT`, `Shop.Settings.Manage`) is an upsert keyed on the
+  server-derived route `tenantId` (never a body field). `expectedVersion:
+  null` creates (a new row at `version: 1`); a non-null value must match the
+  stored row's `version` exactly or the request is a `409` with RFC 7807
+  `type=stale_version`. The row is locked `FOR UPDATE` inside a transaction so
+  concurrent updates serialize, and the unique `ix_shop_profiles_tenant_id`
+  index is what actually resolves two racing first-creates to one success and
+  one `409` (a `DbUpdateException` with PostgreSQL SQLSTATE `23505` is caught,
+  the transaction rolled back, and the same `stale_version` problem returned).
+- **Public read** (`GET /api/shop/{tenantId}/profile`, anonymous) returns the
+  profile only while it exists **and** `is_published`; missing or unpublished
+  are the same non-leaking `404`. The public response
+  (`PublicShopProfileResponse`) deliberately omits `id`, `tenantId`, `version`
+  and `updatedAtUtc` — the internal concurrency counter never leaves the
+  module on the public wire.
+- **Publication gates only the profile/policy pages**, never the catalog:
+  no route reads `is_published` for storefront availability, so existing
+  storefront URLs keep working during rollout.
+
+**Validation** (plain text end to end — never rendered as HTML): every field
+is trimmed on the outside only, internal newlines preserved; required
+`name`(100)/`tagline`(180)/`supportPhone`(30) reject blank; optional long
+texts cap at `4000`/`6000`; `supportPhone` allows only digits, spaces, `+`,
+`-`, `(`, `)`; a non-null `instagramUrl` must be HTTPS with a host that is
+exactly `instagram.com` or a `*.instagram.com` subdomain (`Uri.Host` is
+lower-cased, and the suffix check anchors on the dot so
+`instagram.com.evil.example` is rejected). Any violation is a `400`
+`ValidationProblem` naming the field.
+
+## 14. Test map and commands
 
 | Test class | Protects |
 | --- | --- |
@@ -428,6 +487,7 @@ sandbox needs to demonstrate the seam is real.
 | `ShopOrderIntegrationTests.cs` | Order creation, no double-decrement, concurrent-order race safety |
 | `ShopPaymentIntegrationTests.cs` | Sandbox initiate/callback, idempotent resolution |
 | `ShopOrderLookupIntegrationTests.cs` | Guest lookup contract, non-leaking generic not-found |
+| `ShopProfileIntegrationTests.cs` | B039 storefront profile: admin GET null-empty-state, create→update→GET round-trip with version bump, stale-version `409 stale_version`, concurrent first-create race (one `200`, one `409`, one row), tenant isolation (A cannot read/write B), `Shop.Settings.Manage` denial + role grant + Owner bypass, outside-trim / preserved-newlines / over-length validation, phone allowlist, Instagram URL rules (non-HTTPS / wrong host / look-alike domain), public `404` for missing/unpublished/malformed-id, public `200` shape with no `version`/`id`/`tenantId`/`updatedAtUtc`, and publication NOT gating the storefront catalog |
 
 Commands:
 
@@ -442,7 +502,7 @@ for the WSL/Windows host-binding notes instead of repeating them here. The
 integration tests use Testcontainers; Docker must be running before any test
 command.
 
-## 14. Current limitations
+## 15. Current limitations
 
 Verified against current code (not aspirational):
 
@@ -469,7 +529,7 @@ Verified against current code (not aspirational):
   slice delivers them (see `tasks/TASKS.md`'s Backend queue for current
   status; do not treat a `planned` row as already-delivered behavior).
 
-## 15. Change-impact checklist
+## 16. Change-impact checklist
 
 | Change | Mandatory SHOP.md sections |
 | --- | --- |
@@ -481,6 +541,7 @@ Verified against current code (not aspirational):
 | product media behavior | Product media |
 | inventory/stock behavior | Inventory reservation |
 | payment gateway behavior | Sandbox payment |
+| storefront profile/policy behavior | Storefront profile and policies |
 | test/verification path | Test map |
 | implemented limitation | Current limitations |
 

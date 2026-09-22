@@ -32,11 +32,19 @@ internal static class ShopAuthorization
     /// </summary>
     internal const string ShippingManagePermission = "Shop.Shipping.Manage";
 
-    /// <summary>The two keys Shop owns — see ShopPermissionCatalogContributor.</summary>
+    /// <summary>
+    /// B039: gates the profile/policy save endpoint (PUT
+    /// /api/tenants/{tenantId}/shop/profile). Same Owner-bypass/assigned-
+    /// role-key rule as the other Shop keys.
+    /// </summary>
+    internal const string SettingsManagePermission = "Shop.Settings.Manage";
+
+    /// <summary>The three keys Shop owns — see ShopPermissionCatalogContributor.</summary>
     internal static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
     {
         CatalogManagePermission,
-        ShippingManagePermission
+        ShippingManagePermission,
+        SettingsManagePermission
     };
 
     /// <summary>
@@ -51,8 +59,8 @@ internal static class ShopAuthorization
 
     /// <summary>
     /// Permission-checking overload. Every mutating Shop endpoint (Scope
-    /// table in this Spec) now calls this with CatalogManagePermission or
-    /// ShippingManagePermission.
+    /// table in this Spec) now calls this with CatalogManagePermission,
+    /// ShippingManagePermission or SettingsManagePermission.
     ///
     /// (B035 delivery note: the Spec sketched this as a non-nullable
     /// internal shim plus a private nullable core, but C# forbids two
