@@ -207,7 +207,10 @@ internal sealed class DisabledAccountApiFactory(string connectionString, string 
             ["IAM:Auth:SigningKey"] = "dev-only-tenantforge-signing-key-do-not-use-32b",
             // Shop shares the same database as IAM and its activation runs on
             // every host startup, so the value must be present here too.
-            ["Shop:ShopDb"] = connectionString
+            ["Shop:ShopDb"] = connectionString,
+            // B036: ShopConfig.ValidateConfiguration now requires a writable
+            // media root at every startup, including this narrow factory.
+            ["Shop:MediaRoot"] = Path.Combine(contentRoot, "shop-media")
             // No IAM:SeedAdmin: the account under test was inserted directly,
             // so seeding must stay disabled to avoid seeding an unrelated admin.
         };

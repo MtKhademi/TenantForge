@@ -23,6 +23,14 @@ Work through phases 0–10 in order. `/front-task` runs autonomously: after the
 task is resolved, never ask the user to approve, review, confirm or continue.
 The autonomy rule at the end of this file lists the only reasons to stop.
 
+## Session length management (applies throughout)
+
+Monitor token usage across phases. When usage exceeds roughly 120K tokens, run
+`/compact` to compress the session context, then immediately resume the
+currently `in_progress` todo. Compaction is routine session hygiene: it never
+pauses for user approval and does not break the autonomous flow described
+above.
+
 ---
 
 ## Phase 0 — Git preflight

@@ -14,6 +14,7 @@ internal sealed class ShopProduct
     public decimal BasePrice { get; private set; }
     public decimal? CompareAtPrice { get; private set; }
     public bool IsActive { get; private set; } = true;
+    public int GalleryVersion { get; private set; } = 1;
 
     private ShopProduct()
     {
@@ -53,7 +54,8 @@ internal sealed class ShopProduct
             Description = description.Trim(),
             BasePrice = basePrice,
             CompareAtPrice = compareAtPrice,
-            IsActive = true
+            IsActive = true,
+            GalleryVersion = 1
         };
     }
 
@@ -73,5 +75,10 @@ internal sealed class ShopProduct
         BasePrice = basePrice;
         CompareAtPrice = compareAtPrice;
         IsActive = isActive;
+    }
+
+    public void IncrementGalleryVersion()
+    {
+        GalleryVersion++;
     }
 }

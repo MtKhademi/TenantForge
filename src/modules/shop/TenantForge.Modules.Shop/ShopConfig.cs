@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using TenantForge.BuildingBlocks.Modules;
 using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Shop.Features.Authorization;
+using TenantForge.Modules.Shop.Features.Media;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop;
@@ -14,6 +15,7 @@ public sealed class ShopConfig : IModuleConfig
     public string SectionName => "Shop";
 
     private string ShopConnectionStringPath => $"{SectionName}:ShopDb";
+    private string MediaRootPath => $"{SectionName}:MediaRoot";
 
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
@@ -34,6 +36,8 @@ public sealed class ShopConfig : IModuleConfig
         // ShopDbContext, mirroring IAMConfig.RegisterServices' own
         // scoped-vs-singleton reasoning for its database-backed services.
         services.AddScoped<Features.Payments.IShopPaymentGateway, Features.Payments.SandboxPaymentGateway>();
+        services.AddScoped<IShopMediaStorage, LocalShopMediaStorage>();
+        services.AddScoped<ShopImageValidator>();
 
         // B035: Shop's own contribution to the shared permission catalog
         // (the second real contributor, after IAM's — see B034).
@@ -48,5 +52,14 @@ public sealed class ShopConfig : IModuleConfig
             throw new InvalidOperationException(
                 $"The '{ShopConnectionStringPath}' configuration value is required for Shop persistence.");
         }
+
+        var mediaRoot = configuration[MediaRootPath];
+        if (string.IsNullOrWhiteSpace(mediaRoot))
+        {
+            throw new InvalidOperationException(
+                $"The '{MediaRootPath}' configuration value is required for Shop media storage.");
+        }
+
+        LocalShopMediaStorage.ValidateRoot(configuration);
     }
 }

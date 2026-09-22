@@ -55,6 +55,11 @@ internal sealed class ShopProductMap : IEntityTypeConfiguration<ShopProduct>
             .HasColumnName("is_active")
             .IsRequired();
 
+        builder.Property(product => product.GalleryVersion)
+            .HasColumnName("gallery_version")
+            .HasDefaultValue(1)
+            .IsRequired();
+
         builder.HasIndex(product => new { product.TenantId, product.Slug })
             .IsUnique()
             .HasDatabaseName("ix_shop_products_tenant_slug");

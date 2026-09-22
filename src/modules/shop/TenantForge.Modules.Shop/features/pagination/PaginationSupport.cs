@@ -36,10 +36,13 @@ internal static class PaginationSupport
         return true;
     }
 
-    public static async Task<(IReadOnlyList<T> Items, PaginationMetadata Pagination)> PageAsync<T>(IQueryable<T> queryable, PaginationQuery query)
+    public static Task<(IReadOnlyList<T> Items, PaginationMetadata Pagination)> PageAsync<T>(IQueryable<T> queryable, PaginationQuery query) =>
+        PageAsync(queryable, query, CancellationToken.None);
+
+    public static async Task<(IReadOnlyList<T> Items, PaginationMetadata Pagination)> PageAsync<T>(IQueryable<T> queryable, PaginationQuery query, CancellationToken ct)
     {
-        var totalCount = await queryable.CountAsync();
-        var items = await queryable.Skip(query.Offset).Take(query.PageSize).ToListAsync();
+        var totalCount = await queryable.CountAsync(ct);
+        var items = await queryable.Skip(query.Offset).Take(query.PageSize).ToListAsync(ct);
         return (items, PaginationMetadata.From(query, totalCount));
     }
 
