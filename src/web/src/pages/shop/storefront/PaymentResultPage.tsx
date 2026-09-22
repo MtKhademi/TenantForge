@@ -14,7 +14,7 @@ export function PaymentResultPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const [searchParams] = useSearchParams()
   const approved = searchParams.get('outcome') === 'approved'
-  const placedOrder = loadPlacedOrder()
+  const placedOrder = loadPlacedOrder(tenantId)
 
   if (approved) {
     return (

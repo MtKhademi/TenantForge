@@ -32,8 +32,8 @@ import { loadOrderDraft, loadPlacedOrder } from '@/features/shop/orderDraftState
 export function SandboxBankPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
-  const draft = loadOrderDraft()
-  const [placedOrder] = useState(loadPlacedOrder)
+  const draft = loadOrderDraft(tenantId)
+  const [placedOrder] = useState(() => loadPlacedOrder(tenantId))
   const [gateway, setGateway] = useState<InitiatePaymentResponse | null>(null)
   const [payError, setPayError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)

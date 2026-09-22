@@ -67,7 +67,7 @@ export async function fetchCheckoutSummary(
   tenantId: string,
   fields: Omit<CheckoutSummaryRequest, 'cartId'>,
 ): Promise<CheckoutSummaryResponse> {
-  const cartId = getCartId()
+  const cartId = getCartId(tenantId)
   if (!cartId) throw new EmptyCartError()
 
   const abort = createRequestAbortSignal()
