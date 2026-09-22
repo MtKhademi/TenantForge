@@ -12,6 +12,9 @@ public sealed record StorefrontProductSummaryResponse(
     string Slug,
     decimal EffectivePrice,
     decimal? CompareAtPrice,
+    bool IsOnSale,
+    bool IsSoldOut,
+    string? ThumbnailUrl,
     IReadOnlyList<ProductImageResponse> Images);
 
 public sealed record StorefrontProductListResponse(

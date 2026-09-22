@@ -205,6 +205,15 @@ dotnet.exe ef migrations add <Name> \
 9. `ShopModuleIntegrationTests.ExpectedShopTables` is a hand-maintained exact
    table roster. Every new Shop table must be added there in the same task or
    the startup-contract tests fail.
+10. EF Core will **not** translate a *method call* that returns an
+    `IQueryable` as a correlated subquery — write the `Min`/`Max`/`Count`
+    inline in the `Select`, or the request 500s with
+    `InvalidOperationException` at query-translation time. Model an empty
+    aggregate as nullable (`decimal?`): C# `Min` on a non-nullable sequence
+    cannot express "no rows" (a sold-out product has no in-stock variant).
+11. In LINQ, `OrderBy` after `OrderBy` **replaces** the first ordering; use
+    `ThenBy`/`ThenByDescending` to keep a primary ordering (e.g. sold-out-last)
+    stable across the chosen secondary sort.
 
 ## Decisions future tasks must preserve
 

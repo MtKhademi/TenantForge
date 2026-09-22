@@ -265,7 +265,7 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 
 ## 9. Endpoint catalog
 
-28 routes, one row per literal `Map*` call in
+29 routes, one row per literal `Map*` call in
 `src/modules/shop/TenantForge.Modules.Shop/features/**`.
 
 | Method & path | Purpose | Auth | Feature file |
@@ -284,6 +284,7 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `GET /api/shop/{tenantId}/media/{imageId}` | Serve a published image | Anonymous, active-only | `media/ProductMediaFeature.cs` |
 | `GET /api/shop/{tenantId}/categories` | List active categories | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
 | `GET /api/shop/{tenantId}/categories/{categorySlug}/products` | List active products in a category (paginated) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
+| `GET /api/shop/{tenantId}/products` | List active products with search/sort/sale-only (paginated) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
 | `GET /api/shop/{tenantId}/products/{productSlug}` | Product detail (variants, size guide, gallery) | Anonymous | `storefront/StorefrontCatalogFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/shipping-rates` | List shipping rates | Membership | `shipping/ShippingRatesFeature.cs` |
 | `POST /api/tenants/{tenantId}/shop/shipping-rates` | Set a province's shipping rate | `Shop.Shipping.Manage` | `shipping/ShippingRatesFeature.cs` |
@@ -410,7 +411,7 @@ sandbox needs to demonstrate the seam is real.
 | `ShopModuleIntegrationTests.cs` | Composition seam, fail-closed startup, exact table roster, migration/history-table isolation from IAM |
 | `ShopCatalogAdminIntegrationTests.cs` | Category/product CRUD, tenant isolation, `Shop.Catalog.Manage` enforcement |
 | `ShopProductMediaIntegrationTests.cs` | Upload/reorder/delete round-trip, gallery-version conflicts, eight-image cap, real decode-based validation (fake MIME, SVG, corrupt, oversized, path-traversal filename, EXIF/GPS stripping), tenant/permission denial, protected-vs-public byte routes, staged-file cleanup on a forced DB commit failure, backward-compatible `Images: []` |
-| `ShopStorefrontCatalogIntegrationTests.cs` | Anonymous read contract, active-only filtering, malformed-id handling |
+| `ShopStorefrontCatalogIntegrationTests.cs` | Anonymous read contract, active-only filtering, malformed-id handling, and storefront discovery (all-products list): tenant isolation, inactive category/product exclusion, case-insensitive trimmed/truncated `q` search, `400` on unknown `sort`, cross-tenant `categorySlug` → `404`, all four sorts with an id tie-break, `saleOnly`, sold-out products ordered last with a `basePrice` fallback, thumbnail = first ordered image, and pagination totals reflecting the filtered set |
 | `ShopCartIntegrationTests.cs` | Cart create/add/remove/fetch, atomic stock reservation, concurrent-add race safety |
 | `ShopShippingCouponAdminIntegrationTests.cs` | Shipping-rate/coupon admin CRUD, `Shop.Shipping.Manage` enforcement |
 | `ShopCheckoutIntegrationTests.cs` | Checkout-summary pricing, unshippable-province handling, coupon application |
@@ -445,11 +446,16 @@ Verified against current code (not aspirational):
   guest tracking-code lookup.
 - **Sandbox payment only** — no real gateway integration exists yet; see
   [Section 12](#12-sandbox-payment).
-- **No cross-category subcategory hierarchy, storefront search/sort,
-  cart-reservation expiry, coupon usage limits, admin order operations or
-  rate limiting** — these remain unimplemented until their own later slice
-  delivers them (see `tasks/TASKS.md`'s Backend queue for current status; do
-  not treat a `planned` row as already-delivered behavior).
+- **No full-text search engine, popularity/rating sort, recommendations,
+  tags or faceted color/size filters** — B037's storefront discovery is
+  name search + the four `newest`/`price-asc`/`price-desc`/`name` sorts only
+  (see [Section 9](#9-endpoint-catalog) and `docs/design/shop/http-contracts.md`
+  S33).
+- **No cross-category subcategory hierarchy, cart-reservation expiry,
+  coupon usage limits, admin order operations or rate limiting** — these
+  remain unimplemented until their own later slice delivers them (see
+  `tasks/TASKS.md`'s Backend queue for current status; do not treat a
+  `planned` row as already-delivered behavior).
 
 ## 15. Change-impact checklist
 

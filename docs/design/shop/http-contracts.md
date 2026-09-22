@@ -85,6 +85,7 @@ type StorefrontProductSummaryResponse = {
   isOnSale: boolean
   isSoldOut: boolean
   thumbnailUrl: string | null
+  images: ProductImageResponse[]
 }
 type StorefrontProductListResponse = {
   products: StorefrontProductSummaryResponse[]
@@ -93,8 +94,29 @@ type StorefrontProductListResponse = {
 ```
 
 `GET /api/shop/{tenantId}/products?pageNumber=1&pageSize=24&q=&categorySlug=&sort=newest&saleOnly=false`
-returns the list. Invalid query values return validation `400`; a named category
-that is absent/inactive in this tenant returns `404`.
+returns the paginated list of a tenant's active products in active categories.
+Query parameters: `q` (name search, trimmed and truncated to 100 characters,
+case-insensitive), `categorySlug` (active same-tenant category), `sort` (one of
+`newest`, `price-asc`, `price-desc`, `name`; missing/blank means `newest`), and
+`saleOnly` (`true` keeps only products where `compareAtPrice` exceeds the
+displayed price).
+
+Card price and sale semantics: `effectivePrice` is the lowest
+`PriceOverride ?? BasePrice` among the product's in-stock variants; when no
+variant is in stock the product is `isSoldOut: true` and `effectivePrice` falls
+back to `basePrice`. `isOnSale` is `compareAtPrice > effectivePrice`. Sold-out
+products always list last, then by the chosen sort, then by product id.
+`thumbnailUrl` is the first ordered image's public byte URL (or `null`). SKU and
+raw stock counts are never exposed.
+
+`GET /api/shop/{tenantId}/categories/{categorySlug}/products` returns the same
+`StorefrontProductListResponse` shape; on that route `effectivePrice` is the
+product `basePrice` and `isSoldOut`/`isOnSale`/`thumbnailUrl` are derived the
+same way.
+
+Errors: invalid query values return validation `400` (keyed by field, `sort` for
+an unknown value); a malformed `tenantId` or a named category that is
+absent/inactive in this tenant returns a generic `404`.
 
 ## S34 / B038 — category hierarchy
 
