@@ -1,6 +1,6 @@
 import { CircleCheck, Loader2, RefreshCw, Tag, TriangleAlert } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useParams } from 'react-router-dom'
 import { z } from 'zod'
@@ -8,44 +8,55 @@ import { DashboardShell } from '@/components/shell/DashboardShell'
 import { Button, SecondaryButton } from '@/components/ui/Button'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { TextInput } from '@/components/ui/TextInput'
-import {
-  createShopCatalogAdapter,
-  ShopForbiddenError,
-  ShopValidationError,
-} from '@/features/shop/shopCatalogAdapter'
-import { CategoryConflictError, type ShopCategory } from '@/features/shop/shopCatalogTypes'
+import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
+import { ShopClientError } from '@/features/shop/contracts/shopContract'
+import type { AdminCategory } from '@/features/shop/contracts/categoryHierarchyContract'
+import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
-import { SessionExpiredError } from '@/features/auth/authTypes'
 import { cn } from '@/lib/utils'
 
 /**
- * S26 admin catalog management — categories (F029: connected to the real B026 API).
+ * S26/S34 admin catalog management — categories (F046: hierarchy mock).
  *
- * A tenant member lists, creates and edits the shop's categories. The data
- * source is `createShopCatalogAdapter`, which calls B026's tenant-scoped
- * admin endpoints with the current session bearer token. The page's
- * structure and accepted UX are unchanged from the F028 mock.
+ * The data source is the `categories` slot of `ShopClientsProvider` — the
+ * deterministic B038 mock now, the HTTP client after F056. The page never
+ * imports fixtures and never calls `fetch`.
+ *
+ * The list is deliberately a plain two-level list (roots, each with its
+ * direct children indented): B038's data model has no third level, so no
+ * general-purpose tree component is built. The form's parent selector lists
+ * ONLY active root categories — a child or an inactive category can never be
+ * selected as a parent from the UI; the mock additionally rejects the named
+ * B038 violations (third level, inactive parent, unsafe reparent) with the
+ * exact contract error shape.
  *
  * States:
- * - list: initial skeleton, loaded table, empty panel (a fresh tenant starts
- *   empty), retryable error panel (unavailable or forbidden);
- * - form: idle, invalid (per-field errors), submitting, success feedback, and
- *   a duplicate-slug conflict surfaced under the slug field.
- * - the form is a create form and an edit form: in edit mode an "active"
- *   checkbox appears (a created category is always active).
+ * - list: initial skeleton, loaded two-level list, empty panel, retryable
+ *   error panel (unavailable or forbidden);
+ * - form: idle, invalid (per-field errors including `parentCategoryId`),
+ *   submitting, conflict/forbidden/not-found banner, unavailable-with-retry,
+ *   success feedback shown only when the client actually returned one.
  */
 
 const categorySchema = z.object({
   name: z.string().min(1, 'نام دسته‌بندی الزامی است.').max(120),
   slug: z.string().min(1, 'نامک الزامی است.').max(120),
   displayOrder: z.coerce.number().int().min(0),
+  parent: z.string(),
 })
 type CategoryFormValues = z.infer<typeof categorySchema>
 
+/** True when the client rejected with an AbortError (superseded request). */
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
 export function CategoriesPage() {
-  const { session, signOut } = useAuth()
+  const { signOut } = useAuth()
   const { tenantId = '' } = useParams<{ tenantId: string }>()
-  const [categories, setCategories] = useState<ShopCategory[] | null>(null)
+  const { categories: categoryClient } = useShopClients()
+
+  const [rows, setRows] = useState<AdminCategory[] | null>(null)
   const [isBusy, setIsBusy] = useState(true)
   const [listFailure, setListFailure] = useState<'unavailable' | 'forbidden' | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -53,31 +64,66 @@ export function CategoriesPage() {
   const [editIsActive, setEditIsActive] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
+  const [formFailure, setFormFailure] = useState<{ message: string; retryable: boolean } | null>(null)
 
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
   const slugInputRef = useRef<HTMLInputElement | null>(null)
-  // Fresh refs so the (stable) callbacks below always read the current token
-  // and sign-out action without re-creating the data-source per render.
-  const sessionRef = useRef(session)
+  const parentSelectRef = useRef<HTMLSelectElement | null>(null)
   const signOutRef = useRef(signOut)
-  useEffect(() => {
-    sessionRef.current = session
-  }, [session])
   useEffect(() => {
     signOutRef.current = signOut
   }, [signOut])
 
-  // One bound data-source instance per render, carrying the current token.
-  // Event handlers (submit / startEdit) read `adapter` directly; the
-  // effect-driven load callbacks read `adapterRef` so they stay referentially
-  // stable (a fresh per-render object must not land in a `useEffect` dep, or
-  // it refetches forever).
-  const adapter = createShopCatalogAdapter(session?.accessToken ?? '')
-  const adapterRef = useRef(adapter)
+  // The client slot is stable per render; keep a fresh ref for the
+  // referentially-stable load callback (same pattern as the F029 adapter).
+  const clientRef = useRef(categoryClient)
   useEffect(() => {
-    adapterRef.current = adapter
-  }, [adapter])
+    clientRef.current = categoryClient
+  }, [categoryClient])
+  const listAbortRef = useRef<AbortController | null>(null)
+
+  const handleListFailure = useCallback((error: unknown) => {
+    if (isAbortError(error)) return
+    if (error instanceof SessionExpiredError) {
+      void signOutRef.current()
+      return
+    }
+    if (error instanceof ShopClientError && error.problem.status === 403) {
+      setListFailure('forbidden')
+      return
+    }
+    setListFailure('unavailable')
+  }, [])
+
+  const loadCategories = useCallback(() => {
+    // Aborting the in-flight request guarantees an old response can never
+    // overwrite a newer one's result.
+    listAbortRef.current?.abort()
+    const controller = new AbortController()
+    listAbortRef.current = controller
+    setIsBusy(true)
+    setListFailure(null)
+    return clientRef.current
+      .listAdmin(tenantId, controller.signal)
+      .then((list) => {
+        if (!controller.signal.aborted) setRows(list)
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return
+        handleListFailure(error)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsBusy(false)
+      })
+  }, [tenantId, handleListFailure])
+
+  useEffect(() => {
+    void loadCategories()
+    return () => {
+      listAbortRef.current?.abort()
+    }
+  }, [loadCategories])
 
   const {
     register,
@@ -88,30 +134,26 @@ export function CategoriesPage() {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(categorySchema),
-    defaultValues: { name: '', slug: '', displayOrder: 0 },
+    defaultValues: { name: '', slug: '', displayOrder: 0, parent: '' },
   })
 
-  const handleListFailure = useCallback((error: unknown) => {
-    if (error instanceof SessionExpiredError) {
-      void signOutRef.current()
-      return
+  // The list is already sorted by displayOrder within each level, so the
+  // two-level view model is derived, never re-sorted client-side per level.
+  const { roots, childrenOf } = useMemo(() => {
+    const current = rows ?? []
+    const byOrder = (list: AdminCategory[]) => [...list].sort((a, b) => a.displayOrder - b.displayOrder)
+    return {
+      roots: byOrder(current.filter((row) => row.parentCategoryId === null)),
+      childrenOf: (rootId: string) => byOrder(current.filter((row) => row.parentCategoryId === rootId)),
     }
-    setListFailure(error instanceof ShopForbiddenError ? 'forbidden' : 'unavailable')
-  }, [])
+  }, [rows])
 
-  const loadCategories = useCallback(() => {
-    setIsBusy(true)
-    setListFailure(null)
-    return adapterRef.current
-      .listCategories(tenantId)
-      .then(setCategories)
-      .catch((error) => handleListFailure(error))
-      .finally(() => setIsBusy(false))
-  }, [tenantId, handleListFailure])
-
-  useEffect(() => {
-    void loadCategories()
-  }, [loadCategories])
+  // Only ACTIVE ROOTS may be parents (B038); children and inactive categories
+  // never appear here.
+  const parentOptions = useMemo(
+    () => [...roots].filter((root) => root.isActive).sort((a, b) => a.displayOrder - b.displayOrder),
+    [roots],
+  )
 
   // Focus moves into the form when it opens (back to the toggle on close).
   useEffect(() => {
@@ -126,25 +168,33 @@ export function CategoriesPage() {
     reset()
     clearErrors()
     setSuccess(null)
+    setFormFailure(null)
     toggleButtonRef.current?.focus()
   }, [reset, clearErrors])
 
   const openCreateForm = useCallback(() => {
     setEditingId(null)
     setEditIsActive(true)
-    reset()
+    reset({ name: '', slug: '', displayOrder: 0, parent: '' })
     clearErrors()
     setSuccess(null)
+    setFormFailure(null)
     setFormOpen(true)
   }, [reset, clearErrors])
 
   const startEdit = useCallback(
-    (category: ShopCategory) => {
+    (category: AdminCategory) => {
       setEditingId(category.id)
       setEditIsActive(category.isActive)
-      reset({ name: category.name, slug: category.slug, displayOrder: category.displayOrder })
+      reset({
+        name: category.name,
+        slug: category.slug,
+        displayOrder: category.displayOrder,
+        parent: category.parentCategoryId ?? '',
+      })
       clearErrors()
       setSuccess(null)
+      setFormFailure(null)
       setFormOpen(true)
     },
     [reset, clearErrors],
@@ -154,15 +204,30 @@ export function CategoriesPage() {
     async (values: CategoryFormValues) => {
       setIsSubmitting(true)
       setSuccess(null)
+      setFormFailure(null)
+      const controller = new AbortController()
+      const parentCategoryId = values.parent.length > 0 ? values.parent : null
       try {
         if (editingId) {
-          const updated = await adapter.updateCategory(tenantId, editingId, {
-            ...values,
+          const updated = await clientRef.current.update(tenantId, editingId, {
+            name: values.name,
+            slug: values.slug,
+            displayOrder: values.displayOrder,
             isActive: editIsActive,
-          })
+            parentCategoryId,
+          }, controller.signal)
           setSuccess(`دسته‌بندی ${updated.name} به‌روزرسانی شد.`)
         } else {
-          const created = await adapter.createCategory(tenantId, values)
+          const created = await clientRef.current.create(
+            tenantId,
+            {
+              name: values.name,
+              slug: values.slug,
+              displayOrder: values.displayOrder,
+              parentCategoryId,
+            },
+            controller.signal,
+          )
           setSuccess(`دسته‌بندی ${created.name} ایجاد شد.`)
         }
         reset()
@@ -170,33 +235,61 @@ export function CategoriesPage() {
         setEditingId(null)
         void loadCategories()
       } catch (error) {
+        if (isAbortError(error)) return
         if (error instanceof SessionExpiredError) {
           void signOutRef.current()
-        } else if (error instanceof CategoryConflictError) {
-          setError('slug', { message: error.message })
-          slugInputRef.current?.focus()
-        } else if (error instanceof ShopValidationError) {
-          for (const [field, message] of Object.entries(error.fieldErrors)) {
-            setError(field as keyof CategoryFormValues, { message })
+        } else if (error instanceof ApiUnavailableError) {
+          setFormFailure({
+            message: 'ذخیره تغییرات ممکن نشد؛ اتصال در دسترس نیست. دوباره تلاش کنید.',
+            retryable: true,
+          })
+        } else if (error instanceof ShopClientError) {
+          const { problem } = error
+          if (problem.status === 400) {
+            const fieldErrors = problem.errors ?? {}
+            let focused = false
+            for (const [field, messages] of Object.entries(fieldErrors)) {
+              const message = messages[0]
+              if (!message) continue
+              if (field === 'parentCategoryId') {
+                setError('parent', { message })
+                parentSelectRef.current?.focus()
+                focused = true
+              } else {
+                setError(field as keyof CategoryFormValues, { message })
+                if (!focused) {
+                  if (field === 'name') nameInputRef.current?.focus()
+                  else if (field === 'slug') slugInputRef.current?.focus()
+                  focused = true
+                }
+              }
+            }
+            if (!focused) {
+              setFormFailure({ message: problem.detail ?? problem.title ?? 'مقادیر ارسالی معتبر نیست.', retryable: false })
+            }
+          } else {
+            // 409 (unsafe reparent), 403 (no permission) and 404 (unknown
+            // category) each keep their own message — never one generic one.
+            setFormFailure({ message: problem.detail ?? problem.title ?? 'عملیات انجام نشد.', retryable: false })
           }
-          nameInputRef.current?.focus()
-        } else if (error instanceof ShopForbiddenError) {
-          setError('name', { message: error.message })
-          nameInputRef.current?.focus()
         }
       } finally {
-        setIsSubmitting(false)
+        if (!controller.signal.aborted) setIsSubmitting(false)
       }
     },
-    [editingId, editIsActive, tenantId, adapter, reset, setError, loadCategories],
+    [editingId, editIsActive, tenantId, reset, setError, loadCategories],
   )
 
-  const isLoading = categories === null && isBusy
-  const listError = categories === null && !isBusy && listFailure !== null
-  const isEmpty = categories !== null && categories.length === 0
+  const isLoading = rows === null && isBusy
+  const listError = rows === null && !isBusy && listFailure !== null
+  const isEmpty = rows !== null && rows.length === 0
   const nameField = register('name')
+  const { ref: nameRef, ...nameInput } = nameField
   const slugField = register('slug')
+  const { ref: slugRef, ...slugInput } = slugField
   const orderField = register('displayOrder')
+  const parentField = register('parent')
+  const { ref: parentRef, ...parentInput } = parentField
 
   return (
     <DashboardShell>
@@ -206,11 +299,11 @@ export function CategoriesPage() {
             <p className="text-sm font-semibold text-primary">مدیریت فروشگاه</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">دسته‌بندی‌ها</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              دسته‌بندی‌های محصولات فروشگاه را مشاهده و مدیریت کنید.
+              ریشه‌ها و زیر‌دسته‌های فروشگاه را مشاهده و مدیریت کنید. هر ریشه فقط یک سطح زیر‌دسته دارد.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {categories !== null && (
+            {rows !== null && (
               <SecondaryButton
                 type="button"
                 aria-label="به‌روزرسانی فهرست دسته‌بندی‌ها"
@@ -269,10 +362,10 @@ export function CategoriesPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               {editingId
                 ? 'اطلاعات دسته‌بندی را ویرایش کنید.'
-                : 'دسته‌بندی با وضعیت «فعال» ایجاد می‌شود.'}
+                : 'دسته‌بندی با وضعیت «فعال» ایجاد می‌شود. زیر‌دسته فقط می‌تواند مستقیماً زیر یک ریشه باشد.'}
             </p>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label className="mb-2 block text-sm font-semibold" htmlFor="category-name">
                   نام
@@ -282,9 +375,9 @@ export function CategoriesPage() {
                   autoComplete="off"
                   aria-invalid={Boolean(errors.name)}
                   aria-describedby={errors.name ? 'category-name-error' : undefined}
-                  {...nameField}
+                  {...nameInput}
                   ref={(node) => {
-                    nameField.ref(node)
+                    nameRef(node)
                     nameInputRef.current = node
                   }}
                 />
@@ -303,9 +396,9 @@ export function CategoriesPage() {
                   autoComplete="off"
                   aria-invalid={Boolean(errors.slug)}
                   aria-describedby={errors.slug ? 'category-slug-error' : undefined}
-                  {...slugField}
+                  {...slugInput}
                   ref={(node) => {
-                    slugField.ref(node)
+                    slugRef(node)
                     slugInputRef.current = node
                   }}
                 />
@@ -335,6 +428,38 @@ export function CategoriesPage() {
                   </p>
                 )}
               </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold" htmlFor="category-parent">
+                  ریشه‌ی والد
+                </label>
+                <select
+                  id="category-parent"
+                  ref={(node) => {
+                    parentRef(node)
+                    parentSelectRef.current = node
+                  }}
+                  aria-invalid={Boolean(errors.parent)}
+                  aria-describedby={errors.parent ? 'category-parent-error' : 'category-parent-hint'}
+                  className="min-h-11 w-full rounded-md border border-input bg-surface px-3 py-2 text-base text-foreground transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
+                  {...parentInput}
+                >
+                  <option value="">بدون والد (ریشه)</option>
+                  {parentOptions.map((root) => (
+                    <option key={root.id} value={root.id}>
+                      {root.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.parent ? (
+                  <p className="mt-2 text-sm text-destructive" id="category-parent-error">
+                    {errors.parent.message}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground" id="category-parent-hint">
+                    فقط ریشه‌های فعال قابل انتخاب هستند.
+                  </p>
+                )}
+              </div>
             </div>
 
             {editingId && (
@@ -351,6 +476,22 @@ export function CategoriesPage() {
                 />
                 فعال (در فروشگاه نمایش داده می‌شود)
               </label>
+            )}
+
+            {formFailure && (
+              <div
+                role="alert"
+                className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive"
+              >
+                <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+                <span className="min-w-0 flex-1">{formFailure.message}</span>
+                {formFailure.retryable && (
+                  <Button type="submit" className="min-w-28">
+                    <RefreshCw aria-hidden="true" className="me-2 size-4" />
+                    تلاش دوباره
+                  </Button>
+                )}
+              </div>
             )}
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -405,51 +546,73 @@ export function CategoriesPage() {
           </div>
         )}
 
-        {categories !== null && categories.length > 0 && (
+        {rows !== null && rows.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-sm">
-                <caption className="sr-only">فهرست دسته‌بندی‌های فروشگاه</caption>
-                <thead>
-                  <tr className="border-b border-border text-start">
-                    <th scope="col" className="px-4 py-3 text-start font-semibold">نام</th>
-                    <th scope="col" className="px-4 py-3 text-start font-semibold">نامک</th>
-                    <th scope="col" className="px-4 py-3 text-start font-semibold">ترتیب</th>
-                    <th scope="col" className="px-4 py-3 text-start font-semibold">وضعیت</th>
-                    <th scope="col" className="px-4 py-3 text-start font-semibold">عملیات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((category) => (
-                    <tr key={category.id} className="border-b border-border last:border-b-0">
-                      <td className="px-4 py-3">
-                        <bdi className="font-medium">{category.name}</bdi>
-                      </td>
-                      <td className="px-4 py-3">
-                        <bdi>{category.slug}</bdi>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{category.displayOrder}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge active={category.isActive} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <SecondaryButton
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => startEdit(category)}
-                        >
-                          ویرایش
-                        </SecondaryButton>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">ریشه‌ها و زیر‌دسته‌ها</h3>
             </div>
+            <ul className="divide-y divide-border" role="list">
+              {roots.map((root) => {
+                const children = childrenOf(root.id)
+                return (
+                  <li key={root.id}>
+                    <CategoryRow
+                      category={root}
+                      isChild={false}
+                      isSubmitting={isSubmitting}
+                      onEdit={startEdit}
+                    />
+                    {children.length > 0 && (
+                      <ul className="divide-y divide-border/60 border-t border-border/60 bg-muted/30" role="list">
+                        {children.map((child) => (
+                          <li key={child.id}>
+                            <CategoryRow category={child} isChild isSubmitting={isSubmitting} onEdit={startEdit} />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
           </div>
         )}
       </section>
     </DashboardShell>
+  )
+}
+
+function CategoryRow({
+  category,
+  isChild,
+  isSubmitting,
+  onEdit,
+}: {
+  category: AdminCategory
+  isChild: boolean
+  isSubmitting: boolean
+  onEdit: (category: AdminCategory) => void
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3',
+        isChild && 'ps-10', // logical-start indent: RTL-safe child level
+      )}
+    >
+      <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
+        {isChild && <span aria-hidden="true" className="text-muted-foreground">↳</span>}
+        <bdi className={cn('truncate font-medium', !category.isActive && 'text-muted-foreground')}>
+          {category.name}
+        </bdi>
+      </div>
+      <bdi className="hidden min-w-0 max-w-40 truncate text-sm text-muted-foreground sm:block">{category.slug}</bdi>
+      <span className="text-sm text-muted-foreground">{category.displayOrder}</span>
+      <StatusBadge active={category.isActive} />
+      <SecondaryButton type="button" disabled={isSubmitting} onClick={() => onEdit(category)}>
+        ویرایش
+      </SecondaryButton>
+    </div>
   )
 }
 
@@ -471,7 +634,7 @@ function StatusBadge({ active }: { active: boolean }) {
 }
 
 /**
- * Loading placeholder with the table's footprint (header + rows) so the
+ * Loading placeholder with the list's footprint (header + rows) so the
  * transition to data causes no layout shift.
  */
 function CategoriesSkeleton() {

@@ -96,14 +96,24 @@ Read the nearest existing adapter before writing a new one.
 `src/web/src/features/shop/contracts/` holds Zod wire contracts and
 `src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
 mounts one `ShopClientsProvider` around all routes; each bound slot is replaced
-individually by its connect task (F054 → `media`, F055 → `discovery`). Bound
-so far: `media` → `mockShopMediaClient` (F044) and `discovery` →
-`mockShopDiscoveryClient` (F045). Mock Shop scenario controls are development-only
+individually by its connect task (F054 → `media`, F055 → `discovery`,
+F056 → `categories`). Bound so far: `media` → `mockShopMediaClient` (F044),
+`discovery` → `mockShopDiscoveryClient` (F045) and `categories` →
+`mockShopCategoryClient` (F046). Mock Shop scenario controls are development-only
 and selected through the provider, never by importing fixtures into pages. Each
 capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx` that the
 provider's dev-only `DevScenarioToolbar` loads independently; new capabilities
 add their own switcher and position it so it does not overlap another switcher's
-fixed corner. See `docs/design/shop/frontend-contract-boundary.md`.
+fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
+categories: `bottom-[4.75rem] start-4`). See
+`docs/design/shop/frontend-contract-boundary.md`.
+
+`CategoryPage` (storefront) is deliberately mixed until F055/F056: the grouped
+nav bar in `StorefrontLayout`, the max-two-level breadcrumb and the admin
+`CategoriesPage` all consume the `categories` client slot (mock now), while the
+flat category grid and the product grid on `CategoryPage` still call the real
+`storefrontAdapter` — those calls 404 in the mock-first phase and are the only
+expected console noise on anonymous storefront routes.
 
 ## Authentication and permissions
 
@@ -177,6 +187,17 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
    Playwright pointer clicks (even `force: true`) are intercepted; browser
    evidence scripts dispatch a DOM `el.click()` inside `evaluate()` instead.
    Production builds never contain the toolbars (`import.meta.env.DEV`).
+10. The Vite dev server resolves its `/api` proxy target (WSL gateway IP) ONCE
+   at startup. When that gateway IP changes, `/api/*` through the port returns
+   connection failure while `curl` to `:5000` still works — the app then looks
+   like a logout loop (auth bootstrap 404s → redirect to `/login`). Restart the
+   dev server with an explicit target:
+   `VITE_API_PROXY_TARGET=http://127.0.0.1:5000 npm run dev -- --host 127.0.0.1
+   --port 5173 --strictPort` (the API binds 127.0.0.1 in this setup).
+11. In Playwright, assigning `select.value` inside `evaluate()` does NOT fire
+   React's `onChange`, so a react-hook-form field stays stale (e.g. a mock
+   scenario keyed on a non-null `parentCategoryId` never triggers). Use
+   `page.selectOption()` (fires the proper events) for controlled `<select>`s.
 
 ## Decisions future tasks must preserve
 

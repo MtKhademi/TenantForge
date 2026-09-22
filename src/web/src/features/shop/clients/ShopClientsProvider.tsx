@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { mockShopCategoryClient } from './mockShopCategoryClient'
 import { mockShopDiscoveryClient } from './mockShopDiscoveryClient'
 import { mockShopMediaClient } from './mockShopMediaClient'
+import type { ShopCategoryClient } from './ShopCategoryClient'
 import type { ShopDiscoveryClient } from './ShopDiscoveryClient'
 import type { ShopMediaClient } from './ShopMediaClient'
 
@@ -12,7 +14,7 @@ import type { ShopMediaClient } from './ShopMediaClient'
 export type ShopClients = {
   media: ShopMediaClient // F044 mock  -> F054 HTTP
   discovery: ShopDiscoveryClient // F045 mock -> F055 HTTP
-  // F046 adds:  categories: ShopCategoryClient        -> F056 HTTP
+  categories: ShopCategoryClient // F046 mock -> F056 HTTP
   // F047 adds:  profile: ShopProfileClient            -> F057 HTTP
   // F048 adds:  cartLease: ShopCartLeaseClient        -> F058 HTTP
   // F049 adds:  coupons: ShopCouponClient             -> F059 HTTP
@@ -22,7 +24,7 @@ export type ShopClients = {
 }
 
 export function createShopClients(): ShopClients {
-  return { media: mockShopMediaClient, discovery: mockShopDiscoveryClient }
+  return { media: mockShopMediaClient, discovery: mockShopDiscoveryClient, categories: mockShopCategoryClient }
 }
 
 const ShopClientsContext = createContext<ShopClients | null>(null)
@@ -57,6 +59,7 @@ export function useShopClients(): ShopClients {
 function DevScenarioToolbar() {
   const [MediaSwitcher, setMediaSwitcher] = useState<ComponentType | null>(null)
   const [DiscoverySwitcher, setDiscoverySwitcher] = useState<ComponentType | null>(null)
+  const [CategorySwitcher, setCategorySwitcher] = useState<ComponentType | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +68,9 @@ function DevScenarioToolbar() {
     })
     void import('../DevDiscoveryScenarioSwitcher').then((module) => {
       if (!cancelled) setDiscoverySwitcher(() => module.DevDiscoveryScenarioSwitcher)
+    })
+    void import('../DevCategoryScenarioSwitcher').then((module) => {
+      if (!cancelled) setCategorySwitcher(() => module.DevCategoryScenarioSwitcher)
     })
     return () => {
       cancelled = true
@@ -75,6 +81,7 @@ function DevScenarioToolbar() {
     <>
       {MediaSwitcher ? <MediaSwitcher /> : null}
       {DiscoverySwitcher ? <DiscoverySwitcher /> : null}
+      {CategorySwitcher ? <CategorySwitcher /> : null}
     </>
   )
 }
