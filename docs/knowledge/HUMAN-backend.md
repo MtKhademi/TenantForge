@@ -89,7 +89,14 @@ contract and the permission catalog contracts.
   returns the reserved stock to the shelf exactly once and voids any payment
   that has not yet completed. A paid order cannot be cancelled — refunds are a
   separate, later capability.
-- a sandbox payment gateway;
+- a gateway-neutral payment lifecycle: an operator-free "start payment" that is
+  idempotent (retrying with the same key replays the same answer, an order gets
+  at most one live attempt and ten attempts in total), a token-protected status
+  lookup (the raw callback token is returned once and only its hash is stored),
+  and a single completion service that is the only place an attempt or an order
+  can move — the browser can never declare a payment succeeded. The in-app
+  sandbox is one registered gateway behind this seam (a real provider plugs in
+  the same way); a production host configured with the sandbox refuses to start;
 - a tenant storefront identity (store name, tagline, support phone, Instagram)
   and customer policy pages (about, shipping, payment, returns, privacy) that
   the storefront header/footer can publish, saved with an optimistic-concurrency
@@ -167,8 +174,10 @@ index — not a "check first, then write" that two racing requests could both
 pass. Cancelling an order locks the order and its product-variant rows, returns
 the reserved stock in the same transaction, and records a release timestamp so
 the stock comes back exactly once even if the action is somehow triggered
-twice. A late payment callback for a cancelled order is rejected, so a cancelled
-order can never be paid by accident.
+twice. Cancelling also invalidates the order's still-open payment attempts in
+the same transaction, so a payment result that arrives late finds an attempt
+that can no longer be completed and simply reports the order's current
+(cancelled) status — a cancelled order can never be paid by accident.
 
 **Coupon rules have one owner, and spending capacity is race-safe.** Every
 coupon rule (minimum subtotal, discount cap, redemption limit, expiry, active
@@ -218,7 +227,11 @@ Full environment notes are in `docs/architecture.md`.
 - Invitations are records only. Nothing is emailed, and acceptance,
   registration-from-invite, resend and revoke are not implemented.
 - Sessions use a single access token; there is no refresh-token rotation.
-- Payments run against a sandbox gateway; a real provider is a later slice.
+- Payments run against the in-app sandbox gateway only. The gateway-neutral
+  seam (provider selection, token-protected status, the completion service) is
+  in place, but a real provider (ZarinPal) is a later slice — until then the
+  production provider value `ZarinPal` is configured-but-unimplemented and the
+  sandbox simulation is Development-only.
 - There is no metrics, tracing or background-job infrastructure yet.
 
 ## Where to look next

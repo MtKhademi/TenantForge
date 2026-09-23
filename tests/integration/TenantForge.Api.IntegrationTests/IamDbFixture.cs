@@ -420,3 +420,23 @@ public sealed class ShopOrderOperationsDbFixture : IamDbFixtureBase
 public sealed class ShopOrderOperationsIsolatedCollection : ICollectionFixture<ShopOrderOperationsDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B044's gateway-neutral payment-lifecycle tests
+/// (idempotent initiation, the 10-attempt cap, the completion service's
+/// exactly-once resolution, the token-protected status lookup, the
+/// Development-only sandbox resolve, the Production fail-closed startup and
+/// the redirect URL). Kept off the other Shop databases so their
+/// row-count and attempt-count assertions stay stable.
+/// </summary>
+public sealed class ShopPaymentLifecycleDbFixture : IamDbFixtureBase
+{
+    public ShopPaymentLifecycleDbFixture() : base("tenantforge_shop_payment_lifecycle_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopPaymentLifecycleIsolatedCollection))]
+public sealed class ShopPaymentLifecycleIsolatedCollection : ICollectionFixture<ShopPaymentLifecycleDbFixture>
+{
+}

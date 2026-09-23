@@ -176,13 +176,32 @@ public sealed class ShopOrderLookupIntegrationTests(ShopOrderLookupDbFixture db)
             couponCode = (string?)null
         });
 
-    private static Task<HttpResponseMessage> PostInitiateAsync(HttpClient anonymous, string tenantId, string orderId)
-        => anonymous.PostAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/initiate", content: null);
+    // B044: initiation now requires an Idempotency-Key header and returns
+    // { provider, redirectUrl, resultToken }; the sandbox redirectUrl carries
+    // the authority the fake bank page hands back to the resolve route.
+    private static async Task<string> InitiatePaymentAsync(HttpClient anonymous, string tenantId, string orderId)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post, $"/api/shop/{tenantId}/orders/{orderId}/payments/initiate");
+        request.Headers.TryAddWithoutValidation("Idempotency-Key", Guid.NewGuid().ToString());
+        var response = await anonymous.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var initiation = (await response.Content.ReadFromJsonAsync<LookupInitiatePaymentDto>())!;
+        return ParseAuthorityFromRedirectUrl(initiation.RedirectUrl);
+    }
 
-    private static Task<HttpResponseMessage> PostCallbackAsync(
-        HttpClient anonymous, string tenantId, string orderId, string? gatewayReference, bool approved)
-        => anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/callback",
-            new { gatewayReference, approved });
+    private static Task<HttpResponseMessage> ResolveSandboxAsync(
+        HttpClient anonymous, string tenantId, string orderId, string authority, bool approved)
+        => anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/sandbox/resolve",
+            new { authority, approved });
+
+    private static string ParseAuthorityFromRedirectUrl(string redirectUrl)
+    {
+        // /shop/{tenantId}/bank?authority={authority}
+        var index = redirectUrl.IndexOf("authority=", StringComparison.Ordinal);
+        Assert.True(index >= 0, $"redirectUrl must carry an authority: {redirectUrl}");
+        return redirectUrl[(index + "authority=".Length)..];
+    }
 
     private static Task<HttpResponseMessage> PostLookupAsync(
         HttpClient anonymous, string tenantId, string? trackingCode, string? customerPhone)
@@ -426,13 +445,13 @@ public sealed class ShopOrderLookupIntegrationTests(ShopOrderLookupDbFixture db)
         var setup = await SetupAsync();
 
         using var anonymous = CreateClient();
-        var initiate = await PostInitiateAsync(anonymous, setup.TenantId, setup.Order.OrderId);
-        Assert.Equal(HttpStatusCode.OK, initiate.StatusCode);
-        var initiation = (await initiate.Content.ReadFromJsonAsync<LookupInitiatePaymentDto>())!;
+        var authority = await InitiatePaymentAsync(anonymous, setup.TenantId, setup.Order.OrderId);
         Assert.Equal("PendingPayment", await GetOrderStatusAsync(setup.Order.OrderId));
 
-        var callback = await PostCallbackAsync(anonymous, setup.TenantId, setup.Order.OrderId, initiation.GatewayReference, approved: true);
-        Assert.Equal(HttpStatusCode.OK, callback.StatusCode);
+        // B044: pay through the Development-only sandbox resolve route (the old
+        // general callback route is deleted).
+        var resolve = await ResolveSandboxAsync(anonymous, setup.TenantId, setup.Order.OrderId, authority, approved: true);
+        Assert.Equal(HttpStatusCode.OK, resolve.StatusCode);
         Assert.Equal("Paid", await GetOrderStatusAsync(setup.Order.OrderId));
 
         // The lookup reflects the order's CURRENT status — it reads the live
@@ -516,7 +535,8 @@ internal sealed record LookupOrderCreatedDto(
     string OrderId, string OrderNumber, string TrackingCode, string Status,
     decimal SubTotal, decimal DiscountAmount, decimal ShippingCost, decimal GrandTotal);
 
-internal sealed record LookupInitiatePaymentDto(string GatewayReference, string RedirectUrl);
+// B044: initiation returns { provider, redirectUrl, resultToken }.
+internal sealed record LookupInitiatePaymentDto(string Provider, string RedirectUrl, string ResultToken);
 
 internal sealed record LookupItemDto(
     string ProductNameSnapshot, string VariantLabelSnapshot, decimal UnitPrice, int Quantity);

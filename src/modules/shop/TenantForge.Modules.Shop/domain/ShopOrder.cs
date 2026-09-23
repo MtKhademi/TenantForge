@@ -107,6 +107,13 @@ internal sealed class ShopOrder
         };
     }
 
+    /// <summary>
+    /// B044: moves the order to <c>Paid</c>. Called only by
+    /// <c>ShopPaymentCompletionService</c>, inside its transaction and only
+    /// after it has verified the attempt, its tenant, its order, its amount
+    /// and its provider — a gateway result can never reach this method
+    /// directly.
+    /// </summary>
     public void MarkPaid() => Status = ShopOrderStatus.Paid;
 
     /// <summary>B043's mutation path calls this exactly once per successful change.</summary>
@@ -171,11 +178,5 @@ internal sealed class ShopOrder
 
         InventoryReleasedAtUtc = nowUtc.ToUniversalTime();
         return true;
-    }
-
-    public void MarkPaymentFailed()
-    {
-        if (Status == ShopOrderStatus.PendingPayment) return;
-        Status = ShopOrderStatus.PendingPayment;
     }
 }

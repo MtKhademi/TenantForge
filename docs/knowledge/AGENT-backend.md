@@ -159,6 +159,11 @@ Copy the nearest existing feature in the same module before inventing a shape.
   `tests/integration/TenantForge.Api.IntegrationTests`.
 - `ApiFactory` / `IamDbFixture` boot the real host against a Testcontainers
   PostgreSQL instance. **Docker must be running.**
+- `ApiFactory` sets `Shop:Payments:Provider` per environment (Development →
+  `Sandbox`, Production → `ZarinPal`) so every test host starts after B044 made
+  the value required outside Development (and refused `Sandbox` there).
+  Production hosts never make a payment call, so `ZarinPal` validates at
+  startup and is never resolved to a gateway.
 - Every security-sensitive behavior needs both the happy path and the
   relevant unauthorized/forbidden path.
 - `BuildingBlocksArchitectureTests` and `IamContractArchitectureTests` lock the
@@ -278,7 +283,15 @@ dotnet.exe ef migrations add <Name> \
     also raises CS8863 "only a single partial type may have a parameter list").
     Prefix new DTO records with the task id (e.g. `B041CouponDto`) so they
     cannot collide with the existing per-feature shapes.
-18. When a test builds a query string by interpolation, a
+18. `ShopOrder.MarkPaid` (called only by
+    `features/payments/ShopPaymentCompletionService`) deliberately does **not**
+    bump the order's `Version` — only operator mutations (`TryCancel`/
+    `TryFulfill`) do, and only they are `expectedVersion`-gated. Paying an
+    order must not silently invalidate an operator's in-flight `expectedVersion`
+    (the B043 flow pays an order at version 1, then fulfils it with
+    `expectedVersion: 1`). Bumping the version on payment is a regression, not
+    a missing fix (B044 tripped this).
+19. When a test builds a query string by interpolation, a
     `DateTimeOffset`'s `:O` round-trip form for a UTC value contains a literal
     `+00:00`, and in a **raw query string a `+` decodes to a space** — so the
     endpoint rejects it as an unparseable value. A real HTTP client sends

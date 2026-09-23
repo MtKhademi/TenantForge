@@ -1,59 +1,59 @@
 using System.Security.Cryptography;
-using Microsoft.EntityFrameworkCore;
-using TenantForge.Modules.Shop.Domain;
-using TenantForge.Modules.Shop.Infrastructure;
+using TenantForge.BuildingBlocks.Identifiers;
 
 namespace TenantForge.Modules.Shop.Features.Payments;
 
 /// <summary>
-/// The one real IShopPaymentGateway implementation in this module. It never
-/// makes an outbound HTTP call to any external service — "initiating
-/// payment" means minting a ShopPaymentAttempt row and a redirect URL to an
-/// in-app frontend route (the fake bank page F038/F039 render), which then
-/// calls the callback endpoint directly. See B032's Spec Context and
-/// tasks/slices/029-shop-order-and-sandbox-payment.md for the explicit,
-/// deliberate scope boundary this class sits inside.
+/// B044: the sandbox's <see cref="IShopPaymentGateway"/>. It never makes an
+/// outbound HTTP call to any external service and never touches the database —
+/// it is a pure decision function. "Initiating" produces an authority (a
+/// cryptographically random 32-char hex string, stored in the attempt's
+/// <c>GatewayReference</c>) plus the redirect URL to the in-app fake bank page
+/// (<c>/shop/{tenantId}/bank?authority=…</c>, the real frontend route the
+/// customer approves/declines on). "Verifying" maps that page's
+/// <c>approved</c> callback value to a <see cref="GatewayVerification"/>; the
+/// attempt/order state change then runs exclusively through
+/// <see cref="ShopPaymentCompletionService"/>, which this class never calls.
+/// See docs/design/shop/payments.md for the trust boundary this sits under.
 /// </summary>
-internal sealed class SandboxPaymentGateway(ShopDbContext db) : IShopPaymentGateway
+internal sealed class SandboxPaymentGateway : IShopPaymentGateway
 {
-    private const string ProviderName = "Sandbox";
+    public const string ProviderName = "Sandbox";
 
-    public async Task<PaymentInitiation> InitiateAsync(ShopOrder order, CancellationToken ct)
+    public string Provider => ProviderName;
+
+    public Task<GatewayInitiation> InitiateAsync(PaymentContext context, CancellationToken ct)
     {
-        var gatewayReference = GenerateGatewayReference();
-        var attempt = ShopPaymentAttempt.Create(order.Id, ProviderName, gatewayReference, DateTimeOffset.UtcNow);
-        db.PaymentAttempts.Add(attempt);
-        await db.SaveChangesAsync(ct);
-
-        var redirectUrl = $"/shop/{Format(order.TenantId)}/payments/sandbox/{gatewayReference}";
-        return new PaymentInitiation(gatewayReference, redirectUrl);
+        // The sandbox authority doubles as its gateway reference. 16 random
+        // bytes → 32 lowercase hex chars, well inside the 60-char column.
+        var authority = GenerateAuthority();
+        var redirect = new Uri($"/shop/{TsidId.Format(context.TenantId)}/bank?authority={authority}", UriKind.Relative);
+        return Task.FromResult(new GatewayInitiation(authority, redirect));
     }
 
-    public async Task<PaymentVerification> VerifyCallbackAsync(string gatewayReference, bool approved, CancellationToken ct)
+    public Task<GatewayVerification> VerifyAsync(PaymentVerificationRequest request, CancellationToken ct)
     {
-        var attempt = await db.PaymentAttempts.SingleOrDefaultAsync(a => a.GatewayReference == gatewayReference, ct);
-        if (attempt is null)
+        // The fake bank page hands back a single "approved" flag. This value
+        // is the only browser-authored input the whole payment flow accepts,
+        // and only because it is a Development-only simulation of a provider
+        // page — a real provider verifies server-to-server instead (B045).
+        // The sandbox is an in-app simulation with no provider-side
+        // transaction record, so it contributes no provider reference.
+        if (!request.CallbackValues.TryGetValue("approved", out var raw)
+            || !bool.TryParse(raw, out var approved))
         {
-            return new PaymentVerification(false);
+            return Task.FromResult(new GatewayVerification(
+                GatewayOutcome.Failed, ReferenceId: null, "verification_failed"));
         }
 
-        var resolved = attempt.TryResolve(approved, DateTimeOffset.UtcNow);
-        if (!resolved)
-        {
-            // Already resolved once — do not silently re-apply a second
-            // callback for the same attempt (B032's Spec Non-goals).
-            return new PaymentVerification(false);
-        }
-
-        await db.SaveChangesAsync(ct);
-        return new PaymentVerification(approved);
+        return Task.FromResult(approved
+            ? new GatewayVerification(GatewayOutcome.Succeeded, ReferenceId: null, ErrorCode: null)
+            : new GatewayVerification(GatewayOutcome.Failed, ReferenceId: null, "payment_declined"));
     }
 
-    private static string GenerateGatewayReference()
+    private static string GenerateAuthority()
     {
         var bytes = RandomNumberGenerator.GetBytes(16);
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
-
-    private static string Format(TSID.Creator.NET.Tsid tenantId) => TenantForge.BuildingBlocks.Identifiers.TsidId.Format(tenantId);
 }

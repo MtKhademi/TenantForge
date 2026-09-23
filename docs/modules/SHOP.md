@@ -20,7 +20,7 @@ mismatch and verify before trusting either.
 10. [Product media](#10-product-media)
 11. [Inventory reservation](#11-inventory-reservation)
 12. [Coupon rules](#12-coupon-rules)
-13. [Sandbox payment](#13-sandbox-payment)
+13. [Payment lifecycle (gateway-neutral)](#13-payment-lifecycle-gateway-neutral)
 14. [Storefront profile and policies](#14-storefront-profile-and-policies)
 15. [Test map and commands](#15-test-map-and-commands)
 16. [Current limitations](#16-current-limitations)
@@ -33,8 +33,9 @@ Shop owns:
 - tenant-scoped catalog authoring (categories, products, variants, size
   guide, product image galleries);
 - anonymous public storefront reads (categories, products, product detail);
-- anonymous cart, checkout-summary, order creation, sandbox payment and
-  order-lookup flows;
+- anonymous cart, checkout-summary, order creation, the gateway-neutral
+  payment lifecycle (initiate / token-protected status / Development-only
+  sandbox resolve) and order-lookup flows;
 - tenant-scoped shipping-rate and coupon administration;
 - the tenant storefront identity and customer policy pages (one profile per
   tenant, published or draft);
@@ -53,8 +54,9 @@ Shop explicitly does **not** own:
   [Section 8](#8-tenantauth-rules)) instead of referencing IAM;
 - cloud object storage, video, image-cropping UI or CDN signing for product
   media (see [Section 10](#10-product-media));
-- real payment-gateway integration (only an in-app sandbox exists — see
-  [Section 13](#13-sandbox-payment));
+- real payment-gateway integration (only an in-app sandbox exists behind the
+  gateway-neutral seam — see
+  [Section 13](#13-payment-lifecycle-gateway-neutral));
 - customer accounts (every Shop-facing flow outside the authenticated admin
   routes is deliberately anonymous, matching a guest-first storefront).
 
@@ -109,8 +111,10 @@ await app.UseShopModuleAsync();
 ```
 
 - **`AddShopModule`** (registration, before `Build`) — adds every
-  Shop-owned service to the container (`ShopDbContext`, the sandbox payment
-  gateway, `IShopMediaStorage`, `ShopImageValidator`, `TimeProvider.System`,
+  Shop-owned service to the container (`ShopDbContext`, both
+  `IShopPaymentGateway` implementations (Sandbox today; ZarinPal in B045) plus
+  `IShopPaymentGatewayResolver`, `ShopPaymentCompletionService`,
+  `IShopMediaStorage`, `ShopImageValidator`, `TimeProvider.System`,
   `IShopCartExpiryService`, `ShopCartCleanupWorker`,
   `ShopPermissionCatalogContributor`). No I/O, no pass/fail decision.
 - **`UseShopModuleAsync`** (activation, after `Build`) — runs once, in this
@@ -136,7 +140,7 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | --- | --- | --- |
 | Shop composition seam | `src/modules/shop/TenantForge.Modules.Shop/ShopModule.cs` | The two public calls, activation order, fixed feature-mapping order |
 | Shop configuration | `src/modules/shop/TenantForge.Modules.Shop/ShopConfig.cs` | `Shop:ShopDb`/`Shop:MediaRoot` keys, DI registrations, fail-closed validation |
-| Domain entities | `src/modules/shop/TenantForge.Modules.Shop/domain/` | `ShopCategory`, `ShopProduct`, `ShopProductImage`, `ShopProductVariant`, `ShopSizeGuideColumn/Row/Cell`, `ShopShippingRate`, `ShopCoupon`, `ShopCart`, `ShopCartItem`, `ShopOrder`, `ShopOrderItem`, `ShopPaymentAttempt`, `ShopOrderOperation` and their enums |
+ | Domain entities | `src/modules/shop/TenantForge.Modules.Shop/domain/` | `ShopCategory`, `ShopProduct`, `ShopProductImage`, `ShopProductVariant`, `ShopSizeGuideColumn/Row/Cell`, `ShopShippingRate`, `ShopCoupon`, `ShopCart`, `ShopCartItem`, `ShopOrder`, `ShopOrderItem`, `ShopPaymentAttempt`, `ShopPaymentInitiation`, `ShopOrderOperation` and their enums |
 | Authorization | `src/modules/shop/TenantForge.Modules.Shop/features/authorization/` | `ShopAuthorization` (membership + permission check via raw SQL against IAM's tables), `ShopPermissionCatalogContributor` (the `shop` catalog group) |
 | Category admin | `src/modules/shop/TenantForge.Modules.Shop/features/categories/` | `CategoriesFeature` (create/list/update, the `ValidateParentAsync` eligibility rule and the reparent guard, a `FOR UPDATE` row lock so the guard + save are atomic), `CategoryContracts`, `CategoryVisibility` (the shared "effective public activity" predicate used by every public read) |
 | Product admin | `src/modules/shop/TenantForge.Modules.Shop/features/products/` | `ProductsFeature` (combined product + variants + size-guide authoring), `ProductContracts` |
@@ -149,7 +153,7 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Order creation | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` | `OrderCreationFeature`, `OrderContracts`, `OrderLookupFeature`, `OrderLookupContracts` |
 | Admin order reads | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B042) | `AdminOrdersFeature` (`Shop.Orders.View`-gated list + detail, non-leaking 404, 20-attempt cap), `AdminOrderContracts` |
 | Admin order operations | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B043) | `AdminOrdersFeature`'s `PATCH …/orders/{orderId}/status` (`Shop.Orders.Manage`-gated fulfil/cancel, optimistic `expectedVersion`, idempotent via the `shop_order_operations` unique key, exactly-once inventory release on cancel) — see [Section 11](#11-inventory-reservation) |
-| Sandbox payment | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway` — see [Section 13](#13-sandbox-payment) |
+ | Payment lifecycle | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway`, `ShopPaymentGatewayResolver`, `ShopPaymentCompletionService` — see [Section 13](#13-sandbox-payment) |
 | Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 14](#14-storefront-profile-and-policies) |
 | Pagination | `src/modules/shop/TenantForge.Modules.Shop/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` (Shop's own copy — not shared with IAM's) |
 | Persistence context/maps | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/` | `ShopDbContext`, `*Map.cs`, `ShopTsidValueConverter` |
@@ -170,6 +174,7 @@ All keys are read by `ShopConfig`
 | `Shop:MediaRoot` | Shop | Always required | Startup throws if blank, non-absolute, or the directory cannot be created/written (`LocalShopMediaStorage.ValidateRoot`) |
 | `Shop:CartReservationMinutes` | Shop | Required outside Development; Development defaults to `30` when blank | Startup throws unless the integer value is within `5..1440` inclusive |
 | `Shop:CartCleanupIntervalSeconds` | Shop | Always required | Startup throws unless the integer value is within `30..3600` inclusive |
+| `Shop:Payments:Provider` | Shop | Required outside Development; Development defaults to `Sandbox` when blank | Startup throws unless the value is exactly `Sandbox` or `ZarinPal` (case-sensitive); outside Development the value is additionally required and `Sandbox` is refused — the browser-driven payment simulation fails closed in Production |
 
 `Shop:ShopDb` deliberately points at the same physical database as
 `IAM:IamDb` (see [Section 3](#3-dependency-and-composition-boundary)); each
@@ -194,10 +199,11 @@ are `internal` (not reachable outside the module).
 | `ShopCoupon.cs` | `Tsid Id` | none | `Code`/`NormalizedCode` (upper-cased) unique per tenant; `DiscountType` is `Percentage` or `FixedAmount`; `Deactivate()` is the only state-removal path (no hard delete); B041 adds `MinimumSubtotal` (≥0), `MaximumDiscountAmount` (nullable, caps the discount), `RedemptionLimit` (nullable, `null`=unlimited, else `1..1,000,000`), `RedeemedCount` (≥0, only ever incremented atomically at order creation) and a client-managed `Version` (starts at `0`, bumped on every admin save incl. deactivate) — see [Section 12](#12-coupon-rules) |
 | `ShopCart.cs` | `Tsid Id` | optional `CouponId` | Anonymous — ownership is by opaque cart id alone, no account link; `Status` is `Active`/`Converted`/`Expired`, `LastTouchedAtUtc` and `ExpiresAtUtc` define the server-owned reservation lease, and `ClosedAtUtc` is set when the cart is converted or expired |
 | `ShopCartItem.cs` | `Tsid Id` | `CartId`, `ProductVariantId` | `UnitPriceSnapshot` frozen at add-time; `Quantity` must stay positive |
-| `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot; `Version` (int, default `1`) is the optimistic-concurrency token the status actions bump; `FulfilledAtUtc`/`CancelledAtUtc`/`InventoryReleasedAtUtc` are nullable and each set exactly once (B043); `TryFulfill` (only from `Paid`) and `TryCancel` (only from `PendingPayment`) each check `expectedVersion == Version`, move the status, stamp the matching timestamp and bump `Version` — `MarkInventoryReleased` stamps `InventoryReleasedAtUtc` only when still null (the exactly-once guard) |
+| `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot; `Version` (int, default `1`) is the optimistic-concurrency token the status actions bump; `FulfilledAtUtc`/`CancelledAtUtc`/`InventoryReleasedAtUtc` are nullable and each set exactly once (B043); `TryFulfill` (only from `Paid`) and `TryCancel` (only from `PendingPayment`) each check `expectedVersion == Version`, move the status, stamp the matching timestamp and bump `Version` — `MarkInventoryReleased` stamps `InventoryReleasedAtUtc` only when still null (the exactly-once guard); `MarkPaid` (B044, called only by the payment completion service) moves `PendingPayment → Paid` and deliberately does **not** bump `Version` — only operator mutations are `expectedVersion`-gated, so a payment never invalidates an operator's in-flight version |
 | `ShopOrderOperation.cs` | `Tsid Id` | `OrderId` (cascade) | B043's idempotency record — one row per order-status action: the client `Key` (a UUID), the canonical `OrderStatusAction` (`Fulfill`/`Cancel`), a JSON `ResponseSnapshot`, the acting `ActorId` and `CreatedAtUtc`; the unique `(TenantId, Key)` constraint makes a key single-use per tenant |
 | `ShopOrderItem.cs` | `Tsid Id` | `OrderId` | Snapshots product name/variant label/unit price at order-creation time — never a live join back to the catalog |
-| `ShopPaymentAttempt.cs` | `Tsid Id` | `OrderId` (no `TenantId` column — filter through `ShopOrder` when tenant-scoping is required) | `Status` (`Initiated`/`Succeeded`/`Failed`); `TryResolve` is idempotent — a second callback for an already-resolved attempt returns `false` and changes nothing |
+| `ShopPaymentAttempt.cs` | `Tsid Id` | `OrderId` (no `TenantId` column — filter through `ShopOrder` when tenant-scoping is required) | `Status` (`Initiated`/`Succeeded`/`Failed`/`Invalidated`); `AmountSnapshot` freezes the order total at initiation; `CallbackTokenHash` stores only the SHA-256 of the 32-byte raw callback token (the raw token is never persisted); `FailureCode` (stable code on `Failed`), `ProviderReference` (the provider's verification-time reference, null until a success — never the authority, which stays in `GatewayReference`), `VerifiedAtUtc` (set exactly once on resolution/invalidation) and `Version` (bumped exactly by the resolving write); `TryResolve` (→`Succeeded`/`Failed`) and `TryInvalidate` (→`Invalidated`, called by a cancel) are both called exclusively by `ShopPaymentCompletionService` and both idempotent — a second call for an already-resolved attempt returns `false` and changes nothing |
+| `ShopPaymentInitiation.cs` | `Tsid Id` | `TenantId`, `OrderId` (cascade), `AttemptId` | B044's idempotency record — one row per client `IdempotencyKey` (a UUID) per initiation: the `RequestFingerprint` (SHA-256 of the canonical `tenantId|orderId`), the stored `RedirectUrl`, and the 32-byte `TokenSeed` from which the raw token is re-derived on a same-key replay (the seed is not the token and never authenticates anything); the **unique** `(TenantId, IdempotencyKey)` index makes a key single-use per tenant and is what resolves a racing first-call to exactly one winner |
 | `ShopProfile.cs` | `Tsid Id` | `TenantId` (unique — exactly one profile row per tenant, enforced by a unique index, not a relationship) | All text is plain text (never HTML); every field is trimmed on the outside only, internal newlines preserved; `InstagramUrl` (nullable) must be HTTPS on `instagram.com`/a subdomain; `SupportPhone` is a conservative display allowlist (digits, spaces, `+`, `-`, `(`, `)`); `Version` is a client-managed optimistic-concurrency counter (starts at `1`, not a DB rowversion); `IsPublished` gates only the public profile/policy reads, never the catalog — see [Section 14](#14-storefront-profile-and-policies) |
 
 ## 7. Persistence
@@ -213,7 +219,24 @@ Migration order (`infrastructure/Migrations/`, chronological):
 `AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia` →
 `AddShopCategoryHierarchy` → `AddShopProfile` →
 `AddShopCartReservationExpiry` → `AddShopCouponRules` →
-`AddShopOrderVersion` → `AddShopOrderOperations`.
+`AddShopOrderVersion` → `AddShopOrderOperations` → `AddShopPaymentLifecycle`.
+`AddShopPaymentLifecycle` (B044) adds six columns to
+`shop_payment_attempts` — `amount_snapshot` (numeric(12,2), not nullable),
+`callback_token_hash` (varchar(64), not nullable), `failure_code`
+(varchar(40), nullable), `provider_reference` (varchar(60), nullable),
+`verified_at_utc` (nullable) and `version` (int, not nullable, default `0`) —
+the three new not-nullable columns take flat defaults (`amount_snapshot` `0`,
+`callback_token_hash` empty string, `version` `0`) rather than a data backfill:
+pre-B044 attempt rows are historical (already resolved, or — if still
+`Initiated` — the completion service's amount/provider re-check rejects them
+safely), so no cross-table data migration is needed — and creates the
+`shop_payment_initiations` table (`id`, `tenant_id`, `order_id` with a cascade
+FK to `shop_orders`, `attempt_id`, `idempotency_key` varchar(36),
+`request_fingerprint` varchar(64), `redirect_url` varchar(2048), `token_seed`
+(bytea, 32 bytes), `created_at_utc`) with the **unique** index
+`ix_shop_payment_initiations_tenant_idempotency_key` on
+`(tenant_id, idempotency_key)` and a non-unique
+`ix_shop_payment_initiations_order_id`.
 `AddShopOrderOperations` adds the three nullable timestamps to `shop_orders`
 (`fulfilled_at_utc`, `cancelled_at_utc`, `inventory_released_at_utc`) and the
 `shop_order_operations` table (B043's idempotency record: `id`, `tenant_id`,
@@ -273,9 +296,9 @@ not through IAM's context or entities.
   routes (category/product/media/shipping-rate/coupon authoring, and the
   storefront profile/policy read + save).
 - `/api/shop/{tenantId}/...` — anonymous, public routes (storefront reads,
-  cart, checkout summary, order creation, payment initiate/callback, order
-  lookup, and the public storefront profile). These were the first anonymous
-  endpoints in TenantForge (B027).
+  cart, checkout summary, order creation, payment initiate/status/sandbox
+  resolve, order lookup, and the public storefront profile). These were the
+  first anonymous endpoints in TenantForge (B027).
 
 **`ShopAuthorization.AuthorizeTenantAccessAsync`**
 (`src/modules/shop/TenantForge.Modules.Shop/features/authorization/ShopAuthorization.cs`)
@@ -327,8 +350,9 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 
 ## 9. Endpoint catalog
 
-38 routes, one row per literal `Map*` call in
-`src/modules/shop/TenantForge.Modules.Shop/features/**`.
+39 routes, one row per literal `Map*` call in
+`src/modules/shop/TenantForge.Modules.Shop/features/**` (the Development-only
+sandbox-resolve route is mapped conditionally but is still a mapped route).
 
 | Method & path | Purpose | Auth | Feature file |
 | --- | --- | --- | --- |
@@ -361,8 +385,9 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `GET /api/shop/{tenantId}/carts/{cartId}` | Fetch an active cart with computed subtotal and `expiresAtUtc`; read does not extend the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
 | `POST /api/shop/{tenantId}/checkout/summary` | Price an active cart against an address + optional coupon; expired carts return `410 shop_cart_expired` | Anonymous | `checkout/CheckoutFeature.cs` |
 | `POST /api/shop/{tenantId}/orders` | Create an order from an active validated cart, mark the cart `Converted`, and leave the cart row as history | Anonymous | `orders/OrderCreationFeature.cs` |
-| `POST /api/shop/{tenantId}/orders/{orderId}/payments/initiate` | Start a sandbox payment attempt | Anonymous | `payments/PaymentsFeature.cs` |
-| `POST /api/shop/{tenantId}/orders/{orderId}/payments/callback` | Resolve a sandbox payment attempt | Anonymous | `payments/PaymentsFeature.cs` |
+| `POST /api/shop/{tenantId}/orders/{orderId}/payments/initiate` | Start a payment attempt — `Idempotency-Key` UUID header, no body; `400` naming the header when missing/non-UUID; `409` when the order is not `PendingPayment`; `409 idempotency_key_conflict` on a same-key/different-request reuse; `409 too_many_payment_attempts` on the 11th attempt; a same-key replay returns the stored response byte-identically; a fresh key for an order with a live attempt returns that attempt's response | Anonymous | `payments/PaymentsFeature.cs` |
+| `GET /api/shop/{tenantId}/orders/{orderId}/payments/status?token={resultToken}` | Token-protected order status — fixed-time hash comparison; only `orderNumber`/`status`/`providerReference`; every miss (missing/blank/wrong token, wrong order, wrong tenant, no attempts) is the one identical generic `404` | Anonymous | `payments/PaymentsFeature.cs` |
+| `POST /api/shop/{tenantId}/orders/{orderId}/payments/sandbox/resolve` | Development-only sandbox simulation — `{ authority, approved }`; blank `authority` → `400` naming `authority`; a success for an unpayable order → `409`; a success for an already-resolved attempt returns the stored outcome without re-applying | Anonymous, Development-only | `payments/PaymentsFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/lookup` | Guest order lookup by tracking code + phone | Anonymous | `orders/OrderLookupFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/orders?pageNumber=&pageSize=&status=&q=&fromUtc=&toUtc=` | List the tenant's orders (paginated, filtered); always sorted `CreatedAtUtc desc, Id desc`; malformed/invalid filter → `400` | `Shop.Orders.View` | `orders/AdminOrdersFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/orders/{orderId}` | One order's full detail (customer, totals, item snapshots, ≤20 newest payment attempts, `version`); malformed/foreign/missing id → one identical non-leaking `404` | `Shop.Orders.View` | `orders/AdminOrdersFeature.cs` |
@@ -546,23 +571,73 @@ so the two call sites (checkout preview and order consumption) cannot drift.
   request carries neither field, so neither can change. Deactivation
   (`PATCH …/deactivate`) is always allowed and also bumps `Version`.
 
-## 13. Sandbox payment
+## 13. Payment lifecycle (gateway-neutral)
 
 `IShopPaymentGateway` (`features/payments/IShopPaymentGateway.cs`) is the
-only seam a real provider would implement. `SandboxPaymentGateway` is the
-one registered implementation: `InitiateAsync` never makes an outbound HTTP
-call — it mints a `ShopPaymentAttempt` row and a redirect URL to an in-app
-frontend route (the fake bank page). `VerifyCallbackAsync` resolves the
-attempt to `Succeeded`/`Failed` and is idempotent — a second callback for an
-already-resolved attempt changes nothing and reports failure. There is no
-stored card data and no gateway webhook signature scheme beyond what the
-sandbox needs to demonstrate the seam is real.
+seam a real provider implements. Two implementations are registered
+(`SandboxPaymentGateway` today; ZarinPal lands in B045) and exactly one is
+chosen per request by `ShopPaymentGatewayResolver` from the
+`Shop:Payments:Provider` value — never by registration order. A gateway is a
+pure decision function: it never sees the order aggregate, never touches the
+database, and never mutates an attempt or order.
 
-Two B043 interactions: the callback route answers any order that is no longer
-`PendingPayment` with a `409` (so a late callback for a `Cancelled` order can
-never mark it `Paid`), and a successful cancel invalidates the order's still-
-`Initiated` attempts to `Failed` in its transaction, so an un-paid attempt can
-no longer be completed.
+**Trust boundary**: the browser never declares success. Initiation carries no
+body at all — the `Idempotency-Key` header is the only input and every value
+(the amount, the provider, the callback URL) is server-derived. The browser
+only carries the `authority` it was redirected with; verification goes
+`gateway.VerifyAsync` → `ShopPaymentCompletionService`, which re-checks
+tenant, order, amount and provider under row locks before anything moves.
+
+**The completion service is the single transition owner.**
+`ShopPaymentCompletionService` is the ONLY place an attempt leaves
+`Initiated` (to `Succeeded`/`Failed`/`Invalidated`) and the ONLY place an order
+moves `PendingPayment → Paid`. It locks the order row (`FOR UPDATE`,
+tenant-first — the attempt has no tenant column of its own) then the attempt
+row (its unique `gateway_reference`), validates the attempt belongs to that
+order, the providers match, the frozen `AmountSnapshot` matches the order's
+total, and — for a success — the order is still `PendingPayment`; then it
+resolves the attempt exactly once (a racing duplicate blocks on the lock and
+returns the already-computed outcome instead of re-applying it). A success
+calls `ShopOrder.MarkPaid()` — which deliberately does not bump the order's
+`Version`, since only operator mutations are `expectedVersion`-gated.
+
+**Callback token**: a 32-byte random seed is stored on the initiation row; the
+raw token is its SHA-256 (returned to the client exactly once, and re-derived
+byte-identically on a same-key replay); only the token's SHA-256 is stored, on
+the attempt. `GET …/payments/status` is the only route that accepts it, and
+compares the presented token's hash with a **fixed-time** comparison (a
+normal `==`/`string.Equals` is never used for it).
+
+**Idempotent initiation**: `POST …/payments/initiate` requires the
+`Idempotency-Key` header (a UUID, or `400` naming the header). Under the
+order-row lock it: rejects a non-`PendingPayment` order (`409`); replays a
+same-key/same-request initiation byte-identically (a same-key/different-request
+reuse is `409 idempotency_key_conflict`); reuses the order's single live
+`Initiated` attempt for any fresh key (no orphan rows); and enforces the 10-attempt
+cap (the 11th → `409 too_many_payment_attempts`). The unique
+`(tenant_id, idempotency_key)` index on `shop_payment_initiations` is the
+constraint that resolves a racing same-key first-call to exactly one winner
+(a `23505` is caught and answered as a replay, never a `500`).
+
+**Sandbox gateway**: `InitiateAsync` makes no outbound HTTP call — it mints an
+authority (16 random bytes → 32 lowercase hex chars) and the relative,
+same-origin redirect `/shop/{tenantId}/bank?authority={authority}` (the real
+in-app fake-bank route). `VerifyAsync` maps that page's single `approved`
+value to a `GatewayVerification` (success, or `Failed` with a stable code —
+`payment_declined` / `verification_failed`). The Development-only
+`POST …/payments/sandbox/resolve` route is the only browser-driven payment
+simulation: it is mapped only when the environment is Development, and
+`Shop:Payments:Provider=Sandbox` is refused at startup outside Development, so
+the simulation cannot be enabled silently in Production. There is no stored
+card data and no webhook signature scheme — B045's real provider verifies
+server-to-server through the same seam.
+
+**B043 interaction**: a cancel invalidates the order's still-`Initiated`
+attempts to `Invalidated` (in the cancel's transaction, via
+`completionService.InvalidateInitiatedAttemptsAsync`) so a late success can no
+longer complete them; a late success for such an attempt therefore returns the
+already-computed outcome — the order's current `Cancelled` status — and the
+order never moves to `Paid`.
 
 ## 14. Storefront profile and policies
 
@@ -618,13 +693,13 @@ lower-cased, and the suffix check anchors on the dot so
 | `ShopShippingCouponAdminIntegrationTests.cs` | Shipping-rate/coupon admin CRUD, `Shop.Shipping.Manage` enforcement |
 | `ShopCheckoutIntegrationTests.cs` | Checkout-summary pricing, unshippable-province handling, coupon application |
 | `ShopOrderIntegrationTests.cs` | Order creation, no double-decrement, concurrent-order race safety |
-| `ShopPaymentIntegrationTests.cs` | Sandbox initiate/callback, idempotent resolution |
+| `ShopPaymentLifecycleIntegrationTests.cs` | B044 payment lifecycle: valid initiation (sandbox provider, bank redirect, one `Initiated` attempt, only the token hash stored), same-key replay byte-identical with no duplicate attempt, two fresh keys → one live attempt, `AmountSnapshot` frozen before a later catalog price change, the 10-attempt cap (`409 too_many_payment_attempts`, 11th rejected), sandbox approve → `Paid`/`Succeeded`, sandbox decline → `PendingPayment`/`Failed` (`payment_declined`), duplicate success returns the stored outcome without re-applying, a late success for a `Cancelled` order returns the `Cancelled` outcome and never pays (cancel invalidated the attempt), only the SHA-256 of the token is stored (never the raw token), status endpoint: wrong token/wrong order/wrong tenant/no-attempts all return the one generic `404` (correct token `200`), sandbox resolve works in Development (approve + decline), Production + `Sandbox` provider fails closed at startup, the new migration applies cleanly on the existing history (adds exactly the six attempt columns + `shop_payment_initiations`), the redirect is the relative same-origin bank path, and `Idempotency-Key` missing/non-UUID → `400` naming the header — all asserted against real persisted rows |
 | `ShopOrderLookupIntegrationTests.cs` | Guest lookup contract, non-leaking generic not-found |
 | `ShopProfileIntegrationTests.cs` | B039 storefront profile: admin GET null-empty-state, create→update→GET round-trip with version bump, stale-version `409 stale_version`, concurrent first-create race (one `200`, one `409`, one row), tenant isolation (A cannot read/write B), `Shop.Settings.Manage` denial + role grant + Owner bypass, outside-trim / preserved-newlines / over-length validation, phone allowlist, Instagram URL rules (non-HTTPS / wrong host / look-alike domain), public `404` for missing/unpublished/malformed-id, public `200` shape with no `version`/`id`/`tenantId`/`updatedAtUtc`, and publication NOT gating the storefront catalog |
 | `ShopCouponRulesIntegrationTests.cs` | B041 coupon rules: `ShopCouponPolicy` ordered reason codes (`coupon_inactive`/`_expired`/`_minimum_not_met`/`_limit_reached` + the caller's `coupon_not_found`) with the exact stable code surfaced in the `couponCode` field error, percentage discount capped at `maximumDiscountAmount` (and never past the subtotal), checkout summary never incrementing `RedeemedCount`, order creation incrementing by exactly one and storing the evaluated discount, a forced downstream DB failure rolling the redemption back, the concurrent last-redemption race (one 201 with the discount, one 400 `coupon_limit_reached`, total +1, loser's cart left active), stale `expectedVersion` → `409 stale_version`, `redemptionLimit` below `redeemedCount` → `400` with no persisted change, and tenant B unable to read/update/redeem tenant A's coupon with a byte-identical `coupon_not_found` |
 | `ShopCouponRulesMigrationTests.cs` | B041 migration: a pre-`AddShopCouponRules` `shop_coupons` row backfills to `redemption_limit` NULL (unlimited), `redeemed_count` 0 and `version` 0, keeping its original fields so it stays usable |
-| `ShopAdminOrdersIntegrationTests.cs` | B042 admin order reads: `Shop.Orders.View` matrix (Owner bypass 200, granted member 200, no-key member 403, `Shop.Orders.Manage`-only member still 403, anonymous 401), tenant isolation (foreign orders never listed, cross-tenant id → the byte-identical generic 404), list filters `q`/`status`/`fromUtc`/`toUtc` valid + invalid (400 naming the field), stable two-page pagination, item-snapshot fidelity after the product is renamed/repriced, the 20-newest payment-attempt cap (21 real attempts → 20 returned, newest first), and the detail shape (customer, totals, items, `version: 1`) |
-| `ShopOrderOperationsIntegrationTests.cs` | B043 order-status mutations: fulfil a `Paid` order (`Fulfilled`, `FulfilledAtUtc` set, stock untouched, version 1→2), cancel a `PendingPayment` order (stock restored to full initial, `InventoryReleasedAtUtc` set, `Initiated` attempts invalidated to `Failed`), a late payment callback for a `Cancelled` order rejected `409` and never `Paid`, idempotent replay (same key + same action returns the byte-identical stored response, one operation row, stock restored once), same key + different action → `409 idempotency_key_conflict` with nothing performed, stale `expectedVersion` → `409 stale_version` with no change, two concurrent cancels (one `200`/one `409`, stock restored exactly once, one operation row), the `Shop.Orders.Manage` matrix (Owner 200, granted 200, no-key 403, `Shop.Orders.View`-only 403, anonymous 401), cross-tenant order id → the byte-identical generic 404, and validation `400`s (bad/missing action, non-UUID/missing `Idempotency-Key`) — all asserted against the real persisted rows, not just status codes |
+| `ShopAdminOrdersIntegrationTests.cs` | B042 admin order reads: `Shop.Orders.View` matrix (Owner bypass 200, granted member 200, no-key member 403, `Shop.Orders.Manage`-only member still 403, anonymous 401), tenant isolation (foreign orders never listed, cross-tenant id → the byte-identical generic 404), list filters `q`/`status`/`fromUtc`/`toUtc` valid + invalid (400 naming the field), stable two-page pagination, item-snapshot fidelity after the product is renamed/repriced, the 20-newest payment-attempt cap (21 Failed attempt rows seeded directly — B044's API caps a live order at 10 attempts — → 20 returned, newest first), and the detail shape (customer, totals, items, `version: 1`) |
+| `ShopOrderOperationsIntegrationTests.cs` | B043 order-status mutations (payments driven through B044's sandbox resolve): fulfil a `Paid` order (`Fulfilled`, `FulfilledAtUtc` set, stock untouched, version 1→2 — a payment does not bump the order version), cancel a `PendingPayment` order (stock restored to full initial, `InventoryReleasedAtUtc` set, the `Initiated` attempt invalidated to `Invalidated`, none `Failed`), a late success for a `Cancelled` order returns the already-computed `Cancelled` outcome (`200`) and never pays (the attempt stays `Invalidated`, none `Succeeded`), idempotent replay (same key + same action returns the byte-identical stored response, one operation row, stock restored once), same key + different action → `409 idempotency_key_conflict` with nothing performed, stale `expectedVersion` → `409 stale_version` with no change, two concurrent cancels (one `200`/one `409`, stock restored exactly once, one operation row), the `Shop.Orders.Manage` matrix (Owner 200, granted 200, no-key 403, `Shop.Orders.View`-only 403, anonymous 401), cross-tenant order id → the byte-identical generic 404, and validation `400`s (bad/missing action, non-UUID/missing `Idempotency-Key`) — all asserted against the real persisted rows, not just status codes |
 
 Commands:
 
@@ -651,8 +726,11 @@ Verified against current code (not aspirational):
 - **No customer accounts** — every public/anonymous route is by design;
   there is no login, no saved address book, no order history beyond the
   guest tracking-code lookup.
-- **Sandbox payment only** — no real gateway integration exists yet; see
-  [Section 13](#13-sandbox-payment).
+- **Sandbox payment only** — the gateway-neutral seam (initiation, token-protected
+  status, completion service, `Shop:Payments:Provider` + resolver) is in place,
+  but only the in-app `Sandbox` gateway is registered; a real provider (ZarinPal)
+  lands in B045 and until then `ZarinPal` fails closed at resolution. See
+  [Section 13](#13-payment-lifecycle-gateway-neutral).
 - **No full-text search engine, popularity/rating sort, recommendations,
   tags or faceted color/size filters** — B037's storefront discovery is
   name search + the four `newest`/`price-asc`/`price-desc`/`name` sorts only
@@ -685,7 +763,7 @@ Verified against current code (not aspirational):
 | product media behavior | Product media |
 | inventory/stock behavior | Inventory reservation |
 | coupon rule/limit/redemption behavior | Coupon rules |
-| payment gateway behavior | Sandbox payment |
+| payment gateway behavior | Payment lifecycle (gateway-neutral) |
 | storefront profile/policy behavior | Storefront profile and policies |
 | test/verification path | Test map |
 | implemented limitation | Current limitations |
@@ -703,3 +781,14 @@ B036/S32 declaration: `SHOP.md impact: updated — created this handbook
 keys, domain model, persistence, tenant/auth rules, the full 28-route
 endpoint catalog, the new product-media feature, inventory reservation,
 sandbox payment, the test map and current limitations.`
+
+B044/S40 declaration: `SHOP.md impact: updated — Purpose (payment-lifecycle
+wording), composition (gateway/resolver/completion-service registrations),
+source map (ShopPaymentInitiation, Payment lifecycle row), Configuration
+(Shop:Payments:Provider), Domain (ShopOrder.MarkPaid no version bump,
+ShopPaymentAttempt B044 fields + Invalidated, new ShopPaymentInitiation row),
+Persistence (AddShopPaymentLifecycle migration), Tenant/auth (anonymous route
+wording), Endpoint catalog (39 routes; initiate/status/sandbox-resolve rows
+replacing initiate/callback), Section 13 rewritten as the gateway-neutral
+payment lifecycle, Test map (lifecycle class + migrated B042/B043 rows),
+Current limitations (seam-in-place, sandbox-only).`
