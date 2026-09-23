@@ -80,7 +80,7 @@ one valid Spec link.
 | F045 | S33 | Build contract-shaped storefront discovery mocks | done | F044 | — |
 | F046 | S34 | Build contract-shaped nested category mocks | done | F045 | — |
 | F047 | S35 | Build contract-shaped storefront identity and policy mocks | done | F046 | — |
-| F048 | S36 | Build contract-shaped cart expiry mocks | in_progress | F047 | [F048 Spec](front/F048-shop-cart-expiry-mock.md) |
+| F048 | S36 | Build contract-shaped cart expiry mocks | done | F047 | — |
 | F049 | S37 | Build contract-shaped advanced coupon mocks | planned | F048 | [F049 Spec](front/F049-shop-coupon-rules-mock.md) |
 | F050 | S38 | Build contract-shaped admin order list and detail mocks | planned | F049 | [F050 Spec](front/F050-shop-admin-orders-mock.md) |
 | F051 | S39 | Build contract-shaped fulfil and cancel mocks | planned | F050 | [F051 Spec](front/F051-shop-order-operations-mock.md) |

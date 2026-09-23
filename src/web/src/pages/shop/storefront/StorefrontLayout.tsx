@@ -1,7 +1,7 @@
 import { Camera, Phone, ShoppingCart, Store } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom'
-import { cartAdapter } from '@/features/shop/cartAdapter'
+import { getCartId } from '@/features/shop/cartStorage'
 import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
 import type { PublicCategory } from '@/features/shop/contracts/categoryHierarchyContract'
 import type { PublicShopProfile } from '@/features/shop/contracts/shopProfileContract'
@@ -14,11 +14,15 @@ import { cn } from '@/lib/utils'
  * routes live outside `ProtectedLayout` in `App.tsx`. It reuses only the
  * design tokens in `index.css` and the shared `ui/` primitives.
  *
- * The cart control is a count badge fed by the real cart API (F033). Since
- * F033 replaced the in-memory mock store with `cartAdapter`, there is no
- * synchronous subscription anymore: the count is re-fetched on mount and
+ * The cart control is a count badge fed by the `cartLease` client slot (the
+ * B040 mock now, the HTTP client after F058). It is re-read on mount and
  * whenever the route changes (e.g. after adding to cart on the product
  * detail page), so it is always fresh on the page the visitor lands on.
+ * F048 moved it off the real `cartAdapter` (F033): in the mock-first phase
+ * the stored cart id is client-minted by the cart page's `useCartLease`, and
+ * the real adapter's 404 handler would clear that id and race the mock.
+ * The badge stays read-only — it reads the STORED cart id only, never mints
+ * one, and a plain read never extends the lease (B040).
  *
  * F046 adds the grouped category bar: `listPublic` (the B038 mock now, the
  * HTTP client after F056) returns only effective-activity roots, each with
@@ -54,7 +58,7 @@ const POLICY_LINKS: ReadonlyArray<{ slug: string; label: string }> = [
 export function StorefrontLayout() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const location = useLocation()
-  const { categories: categoryClient, profile: profileClient } = useShopClients()
+  const { categories: categoryClient, profile: profileClient, cartLease } = useShopClients()
   const [itemCount, setItemCount] = useState(0)
   const [categoryTree, setCategoryTree] = useState<PublicCategory[] | null>(null)
   // null = not loaded yet (or failed); a profile object = published identity.
@@ -62,21 +66,31 @@ export function StorefrontLayout() {
   const [profileLoaded, setProfileLoaded] = useState(false)
 
   useEffect(() => {
+    const controller = new AbortController()
+    const storedCartId = getCartId(tenantId)
+    if (!storedCartId) {
+      // No stored cart: nothing to count. Deliberately NOT minting one —
+      // the badge is read-only, exactly as F033's adapter-based badge was.
+      setItemCount(0)
+      return undefined
+    }
     let cancelled = false
-    void cartAdapter
-      .getCart(tenantId)
+    void cartLease
+      .getCart(tenantId, storedCartId, controller.signal)
       .then((cart) => {
-        if (!cancelled) setItemCount(cart ? cart.items.reduce((sum, item) => sum + item.quantity, 0) : 0)
+        if (!cancelled) setItemCount(cart.items.reduce((sum, item) => sum + item.quantity, 0))
       })
       .catch(() => {
-        // The badge is decorative weight only; an unreachable API must not
-        // break storefront navigation, so the count simply stays at 0.
+        // The badge is decorative weight only; an expired lease, unknown id
+        // or transport failure must not break storefront navigation, so the
+        // count simply stays at 0 (the page's own recovery state owns UX).
         if (!cancelled) setItemCount(0)
       })
     return () => {
       cancelled = true
+      controller.abort()
     }
-  }, [tenantId, location.pathname])
+  }, [tenantId, location.pathname, cartLease])
 
   // One abort controller per tenant for the category tree; a superseded tree
   // must never overwrite a newer one, and an aborted load must not surface as
