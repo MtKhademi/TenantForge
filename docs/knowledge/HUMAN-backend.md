@@ -73,7 +73,12 @@ contract and the permission catalog contracts.
   per-product "card price" (lowest in-stock variant price), an on-sale flag
   and a sold-out state — without ever exposing SKUs or raw stock counts;
 - persistent carts with server-owned reservation leases: abandoned carts expire, release reserved stock back to variants, and return a stable `410 shop_cart_expired` problem so the storefront can ask the shopper to start again;
-- shipping rates and coupons;
+- shipping rates and coupons, where a coupon can now set a minimum subtotal, a
+  maximum discount cap and a total redemption limit; the checkout preview shows
+  what would be discounted without consuming a redemption, and order creation
+  spends a redemption exactly once (two shoppers racing for the last slot get
+  one discount and one "limit reached", and the shopper who lost keeps their
+  cart);
 - a checkout summary, order creation and guest order lookup;
 - a sandbox payment gateway;
 - a tenant storefront identity (store name, tagline, support phone, Instagram)
@@ -133,6 +138,18 @@ conflict carries a stable `type` (`stale_version`) so the frontend can react
 to it by name instead of parsing a message.
 
 **Cart stock leases are explicit.** Adding an item reserves stock immediately so checkout cannot oversell. That reservation now has a server-owned expiry; a row lock makes expiry and order creation race safely, so either the cart becomes an order or the stock is restored exactly once — never both.
+
+**Coupon rules have one owner, and spending capacity is race-safe.** Every
+coupon rule (minimum subtotal, discount cap, redemption limit, expiry, active
+flag) lives in a single pure function that reads a coupon and returns a verdict
+plus the discount to apply — it never writes. The checkout summary and the order
+creation both call it, so the price a shopper previews and the price they are
+charged can never disagree. Spending a redemption is different, though: the
+order path re-checks the rules while holding a database row lock on the coupon
+and bumps the redeemed count in the same transaction that writes the order. That
+lock is what stops two concurrent orders from both claiming the last allowed
+redemption, and because the bump is in the same transaction, a failure later in
+the order also undoes the redemption.
 
 **No speculative endpoints.** An endpoint is added only when a current or
 immediately dependent frontend task consumes it.

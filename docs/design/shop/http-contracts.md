@@ -288,11 +288,33 @@ type UpdateCouponRequest = {
 }
 ```
 
-Existing POST/list/deactivate remain. New
-`PUT /api/tenants/{tenantId}/shop/coupons/{couponId}` returns
-`200 CouponResponse`. Checkout/order validation uses:
-`coupon_not_found`, `coupon_inactive`, `coupon_expired`,
-`coupon_minimum_not_met`, `coupon_limit_reached`.
+Existing POST/list/deactivate remain, with `CouponResponse` gaining
+`minimumSubtotal`, `maximumDiscountAmount`, `redemptionLimit`, `redeemedCount`
+and `version` (so `POST …/coupons`, `GET …/coupons` list items and
+`PATCH …/deactivate` all return the extended shape). New
+`PUT /api/tenants/{tenantId}/shop/coupons/{couponId}` (protected by
+`Shop.Shipping.Manage`) returns `200 CouponResponse` on success, `409`
+Problem Details with `type: 'stale_version'` when `expectedVersion` does not
+match the stored `version`, and `400` Problem Details naming `redemptionLimit`
+when the new limit is set below the current `redeemedCount`. The request carries
+neither `code` nor `discountType`, so the code and discount type cannot change
+through the endpoint.
+
+Validation rules (centralized in `ShopCouponPolicy`, applied at checkout
+preview and re-applied at order consumption): `minimumSubtotal` ≥ 0 and
+`maximumDiscountAmount` ≥ 0 when set; a set `redemptionLimit` is `1..1000000`;
+percentage `discountValue` stays `1..100` and fixed stays `> 0`; the computed
+discount is capped at `maximumDiscountAmount` (when set) and never exceeds the
+subtotal. `checkout/summary` is preview-only — it never increments
+`redeemedCount`. `orders` re-validates under a coupon row lock and increments
+`redeemedCount` exactly once on success.
+
+A rejected coupon on the anonymous `checkout/summary` or `orders` routes is a
+`400` Problem Details with a `couponCode` field error naming the exact stable
+code in parentheses — one of `coupon_not_found`, `coupon_inactive`,
+`coupon_expired`, `coupon_minimum_not_met`, `coupon_limit_reached`.
+`coupon_not_found` is returned identically for a code that does not exist and
+one that belongs to another tenant (non-leaking).
 
 ## S38 / B042 — admin order reads
 

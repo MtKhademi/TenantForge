@@ -242,6 +242,27 @@ dotnet.exe ef migrations add <Name> \
     its root are `IsActive` — always route public eligibility through
     `CategoryVisibility`; a root's slug includes its direct children's
     products, a child's slug only its own.
+16. Every coupon rule (minimum subtotal, max-discount cap, redemption limit,
+    expiry, active flag) is centralized in the pure `ShopCouponPolicy.Evaluate`
+    (`features/coupons/ShopCouponPolicy.cs`) — a single owner so the checkout
+    preview and the order-consumption path cannot drift. It is pure: it reads
+    the loaded coupon and returns a `CouponEvaluation` (valid flag, capped
+    discount, stable `ErrorCode`), never writes. `coupon_not_found` is produced
+    by the caller (tenant-first lookup → null), not by `Evaluate`; the other
+    four codes it returns are `coupon_inactive`, `coupon_expired` (strictly
+    past `ExpiresAtUtc`), `coupon_minimum_not_met`, `coupon_limit_reached`. A
+    rejected coupon surfaces on the anonymous routes as a `400` `couponCode`
+    field error naming the exact code in parentheses (the first three keep the
+    historical "not valid" phrasing so B030/B031 tests stay green). Order
+    creation re-evaluates under a coupon `FOR UPDATE` row lock (lock order cart
+    → coupon) and bumps `RedeemedCount` exactly once; checkout never increments.
+17. The integration test assembly is a single namespace with `internal` DTO
+    records defined per feature file (`CouponDto`, `CouponListDto`,
+    `CheckoutSummaryDto`, `OrderCreatedDto`, …). Defining a record with an
+    already-used name in a new test file is a CS0101 collision (the compiler
+    also raises CS8863 "only a single partial type may have a parameter list").
+    Prefix new DTO records with the task id (e.g. `B041CouponDto`) so they
+    cannot collide with the existing per-feature shapes.
 
 ## Decisions future tasks must preserve
 

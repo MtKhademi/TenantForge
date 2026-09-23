@@ -7,6 +7,7 @@ using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Carts;
+using TenantForge.Modules.Shop.Features.Coupons;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Orders;
@@ -85,18 +86,42 @@ internal static class OrderCreationFeature
             decimal discountAmount = 0;
             if (!string.IsNullOrWhiteSpace(request.CouponCode))
             {
+                // B041: consume mode. The coupon row is loaded TRACKED and
+                // locked FOR UPDATE inside the same transaction that creates the
+                // order, so a concurrent checkout of the last redemption slot is
+                // serialized against ours: the winner bumps RedeemedCount and
+                // commits, the loser re-reads the bumped count, fails
+                // coupon_limit_reached, rolls back and keeps its cart. We never
+                // trust the earlier checkout-summary preview — re-evaluating
+                // here is what actually enforces the rules at consume time.
                 var normalizedCode = request.CouponCode.Trim().ToUpperInvariant();
-                var coupon = await db.Coupons.AsNoTracking()
-                    .SingleOrDefaultAsync(coupon => coupon.TenantId == tenantTsid && coupon.NormalizedCode == normalizedCode);
-                if (coupon is null || !coupon.IsActive || coupon.ExpiresAtUtc < DateTimeOffset.UtcNow)
+                var coupon = await db.Coupons
+                    .FromSqlRaw("""
+                        SELECT *
+                        FROM shop_coupons
+                        WHERE tenant_id = {0} AND normalized_code = {1}
+                        FOR UPDATE
+                        """, tenantTsid.ToLong(), normalizedCode)
+                    .SingleOrDefaultAsync(ct);
+
+                if (coupon is null)
                 {
-                    errors["couponCode"] = ["This coupon code is not valid."];
+                    // Same non-leaking result as checkout: "does not exist" and
+                    // "belongs to another tenant" are indistinguishable.
+                    errors["couponCode"] = [ShopCouponPolicy.MessageFor(ShopCouponPolicy.CouponNotFound)];
                 }
                 else
                 {
-                    discountAmount = coupon.DiscountType == ShopDiscountType.Percentage
-                        ? Math.Round(subTotal * coupon.DiscountValue / 100m, 2)
-                        : Math.Min(coupon.DiscountValue, subTotal);
+                    var evaluation = ShopCouponPolicy.Evaluate(coupon, subTotal, timeProvider.GetUtcNow());
+                    if (!evaluation.IsValid)
+                    {
+                        errors["couponCode"] = [ShopCouponPolicy.MessageFor(evaluation.ErrorCode!)];
+                    }
+                    else
+                    {
+                        coupon.RecordRedemption(); // exactly once, under the lock
+                        discountAmount = evaluation.DiscountAmount;
+                    }
                 }
             }
 
