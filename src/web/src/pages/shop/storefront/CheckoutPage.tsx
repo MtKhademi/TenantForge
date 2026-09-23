@@ -1,3 +1,4 @@
+import { CircleCheck, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWatch, useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -10,6 +11,11 @@ import {
   CheckoutValidationError,
   type CheckoutSummaryResponse,
 } from '@/features/shop/checkoutAdapter'
+import {
+  COUPON_REASON_MESSAGES,
+  evaluateCouponPreview,
+  findCouponByCode,
+} from '@/features/shop/contracts/couponRulesContract'
 import { useCartLease } from '@/features/shop/useCartLease'
 import { saveOrderDraft } from '@/features/shop/orderDraftState'
 import { CartLeaseCountdown, CartLeaseRecovery } from '@/features/shop/CartLeaseUi'
@@ -47,10 +53,18 @@ const checkoutSchema = z.object({
 })
 type CheckoutFormValues = z.infer<typeof checkoutSchema>
 
+/** The five visible states of the checkout coupon field (S37). */
+type CouponPreviewState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'applied'; discountAmount: number; code: string }
+  | { kind: 'rejected'; message: string }
+  | { kind: 'unavailable' }
+
 export function CheckoutPage() {
   const { tenantId = '' } = useParams<{ tenantId: string }>()
   const navigate = useNavigate()
-  const { cartLease } = useShopClients()
+  const { cartLease, coupons: couponsClient } = useShopClients()
   const { state, reload, markLocalExpiry } = useCartLease(tenantId, cartLease)
   const { register, control, getValues, formState: { errors } } = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
@@ -62,6 +76,19 @@ export function CheckoutPage() {
 
   const [summary, setSummary] = useState<CheckoutSummaryResponse | null>(null)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+
+  // S37 coupon preview (F049, mock phase): the typed code is evaluated against
+  // the mock `coupons` list and the live cart subtotal using B041's pure
+  // `evaluateCouponPreview`. It is a read-only preview — it NEVER writes
+  // `redeemedCount`, so the displayed usage can only stay the same or rise,
+  // never decrease (a real redemption is the only thing that changes it, and
+  // this mock does not simulate that). Each B041 reason code maps to its own
+  // distinct message via `COUPON_REASON_MESSAGES`.
+  const [couponPreview, setCouponPreview] = useState<CouponPreviewState>({ kind: 'idle' })
+  const [couponReloadKey, setCouponReloadKey] = useState(0)
+  const couponAbortRef = useRef<AbortController | null>(null)
+  const couponDebounceRef = useRef<number | null>(null)
+  const subTotal = state.kind === 'ok' ? state.cart.subTotal : null
   // `useWatch` (not the render-phase `watch` helper) is the project idiom
   // (see `ProductsPage`): it reads the same react-hook-form store but is
   // React-Compiler-memoizable, so editing a field recomputes the summary
@@ -84,6 +111,16 @@ export function CheckoutPage() {
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
     debounceRef.current = window.setTimeout(async () => {
       const values = getValues()
+      // In this mock phase the live coupon verdict (the mock `coupons` client
+      // evaluated against the cart subtotal) is the coupon authority. While a
+      // code is typed we let it own the coupon line and skip the real summary
+      // call (which 404s the mock-minted cart) so the two never read as one
+      // confusing message. F059 restores the single server-side summary.
+      if (values.couponCode.trim() !== '') {
+        setSummary(null)
+        setSummaryError(null)
+        return
+      }
       if (!values.shippingProvince) {
         setSummary(null)
         setSummaryError(null)
@@ -117,6 +154,55 @@ export function CheckoutPage() {
   useEffect(() => {
     void recompute()
   }, [recompute, province, city, addressLine, postalCode, couponCode])
+
+  // S37: evaluate the typed coupon code against the live cart subtotal (mock).
+  const typedCode = (couponCode ?? '').trim()
+  const couponActive = state.kind === 'ok' && typedCode !== ''
+  useEffect(() => {
+    if (couponDebounceRef.current) window.clearTimeout(couponDebounceRef.current)
+    couponAbortRef.current?.abort()
+    if (!couponActive || subTotal === null) {
+      setCouponPreview({ kind: 'idle' })
+      return
+    }
+    setCouponPreview({ kind: 'loading' })
+    const controller = new AbortController()
+    couponAbortRef.current = controller
+    const subtotalNow = subTotal
+    couponDebounceRef.current = window.setTimeout(async () => {
+      try {
+        const list = await couponsClient.list(tenantId, { pageNumber: 1, pageSize: 100 }, controller.signal)
+        if (controller.signal.aborted) return
+        const coupon = findCouponByCode(list.coupons, typedCode)
+        if (coupon === null) {
+          setCouponPreview({ kind: 'rejected', message: COUPON_REASON_MESSAGES.coupon_not_found })
+          return
+        }
+        const result = evaluateCouponPreview(coupon, subtotalNow, Date.now())
+        if (result.status === 'applied') {
+          setCouponPreview({ kind: 'applied', discountAmount: result.discountAmount, code: coupon.code })
+        } else {
+          setCouponPreview({ kind: 'rejected', message: COUPON_REASON_MESSAGES[result.reasonCode] })
+        }
+      } catch {
+        if (controller.signal.aborted) return
+        // Any failure to fetch the list is the unavailable-with-retry state.
+        setCouponPreview({ kind: 'unavailable' })
+      }
+    }, 300)
+    return () => {
+      if (couponDebounceRef.current) window.clearTimeout(couponDebounceRef.current)
+    }
+  }, [couponActive, subTotal, typedCode, couponsClient, tenantId, couponReloadKey])
+  useEffect(() => () => couponAbortRef.current?.abort(), [])
+
+  // A coupon verdict (applied or a distinct rejection) supersedes a stale
+  // summary error so the two never read as one confusing message.
+  useEffect(() => {
+    if (couponPreview.kind === 'applied' || couponPreview.kind === 'rejected') {
+      setSummaryError(null)
+    }
+  }, [couponPreview])
 
   // ---- lease-gated render ----
 
@@ -214,6 +300,20 @@ export function CheckoutPage() {
           <CartLeaseCountdown expiresAtUtc={state.cart.expiresAtUtc} onExpiry={markLocalExpiry} />
         </div>
         {summaryError && <p role="alert" className="text-sm font-semibold text-destructive">{summaryError}</p>}
+
+        <CouponVerdict preview={couponPreview} onRetry={() => setCouponReloadKey((k) => k + 1)} />
+
+        {/* Mock-phase coupon preview: with a code typed, the mock evaluates the
+            discount against the live cart subtotal, so we show the goods
+            subtotal, the applied discount and the resulting total (shipping is
+            deferred to F059's single server-side summary). */}
+        {couponPreview.kind === 'applied' && (
+          <dl className="space-y-2 text-sm">
+            <div className="flex justify-between"><dt>جمع کل محصولات</dt><dd>{state.cart.subTotal.toLocaleString('fa-IR')}</dd></div>
+            <div className="flex justify-between"><dt>تخفیف <bdi dir="ltr" className="text-muted-foreground">({couponPreview.code})</bdi></dt><dd className="text-success">-{couponPreview.discountAmount.toLocaleString('fa-IR')}</dd></div>
+            <div className="flex justify-between border-t border-border pt-2 font-semibold"><dt>مجموع نهایی</dt><dd>{Math.max(0, state.cart.subTotal - couponPreview.discountAmount).toLocaleString('fa-IR')}</dd></div>
+          </dl>
+        )}
         {summary && (
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between"><dt>جمع کل محصولات</dt><dd>{summary.subTotal.toLocaleString('fa-IR')}</dd></div>
@@ -225,10 +325,29 @@ export function CheckoutPage() {
         <Button
           type="button"
           className="w-full"
-          disabled={!summary}
+          disabled={!summary && couponPreview.kind !== 'applied'}
           onClick={() => {
-            if (!summary) return
             const values = getValues()
+            const couponCodeValue = values.couponCode || null
+            if (couponPreview.kind === 'applied') {
+              const sub = state.cart.subTotal
+              saveOrderDraft(tenantId, {
+                customerName: values.customerName,
+                customerPhone: values.customerPhone,
+                shippingProvince: values.shippingProvince,
+                shippingCity: values.shippingCity,
+                shippingAddressLine: values.shippingAddressLine,
+                shippingPostalCode: values.shippingPostalCode,
+                couponCode: couponCodeValue,
+                subTotal: sub,
+                discountAmount: couponPreview.discountAmount,
+                shippingCost: 0,
+                grandTotal: Math.max(0, sub - couponPreview.discountAmount),
+              })
+              navigate(`/shop/${tenantId}/order-review`)
+              return
+            }
+            if (!summary) return
             saveOrderDraft(tenantId, {
               customerName: values.customerName,
               customerPhone: values.customerPhone,
@@ -236,7 +355,7 @@ export function CheckoutPage() {
               shippingCity: values.shippingCity,
               shippingAddressLine: values.shippingAddressLine,
               shippingPostalCode: values.shippingPostalCode,
-              couponCode: values.couponCode || null,
+              couponCode: couponCodeValue,
               ...summary,
             })
             navigate(`/shop/${tenantId}/order-review`)
@@ -246,5 +365,40 @@ export function CheckoutPage() {
         </Button>
       </div>
     </section>
+  )
+}
+
+/**
+ * The coupon field's verdict, with a stable footprint (no layout shift between
+ * states). `loading` shows an in-line spinner; `applied` is an honest
+ * success tint; `rejected` is a distinct destructive message (one per B041
+ * reason code); `unavailable` offers a retry. `idle` renders nothing.
+ */
+function CouponVerdict({ preview, onRetry }: { preview: CouponPreviewState; onRetry: () => void }) {
+  if (preview.kind === 'idle') return null
+  if (preview.kind === 'loading') {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
+        <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+        در حال بررسی کد تخفیف…
+      </p>
+    )
+  }
+  if (preview.kind === 'applied') {
+    return (
+      <p role="status" className="flex items-center gap-2 rounded-md bg-success/10 px-3 py-2 text-sm font-medium text-success" aria-live="polite">
+        <CircleCheck aria-hidden="true" className="size-4 shrink-0" />
+        کد تخفیف اعمال شد.
+      </p>
+    )
+  }
+  if (preview.kind === 'rejected') {
+    return <p role="alert" className="text-sm font-semibold text-destructive">{preview.message}</p>
+  }
+  return (
+    <div role="alert" className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+      <span>هم‌اکنون نمی‌توانیم کد تخفیف را بررسی کنیم.</span>
+      <Button type="button" className="px-2 py-1 text-xs" onClick={onRetry}>تلاش دوباره</Button>
+    </div>
   )
 }
