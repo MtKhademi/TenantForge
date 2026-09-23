@@ -7,7 +7,8 @@ internal enum ShopPaymentAttemptStatus
 {
     Initiated,
     Succeeded,
-    Failed
+    Failed,
+    Invalidated
 }
 
 internal sealed class ShopPaymentAttempt
@@ -16,7 +17,50 @@ internal sealed class ShopPaymentAttempt
     public Tsid OrderId { get; private set; }
     public string Provider { get; private set; } = string.Empty;
     public ShopPaymentAttemptStatus Status { get; private set; } = ShopPaymentAttemptStatus.Initiated;
+
+    /// <summary>
+    /// The identifier the provider issues at initiation — for Sandbox a random
+    /// hex string, for ZarinPal (B045) the authority. This column (not a
+    /// separate "authority" column) is what B045 ships without a migration of
+    /// its own.
+    /// </summary>
     public string GatewayReference { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// B044: the order's <c>GrandTotal</c> frozen at initiation time. A later
+    /// price change can never change what this attempt is for; the completion
+    /// service refuses any verification whose amount does not match this.
+    /// </summary>
+    public decimal AmountSnapshot { get; private set; }
+
+    /// <summary>
+    /// B044: SHA-256 (hex, lowercase) of the 32-byte raw callback token. Only
+    /// the hash is ever stored — the raw token is returned exactly once in
+    /// the initiation response and is never persisted or logged.
+    /// </summary>
+    public string CallbackTokenHash { get; private set; } = string.Empty;
+
+    /// <summary>B044: stable reason code set when the attempt ends as <see cref="ShopPaymentAttemptStatus.Failed"/>.</summary>
+    public string? FailureCode { get; private set; }
+
+    /// <summary>
+    /// B044: the reference the provider returns at verification (ZarinPal's
+    /// RefId). Nullable — it does not exist until verification succeeds.
+    /// Never holds the authority; that is <see cref="GatewayReference"/>.
+    /// </summary>
+    public string? ProviderReference { get; private set; }
+
+    /// <summary>B044: set exactly once, when the attempt is resolved by the completion service.</summary>
+    public DateTimeOffset? VerifiedAtUtc { get; private set; }
+
+    /// <summary>
+    /// B044: optimistic-concurrency / row-locking token. Bumped by exactly the
+    /// mutation that resolves the attempt, inside the completion service's
+    /// transaction — a racing duplicate re-reads the bumped row and cannot
+    /// re-apply the transition.
+    /// </summary>
+    public int Version { get; private set; }
+
     public DateTimeOffset CreatedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CallbackReceivedAtUtc { get; private set; }
 
@@ -24,7 +68,9 @@ internal sealed class ShopPaymentAttempt
     {
     }
 
-    public static ShopPaymentAttempt Create(Tsid orderId, string provider, string gatewayReference, DateTimeOffset nowUtc)
+    public static ShopPaymentAttempt Create(
+        Tsid orderId, string provider, string gatewayReference,
+        decimal amountSnapshot, string callbackTokenHash, DateTimeOffset nowUtc)
     {
         if (TsidId.IsDefault(orderId))
         {
@@ -38,12 +84,24 @@ internal sealed class ShopPaymentAttempt
             Provider = provider,
             Status = ShopPaymentAttemptStatus.Initiated,
             GatewayReference = gatewayReference,
-            CreatedAtUtc = nowUtc.ToUniversalTime()
+            AmountSnapshot = amountSnapshot,
+            CallbackTokenHash = callbackTokenHash,
+            CreatedAtUtc = nowUtc.ToUniversalTime(),
+            Version = 0
         };
     }
 
-    /// <summary>Returns false (no change) when the attempt was already resolved.</summary>
-    public bool TryResolve(bool succeeded, DateTimeOffset nowUtc)
+    /// <summary>
+    /// B044: the only transition out of <see cref="ShopPaymentAttemptStatus.Initiated"/>
+    /// to a resolved state, and it is called exclusively by
+    /// <c>ShopPaymentCompletionService</c> — inside its transaction, while it
+    /// holds the row locks — so the attempt and its order can never resolve
+    /// out of step. Returns false (no change) when the attempt was already
+    /// resolved or invalidated: a duplicate provider callback is a replay,
+    /// never a second write.
+    /// </summary>
+    public bool TryResolve(
+        bool succeeded, string? providerReference, string? failureCode, DateTimeOffset nowUtc)
     {
         if (Status != ShopPaymentAttemptStatus.Initiated)
         {
@@ -51,29 +109,34 @@ internal sealed class ShopPaymentAttempt
         }
 
         Status = succeeded ? ShopPaymentAttemptStatus.Succeeded : ShopPaymentAttemptStatus.Failed;
+        ProviderReference = providerReference;
+        FailureCode = failureCode;
+        VerifiedAtUtc = nowUtc.ToUniversalTime();
         CallbackReceivedAtUtc = nowUtc.ToUniversalTime();
+        Version++;
         return true;
     }
 
     /// <summary>
-    /// B043: called inside a cancel's transaction for every attempt still in
+    /// B044: called inside a cancel's transaction for every attempt still in
     /// <see cref="ShopPaymentAttemptStatus.Initiated"/>. Moving the attempt to
-    /// <see cref="ShopPaymentAttemptStatus.Failed"/> is what makes it
-    /// un-completable — a late payment callback for the (now cancelled) order
-    /// is already answered <c>409</c> by the order-status guard, and even if a
-    /// reference were presented, <see cref="TryResolve"/> would refuse to touch
-    /// an attempt that is no longer <c>Initiated</c>. Already-resolved attempts
-    /// return false and change nothing. No history row is ever deleted.
+    /// <see cref="ShopPaymentAttemptStatus.Invalidated"/> is what makes it
+    /// un-completable — the completion service refuses any transition out of
+    /// any non-<c>Initiated</c> status, and the order is no longer
+    /// <c>PendingPayment</c> anyway. Already-resolved attempts return false
+    /// and change nothing. No history row is ever deleted.
     /// </summary>
-    public bool Invalidate(DateTimeOffset nowUtc)
+    public bool TryInvalidate(DateTimeOffset nowUtc)
     {
         if (Status != ShopPaymentAttemptStatus.Initiated)
         {
             return false;
         }
 
-        Status = ShopPaymentAttemptStatus.Failed;
+        Status = ShopPaymentAttemptStatus.Invalidated;
+        VerifiedAtUtc = nowUtc.ToUniversalTime();
         CallbackReceivedAtUtc = nowUtc.ToUniversalTime();
+        Version++;
         return true;
     }
 }

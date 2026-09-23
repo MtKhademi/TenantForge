@@ -99,7 +99,13 @@ internal sealed class UnsafeSeedApiFactory(IamDbFixture db) : Microsoft.AspNetCo
             ["Shop:ShopDb"] = db.ConnectionString,
             ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media"),
             ["Shop:CartReservationMinutes"] = "30",
-            ["Shop:CartCleanupIntervalSeconds"] = "3600"
+            ["Shop:CartCleanupIntervalSeconds"] = "3600",
+            // B044: outside Development the payments provider is required and
+            // Sandbox is refused. This host's failure is raised earlier by IAM
+            // validation (the unsafe password), but Shop validation would also
+            // run, so a valid non-Sandbox value keeps the test's intent
+            // (the unsafe-password message) intact.
+            ["Shop:Payments:Provider"] = "ZarinPal"
         };
 
         builder.ConfigureAppConfiguration((_, configuration) =>

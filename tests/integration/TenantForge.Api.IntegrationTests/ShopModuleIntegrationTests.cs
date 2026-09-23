@@ -18,7 +18,8 @@ namespace TenantForge.Api.IntegrationTests;
 /// same change (B025: the six catalog tables; B028: the two cart tables;
 /// B029: shop_shipping_rates and shop_coupons; B031: shop_orders and
 /// shop_order_items; B032: shop_payment_attempts; B036: shop_product_images;
-/// B039: shop_profiles; B043: shop_order_operations).
+/// B039: shop_profiles; B043: shop_order_operations;
+/// B044: shop_payment_initiations).
 ///
 /// Shop:ShopDb deliberately points at the SAME physical database as IAM:IamDb
 /// (a named B025 decision — later Shop admin tasks read IAM membership with
@@ -46,6 +47,7 @@ public sealed class ShopModuleIntegrationTests(ShopDbFixture db)
         "shop_order_items",
         "shop_payment_attempts",
         "shop_order_operations",
+        "shop_payment_initiations",
         "shop_profiles"
     ];
 

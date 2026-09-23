@@ -73,7 +73,13 @@ public sealed class ShopOrderOperationsIntegrationTests(ShopOrderOperationsDbFix
         string OrderId, string OrderNumber, string TrackingCode, string Status,
         decimal SubTotal, decimal DiscountAmount, decimal ShippingCost, decimal GrandTotal);
 
-    internal sealed record B043InitiatePaymentDto(string GatewayReference, string RedirectUrl);
+    // B044: initiation now carries an Idempotency-Key header and returns
+    // { provider, redirectUrl, resultToken }; the authority the sandbox page
+    // hands back is embedded in the redirectUrl, so the helper parses it out
+    // (exactly what the fake bank page does).
+    internal sealed record B043InitiatePaymentDto(string Provider, string RedirectUrl, string ResultToken);
+
+    internal sealed record B043PaymentStatusDto(string OrderNumber, string Status, string? ProviderReference);
 
     // ─── Setup helpers (mirror B042's admin-order test helpers) ────────────────
 
@@ -254,18 +260,35 @@ public sealed class ShopOrderOperationsIntegrationTests(ShopOrderOperationsDbFix
 
     internal sealed record B043CartCreatedDto(string CartId, string? ExpiresAtUtc);
 
+    // B044: initiation now requires an Idempotency-Key header and returns
+    // { provider, redirectUrl, resultToken }. The sandbox redirectUrl is
+    // /shop/{tenantId}/bank?authority={authority}, so the helper parses the
+    // authority out — the same value the fake bank page would hand back.
     private static async Task<string> InitiatePaymentAsync(HttpClient anonymous, string tenantId, string orderId)
     {
-        var response = await anonymous.PostAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/initiate", content: null);
+        var request = new HttpRequestMessage(
+            HttpMethod.Post, $"/api/shop/{tenantId}/orders/{orderId}/payments/initiate");
+        request.Headers.TryAddWithoutValidation("Idempotency-Key", Guid.NewGuid().ToString());
+        var response = await anonymous.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var initiation = (await response.Content.ReadFromJsonAsync<B043InitiatePaymentDto>())!;
-        return initiation.GatewayReference;
+        return ParseAuthorityFromRedirectUrl(initiation.RedirectUrl);
     }
 
-    private static Task<HttpResponseMessage> PostCallbackAsync(
-        HttpClient anonymous, string tenantId, string orderId, string gatewayReference, bool approved)
-        => anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/callback",
-            new { gatewayReference, approved });
+    // B044: the browser-driven simulation moved to the Development-only
+    // sandbox resolve route (the old general callback route is deleted).
+    private static Task<HttpResponseMessage> ResolveSandboxAsync(
+        HttpClient anonymous, string tenantId, string orderId, string authority, bool approved)
+        => anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/sandbox/resolve",
+            new { authority, approved });
+
+    private static string ParseAuthorityFromRedirectUrl(string redirectUrl)
+    {
+        // /shop/{tenantId}/bank?authority={authority}
+        var index = redirectUrl.IndexOf("authority=", StringComparison.Ordinal);
+        Assert.True(index >= 0, $"redirectUrl must carry an authority: {redirectUrl}");
+        return redirectUrl[(index + "authority=".Length)..];
+    }
 
     // ─── The endpoint under test ─────────────────────────────────────────────
 
@@ -358,6 +381,30 @@ public sealed class ShopOrderOperationsIntegrationTests(ShopOrderOperationsDbFix
         return Convert.ToInt32(value);
     }
 
+    private async Task<int> CountInvalidatedAttemptsAsync(string orderId)
+    {
+        var orderTsid = RequireTsid(orderId);
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM shop_payment_attempts WHERE order_id = @orderId AND status = 'Invalidated';";
+        command.Parameters.AddWithValue("orderId", orderTsid.ToLong());
+        var value = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(value);
+    }
+
+    private async Task<int> CountSucceededAttemptsAsync(string orderId)
+    {
+        var orderTsid = RequireTsid(orderId);
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM shop_payment_attempts WHERE order_id = @orderId AND status = 'Succeeded';";
+        command.Parameters.AddWithValue("orderId", orderTsid.ToLong());
+        var value = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(value);
+    }
+
     private async Task<int> CountOperationRowsAsync(string orderId)
     {
         var orderTsid = RequireTsid(orderId);
@@ -393,10 +440,11 @@ public sealed class ShopOrderOperationsIntegrationTests(ShopOrderOperationsDbFix
         var reservedStock = initialStock - 1;
         Assert.Equal(reservedStock, await ReadVariantStockAsync(variantId));
 
-        // Pay the order so it is in the only status Fulfil may move from.
+        // Pay the order (B044: via the sandbox resolve route) so it is in the
+        // only status Fulfil may move from.
         using var anonymous = CreateClient();
-        var reference = await InitiatePaymentAsync(anonymous, tenantId, orderId);
-        Assert.Equal(HttpStatusCode.OK, (await PostCallbackAsync(anonymous, tenantId, orderId, reference, approved: true)).StatusCode);
+        var authority = await InitiatePaymentAsync(anonymous, tenantId, orderId);
+        Assert.Equal(HttpStatusCode.OK, (await ResolveSandboxAsync(anonymous, tenantId, orderId, authority, approved: true)).StatusCode);
         Assert.Equal("Paid", (await ReadOrderRowAsync(orderId)).Status);
 
         var key = Guid.NewGuid().ToString();
@@ -430,7 +478,7 @@ public sealed class ShopOrderOperationsIntegrationTests(ShopOrderOperationsDbFix
 
         // Leave one Initiated payment attempt on the order (not resolved).
         using var anonymous = CreateClient();
-        var reference = await InitiatePaymentAsync(anonymous, tenantId, orderId);
+        _ = await InitiatePaymentAsync(anonymous, tenantId, orderId);
         Assert.Equal(1, await CountInitiatedAttemptsAsync(orderId));
 
         var reservedStock = initialStock - 1;
@@ -452,34 +500,44 @@ public sealed class ShopOrderOperationsIntegrationTests(ShopOrderOperationsDbFix
 
         // Stock restored exactly once: back to the full initial quantity.
         Assert.Equal(initialStock, await ReadVariantStockAsync(variantId));
-        // The Initiated attempt was invalidated to Failed; no Initiated remains.
+        // B044: the Initiated attempt is now Invalidated (not Failed — a
+        // cancel is not a failed payment); no Initiated remains and no Failed
+        // row was created by the cancel either.
         Assert.Equal(0, await CountInitiatedAttemptsAsync(orderId));
-        Assert.Equal(1, await CountFailedAttemptsAsync(orderId));
+        Assert.Equal(0, await CountFailedAttemptsAsync(orderId));
+        Assert.Equal(1, await CountInvalidatedAttemptsAsync(orderId));
         Assert.Equal(1, await CountOperationRowsAsync(orderId));
     }
 
-    // ─── 3. Late callback for a Cancelled order never marks it Paid ───────────
+    // ─── 3. Late verification for a Cancelled order never marks it Paid ───────
 
     [Fact]
-    public async Task LatePaymentCallback_CancelledOrder_IsRejected_NeverPaid()
+    public async Task LatePaymentVerification_CancelledOrder_ReturnsCancelledOutcome_NeverPaid()
     {
         var (tenantId, ownerClient, _, _) = await NewTenantAsync();
         var (_, variantId, _) = await CreateSingleVariantAsync(ownerClient, tenantId, "Late Shirt", $"late-{Guid.NewGuid():N}"[..14], 10, 1000);
         var orderId = await CreateOrderAsync(tenantId, ownerClient, variantId, "Late Customer", "09121000003");
 
         using var anonymous = CreateClient();
-        var reference = await InitiatePaymentAsync(anonymous, tenantId, orderId);
+        var authority = await InitiatePaymentAsync(anonymous, tenantId, orderId);
 
-        // Cancel first.
+        // Cancel first — this invalidates the Initiated attempt (B044).
         var key = Guid.NewGuid().ToString();
         Assert.Equal(HttpStatusCode.OK, (await ChangeStatusAsync(ownerClient, tenantId, orderId, "Cancel", 1, key)).StatusCode);
         Assert.Equal("Cancelled", (await ReadOrderRowAsync(orderId)).Status);
+        Assert.Equal(0, await CountInitiatedAttemptsAsync(orderId));
+        Assert.Equal(1, await CountInvalidatedAttemptsAsync(orderId));
 
-        // A late gateway callback arriving for the cancelled order is rejected
-        // and the order never moves to Paid.
-        var late = await PostCallbackAsync(anonymous, tenantId, orderId, reference, approved: true);
-        Assert.Equal(HttpStatusCode.Conflict, late.StatusCode);
+        // A late success arriving for the (now invalidated) attempt returns the
+        // already-computed outcome — the order's current Cancelled status — and
+        // never moves it to Paid. The attempt is not re-resolved to Succeeded.
+        var late = await ResolveSandboxAsync(anonymous, tenantId, orderId, authority, approved: true);
+        Assert.Equal(HttpStatusCode.OK, late.StatusCode);
+        var lateBody = (await late.Content.ReadFromJsonAsync<B043PaymentStatusDto>())!;
+        Assert.Equal("Cancelled", lateBody.Status);
         Assert.Equal("Cancelled", (await ReadOrderRowAsync(orderId)).Status);
+        Assert.Equal(1, await CountInvalidatedAttemptsAsync(orderId));
+        Assert.Equal(0, await CountSucceededAttemptsAsync(orderId));
     }
 
     // ─── 4. Idempotent replay: same key + same action ─────────────────────────

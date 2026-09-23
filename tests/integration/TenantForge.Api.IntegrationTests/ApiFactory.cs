@@ -67,7 +67,16 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
             ["Shop:ShopDb"] = db.ConnectionString,
             ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media"),
             ["Shop:CartReservationMinutes"] = "30",
-            ["Shop:CartCleanupIntervalSeconds"] = "3600"
+            ["Shop:CartCleanupIntervalSeconds"] = "3600",
+            // B044: outside Development the payments provider is required and
+            // the Sandbox value is refused (fail closed). Every test host is
+            // given an explicit value rather than relying on the Development
+            // default: Development hosts use the Sandbox gateway (the only one
+            // registered until B045); Production hosts use ZarinPal, which
+            // validates at startup and is only resolved to a gateway on a real
+            // payment call — none of these hosts makes one, so they start and
+            // serve their IAM/dashboard/account routes normally.
+            ["Shop:Payments:Provider"] = environment == "Production" ? "ZarinPal" : "Sandbox"
         };
 
         switch (seedMode)

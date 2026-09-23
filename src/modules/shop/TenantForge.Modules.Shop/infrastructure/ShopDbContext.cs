@@ -19,6 +19,7 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
     internal DbSet<ShopOrder> Orders => Set<ShopOrder>();
     internal DbSet<ShopOrderItem> OrderItems => Set<ShopOrderItem>();
     internal DbSet<ShopPaymentAttempt> PaymentAttempts => Set<ShopPaymentAttempt>();
+    internal DbSet<ShopPaymentInitiation> PaymentInitiations => Set<ShopPaymentInitiation>();
     internal DbSet<ShopOrderOperation> OrderOperations => Set<ShopOrderOperation>();
     internal DbSet<ShopProfile> Profiles => Set<ShopProfile>();
 
@@ -38,6 +39,7 @@ internal sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : D
         modelBuilder.ApplyConfiguration(new ShopOrderMap());
         modelBuilder.ApplyConfiguration(new ShopOrderItemMap());
         modelBuilder.ApplyConfiguration(new ShopPaymentAttemptMap());
+        modelBuilder.ApplyConfiguration(new ShopPaymentInitiationMap());
         modelBuilder.ApplyConfiguration(new ShopOrderOperationMap());
         modelBuilder.ApplyConfiguration(new ShopProfileMap());
     }

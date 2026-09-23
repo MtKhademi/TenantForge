@@ -154,6 +154,7 @@ internal static class AdminOrdersFeature
             ChangeOrderStatusRequest request,
             ClaimsPrincipal principal,
             ShopDbContext db,
+            Features.Payments.ShopPaymentCompletionService completionService,
             TimeProvider timeProvider,
             CancellationToken ct) =>
         {
@@ -277,7 +278,7 @@ internal static class AdminOrdersFeature
 
                 if (action == OrderStatusAction.Cancel)
                 {
-                    await ReleaseCancelledOrderInventoryAsync(order, db, now, ct);
+                    await ReleaseCancelledOrderInventoryAsync(order, db, now, completionService, timeProvider, ct);
                 }
 
                 var response = await BuildOrderDetailResponseAsync(order, db, ct);
@@ -372,7 +373,9 @@ internal static class AdminOrdersFeature
     /// <c>Initiated</c> payment attempt. No order history row is ever deleted.
     /// </summary>
     private static async Task ReleaseCancelledOrderInventoryAsync(
-        ShopOrder order, ShopDbContext db, DateTimeOffset now, CancellationToken ct)
+        ShopOrder order, ShopDbContext db, DateTimeOffset now,
+        Features.Payments.ShopPaymentCompletionService completionService,
+        TimeProvider timeProvider, CancellationToken ct)
     {
         // The restore is gated on the order's release stamp, set in the same
         // transaction — the guard that makes it exactly-once.
@@ -404,17 +407,12 @@ internal static class AdminOrdersFeature
             }
         }
 
-        // Invalidate any attempt still Initiated so a late callback can no
-        // longer complete it (the order is Cancelled, so the callback route
-        // already answers 409; this makes the attempt itself un-completable).
-        var initiated = await db.PaymentAttempts
-            .Where(attempt => attempt.OrderId == order.Id && attempt.Status == ShopPaymentAttemptStatus.Initiated)
-            .ToListAsync(ct);
-
-        foreach (var attempt in initiated)
-        {
-            attempt.Invalidate(now);
-        }
+        // B044: invalidating Initiated attempts is the completion service's
+        // job — it is the only class allowed to move an attempt out of
+        // Initiated. It is called inside THIS transaction, with the order
+        // already Cancelled and the order-row lock already held by the
+        // handler, so no second lock is taken here.
+        await completionService.InvalidateInitiatedAttemptsAsync(order, timeProvider, ct);
     }
 
     /// <summary>

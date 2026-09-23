@@ -238,19 +238,6 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
         return new B042OrderDto(created.OrderId, created.OrderNumber);
     }
 
-    private static async Task<string> InitiatePaymentAsync(HttpClient anonymous, string tenantId, string orderId)
-    {
-        var response = await anonymous.PostAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/initiate", content: null);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var initiation = (await response.Content.ReadFromJsonAsync<B042InitiatePaymentDto>())!;
-        return initiation.GatewayReference;
-    }
-
-    private static Task<HttpResponseMessage> PostCallbackAsync(
-        HttpClient anonymous, string tenantId, string orderId, string gatewayReference, bool approved)
-        => anonymous.PostAsJsonAsync($"/api/shop/{tenantId}/orders/{orderId}/payments/callback",
-            new { gatewayReference, approved });
-
     private async Task<int> CountPaymentAttemptsAsync(string orderId)
     {
         Assert.True(TsidId.TryParse(orderId, out var orderTsid), "orderId must be a canonical TSID string");
@@ -261,6 +248,54 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
         command.Parameters.AddWithValue("orderId", orderTsid.ToLong());
         var value = await command.ExecuteScalarAsync();
         return Convert.ToInt32(value);
+    }
+
+    /// <summary>
+    /// B044: the API caps a live order at 10 attempts, so a display-cap fact
+    /// that needs more than 10 rows seeds them directly. Inserts
+    /// <paramref name="count"/> synthetic Failed attempts with distinct,
+    /// monotonically decreasing created_at_utc (i=0 is the newest) so the
+    /// detail route's "20 newest, newest first" ordering is deterministic.
+    /// </summary>
+    private async Task SeedFailedPaymentAttemptsAsync(string orderId, int count)
+    {
+        Assert.True(TsidId.TryParse(orderId, out var orderTsid), "orderId must be a canonical TSID string");
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = connection.BeginTransaction();
+
+        // A far-out base keeps the synthetic ids clear of real TSIDs (which
+        // are far smaller); the offset makes each unique within the insert.
+        const long idBase = 9_000_000_000_000_000_000L;
+        var newest = DateTimeOffset.UtcNow;
+
+        for (var i = 0; i < count; i++)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO shop_payment_attempts (
+                    id, order_id, provider, status, gateway_reference,
+                    amount_snapshot, callback_token_hash, failure_code,
+                    provider_reference, verified_at_utc, version,
+                    created_at_utc, callback_received_at_utc)
+                VALUES (
+                    @id, @orderId, 'Sandbox', 'Failed', @ref,
+                    200, @hash, 'payment_declined',
+                    NULL, @now, 1,
+                    @created, @now);
+                """;
+            command.Parameters.AddWithValue("id", idBase - i);
+            command.Parameters.AddWithValue("orderId", orderTsid.ToLong());
+            command.Parameters.AddWithValue("ref", $"seed-ref-{idBase - i}-x".PadRight(60, '0')[..60]);
+            command.Parameters.AddWithValue("hash", new string('a', 64));
+            command.Parameters.AddWithValue("now", newest.UtcDateTime);
+            // i=0 is the newest; each subsequent row is strictly older.
+            command.Parameters.AddWithValue("created", newest.UtcDateTime.AddSeconds(-i));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        transaction.Commit();
     }
 
     // ─── 1. Authorization matrix ─────────────────────────────────────────────
@@ -539,16 +574,12 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
         var variant = await CreateSingleVariantAsync(ownerClient, tenantId, "Attempts Shirt", $"att-{Guid.NewGuid():N}"[..14], 25, 200);
         var order = await CreateOrderAsync(tenantId, ownerClient, variant.VariantId, "Attempts Customer", "09128880008");
 
-        using var anonymous = CreateClient();
-        // 21 failed sandbox attempts: each initiate mints a new Initiated row
-        // and each failed callback resolves it to Failed without moving the
-        // order out of PendingPayment, so all 21 remain on the order.
-        for (var i = 0; i < 21; i++)
-        {
-            var reference = await InitiatePaymentAsync(anonymous, tenantId, order.OrderId);
-            var callback = await PostCallbackAsync(anonymous, tenantId, order.OrderId, reference, approved: false);
-            Assert.Equal(HttpStatusCode.OK, callback.StatusCode);
-        }
+        // B044: the API caps a live order at 10 attempts, so the 21 rows this
+        // display-cap fact needs are seeded directly — synthetic Failed rows
+        // with distinct, monotonically decreasing created_at_utc (i=0 is the
+        // newest). The order stays PendingPayment; only the attempt history is
+        // what the detail route must cap at its 20 newest.
+        await SeedFailedPaymentAttemptsAsync(order.OrderId, count: 21);
         Assert.Equal(21, await CountPaymentAttemptsAsync(order.OrderId));
 
         var detail = await ReadJsonAsync<B042AdminOrderDetailDto>(ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders/{order.OrderId}"));
@@ -616,8 +647,6 @@ internal sealed record B042OrderDto(string OrderId, string OrderNumber);
 internal sealed record B042OrderCreatedDto(
     string OrderId, string OrderNumber, string TrackingCode, string Status,
     decimal SubTotal, decimal DiscountAmount, decimal ShippingCost, decimal GrandTotal);
-
-internal sealed record B042InitiatePaymentDto(string GatewayReference, string RedirectUrl);
 
 internal sealed record B042AdminOrderSummaryDto(
     string Id, string OrderNumber, string CustomerName, string CustomerPhone,

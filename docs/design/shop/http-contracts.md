@@ -446,9 +446,12 @@ response again (`200`, byte-identical) without re-running the transition.
 Re-sending the **same key with a different action** is a `409` with
 `type: "idempotency_key_conflict"` — neither action is performed.
 
-**Late payments**: a payment callback that arrives after an order is `Cancelled`
-is answered `409` and the order never moves to `Paid` (the callback route's
-existing status guard). This rule must keep holding through S40/S41.
+**Late payments**: a payment success that arrives after an order is `Cancelled`
+never moves it to `Paid`. Because S40 (B044) makes `Cancel` invalidate the
+order's still-`Initiated` attempts in the same transaction, the late success
+arrives at an already-resolved attempt and is answered with the already-computed
+outcome — the order's current `Cancelled` status (`200`, S40's status shape).
+(Pre-S40 the legacy callback route answered this `409`; that route is deleted.)
 
 **F061 handoff**: the route, request, response (`AdminOrderDetailResponse`,
 S38), error codes (`invalid_order_transition`, `stale_version`,
@@ -480,11 +483,58 @@ type ResolveSandboxPaymentRequest = {
 
 | Method | Route | Request/success |
 |---|---|---|
-| POST | `/api/shop/{tenantId}/orders/{orderId}/payments/initiate` | `Idempotency-Key`; `200 InitiatePaymentResponse` |
+| POST | `/api/shop/{tenantId}/orders/{orderId}/payments/initiate` | `Idempotency-Key` header; `200 InitiatePaymentResponse` |
 | GET | `/api/shop/{tenantId}/orders/{orderId}/payments/status?token={resultToken}` | `200 PaymentStatusResponse` |
 | POST | `/api/shop/{tenantId}/orders/{orderId}/payments/sandbox/resolve` | Development only; `ResolveSandboxPaymentRequest`; `200 PaymentStatusResponse` |
 
-Unknown token/order pairs use one generic `404`.
+The legacy `POST …/payments/callback` route (a browser-authored `approved`
+boolean) is **deleted**.
+
+**Initiate**: anonymous, no body — everything is server-derived. The
+`Idempotency-Key` header is required and must be a UUID (missing or non-UUID →
+`400` naming `Idempotency-Key`). Only a `PendingPayment` order may start an
+attempt (any other status → `409`); an order has at most one live `Initiated`
+attempt (a fresh key for an order that has one returns that attempt's stored
+response instead of minting a second row); an order has at most **10** attempts
+in total (the 11th → `409` with RFC 7807 `type: "too_many_payment_attempts"`).
+Re-sending the **same key with the same canonical request** replays the stored
+response byte-identically; the **same key with a different request** is a `409`
+with `type: "idempotency_key_conflict"`. `redirectUrl` is the gateway's target
+(Sandbox: the relative same-origin path
+`/shop/{tenantId}/bank?authority={authority}`; a real provider: an absolute
+URL). `resultToken` is the raw callback token, returned exactly once per
+initiation (and re-derived, byte-identically, on a same-key replay); only its
+SHA-256 hash is ever stored.
+
+**Status**: anonymous. The `token` query value is the raw callback token,
+compared to the stored hash in **fixed time**. It returns only
+`orderNumber`/`status`/`providerReference` — nothing else about the order.
+Every miss — missing/blank token, wrong token, wrong order, wrong tenant, an
+order with no attempts — returns the one identical generic `404`.
+
+**Sandbox resolve**: mapped **only in Development** (`ResolveSandboxPaymentRequest`;
+blank `authority` → `400` naming `authority`). It is the only browser-driven
+payment simulation. A success for an attempt whose order is no longer payable
+answers `409`; a success for an already-resolved (e.g. cancel-invalidated)
+attempt returns the already-computed outcome — the order's current status —
+without re-applying side effects.
+
+**Provider configuration** (`Shop:Payments:Provider`): exactly `Sandbox` or
+`ZarinPal`. Outside Development the value is required and `Sandbox` is refused
+— a Production host with the sandbox provider **fails closed at startup**
+rather than silently allowing the browser-driven simulation. A configured
+provider with no registered gateway (ZarinPal before B045) fails closed at the
+first resolution.
+
+**F062 handoff**: the three routes, the response shapes, the `Idempotency-Key`
+header (a fresh UUID per logical initiation, replayable on retry), the
+`resultToken` (store it; it is the only credential for the status lookup and is
+returned only once), the error codes (`too_many_payment_attempts`,
+`idempotency_key_conflict`), and the sandbox `redirectUrl` (treat a leading-slash
+path as same-origin) are exactly as above. To exercise the sandbox end to end:
+initiate (send an `Idempotency-Key`), navigate to `redirectUrl`, approve or
+decline on the in-app bank page, which POSTs to sandbox resolve; afterwards the
+status lookup with the `resultToken` reports the order's current status.
 
 ## S41 / B045 — ZarinPal callback
 

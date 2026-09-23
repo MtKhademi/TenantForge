@@ -38,6 +38,41 @@ internal sealed class ShopPaymentAttemptMap : IEntityTypeConfiguration<ShopPayme
             .HasMaxLength(60)
             .IsRequired();
 
+        // B044: the amount frozen at initiation — same money column type the
+        // order's own totals use.
+        builder.Property(attempt => attempt.AmountSnapshot)
+            .HasColumnName("amount_snapshot")
+            .HasColumnType("numeric(12,2)")
+            .IsRequired();
+
+        // B044: SHA-256 (32 bytes) hex-encoded → exactly 64 lowercase chars.
+        // The raw callback token is never persisted.
+        builder.Property(attempt => attempt.CallbackTokenHash)
+            .HasColumnName("callback_token_hash")
+            .HasMaxLength(64)
+            .IsRequired();
+
+        // B044: stable failure reason code (e.g. "payment_declined").
+        builder.Property(attempt => attempt.FailureCode)
+            .HasColumnName("failure_code")
+            .HasMaxLength(40);
+
+        // B044: the provider's verification-time reference (ZarinPal's RefId
+        // in B045). Never the authority — that is gateway_reference.
+        builder.Property(attempt => attempt.ProviderReference)
+            .HasColumnName("provider_reference")
+            .HasMaxLength(60);
+
+        builder.Property(attempt => attempt.VerifiedAtUtc)
+            .HasColumnName("verified_at_utc");
+
+        // B044: optimistic-concurrency / row-locking token, bumped by the
+        // completion service exactly when it resolves the attempt.
+        builder.Property(attempt => attempt.Version)
+            .HasColumnName("version")
+            .HasDefaultValue(0)
+            .IsRequired();
+
         builder.Property(attempt => attempt.CreatedAtUtc)
             .HasColumnName("created_at_utc")
             .IsRequired();

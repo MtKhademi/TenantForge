@@ -21,10 +21,21 @@ public sealed class ShopConfig : IModuleConfig
     internal const int MinCartCleanupIntervalSeconds = 30;
     internal const int MaxCartCleanupIntervalSeconds = 3600;
 
+    /// <summary>
+    /// B044: the exact, closed set of payment providers the configuration
+    /// accepts. The value is matched case-sensitively against a gateway's
+    /// <c>IShopPaymentGateway.Provider</c>, so these strings are the wire
+    /// values, not arbitrary aliases.
+    /// </summary>
+    internal static readonly string[] SupportedPaymentProviders =
+        [Features.Payments.SandboxPaymentGateway.ProviderName, "ZarinPal"];
+
     private string ShopConnectionStringPath => $"{SectionName}:ShopDb";
     private string MediaRootPath => $"{SectionName}:MediaRoot";
     private string CartReservationMinutesPath => $"{SectionName}:CartReservationMinutes";
     private string CartCleanupIntervalSecondsPath => $"{SectionName}:CartCleanupIntervalSeconds";
+
+    internal const string PaymentsProviderPath = "Shop:Payments:Provider";
 
     public void RegisterServices(IServiceCollection services, IHostEnvironment environment)
     {
@@ -41,10 +52,18 @@ public sealed class ShopConfig : IModuleConfig
             });
         });
 
-        // Scoped, not singleton: SandboxPaymentGateway depends on the scoped
-        // ShopDbContext, mirroring IAMConfig.RegisterServices' own
-        // scoped-vs-singleton reasoning for its database-backed services.
+        // Scoped, not singleton: both payment gateways and the completion
+        // service depend on the scoped ShopDbContext, mirroring
+        // IAMConfig.RegisterServices' own scoped-vs-singleton reasoning for
+        // its database-backed services.
+        //
+        // B044: BOTH registered gateways (the sandbox today; ZarinPal lands
+        // in B045 behind the same seam) are registered, and the one actually
+        // used is picked by ShopPaymentGatewayResolver from the
+        // Shop:Payments:Provider value — never by registration order.
         services.AddScoped<Features.Payments.IShopPaymentGateway, Features.Payments.SandboxPaymentGateway>();
+        services.AddScoped<Features.Payments.IShopPaymentGatewayResolver, Features.Payments.ShopPaymentGatewayResolver>();
+        services.AddScoped<Features.Payments.ShopPaymentCompletionService>();
         services.AddScoped<IShopMediaStorage, LocalShopMediaStorage>();
         services.AddScoped<ShopImageValidator>();
         services.AddSingleton(TimeProvider.System);
@@ -76,6 +95,48 @@ public sealed class ShopConfig : IModuleConfig
 
         _ = GetCartReservationMinutes(environment, configuration);
         _ = GetCartCleanupIntervalSeconds(configuration);
+
+        ValidatePaymentsProvider(environment, configuration);
+    }
+
+    /// <summary>
+    /// B044: <c>Shop:Payments:Provider</c> accepts exactly the strings
+    /// <c>Sandbox</c> or <c>ZarinPal</c> and nothing else. In Development an
+    /// absent value defaults to <c>Sandbox</c> (keeping the repository
+    /// demoable without a payments section); outside Development the value
+    /// is required, and <c>Sandbox</c> is refused — the browser-driven
+    /// payment simulation fails closed in Production rather than being
+    /// enabled silently. A provider name that no registered gateway matches
+    /// (e.g. ZarinPal before B045 registers its gateway) fails closed at the
+    /// first resolution, in the resolver, not here.
+    /// </summary>
+    private static void ValidatePaymentsProvider(IHostEnvironment environment, IConfiguration configuration)
+    {
+        var provider = configuration[PaymentsProviderPath];
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            if (environment.IsDevelopment())
+            {
+                return; // the Development default is Sandbox
+            }
+
+            throw new InvalidOperationException(
+                $"The '{PaymentsProviderPath}' configuration value is required and must be one of: {string.Join(", ", SupportedPaymentProviders)}.");
+        }
+
+        if (!SupportedPaymentProviders.Contains(provider))
+        {
+            throw new InvalidOperationException(
+                $"The '{PaymentsProviderPath}' configuration value must be one of: {string.Join(", ", SupportedPaymentProviders)}.");
+        }
+
+        if (!environment.IsDevelopment()
+            && string.Equals(provider, Features.Payments.SandboxPaymentGateway.ProviderName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The 'Sandbox' payment provider is not available outside Development. " +
+                $"Configure '{PaymentsProviderPath}' to a real provider.");
+        }
     }
 
     internal static int GetCartReservationMinutes(IHostEnvironment environment, IConfiguration configuration)
