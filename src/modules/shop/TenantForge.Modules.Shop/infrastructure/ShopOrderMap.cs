@@ -82,6 +82,15 @@ internal sealed class ShopOrderMap : IEntityTypeConfiguration<ShopOrder>
             .HasDefaultValue(1)
             .IsRequired();
 
+        builder.Property(order => order.FulfilledAtUtc)
+            .HasColumnName("fulfilled_at_utc");
+
+        builder.Property(order => order.CancelledAtUtc)
+            .HasColumnName("cancelled_at_utc");
+
+        builder.Property(order => order.InventoryReleasedAtUtc)
+            .HasColumnName("inventory_released_at_utc");
+
         builder.HasIndex(order => order.OrderNumber)
             .IsUnique()
             .HasDatabaseName("ix_shop_orders_order_number");

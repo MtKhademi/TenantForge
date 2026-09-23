@@ -143,7 +143,7 @@ one valid Spec link.
 | B040 | S36 | Expire abandoned carts and release reserved stock | done | B031 | — |
 | B041 | S37 | Add enforceable coupon limits and atomic redemption | done | B040, B029 | — |
 | B042 | S38 | Expose tenant order list and detail for operators | done | B035, B033 | — |
-| B043 | S39 | Fulfil or cancel orders with inventory-safe transitions | planned | B042, B040 | [B043 Spec](backend/B043-shop-order-operations.md) |
+| B043 | S39 | Fulfil or cancel orders with inventory-safe transitions | done | B042, B040 | — |
 | B044 | S40 | Make payment initiation and verification gateway-neutral and idempotent | planned | B032, B043 | [B044 Spec](backend/B044-shop-payment-lifecycle.md) |
 | B045 | S41 | Integrate ZarinPal request and server-side verification | planned | B044 | [B045 Spec](backend/B045-shop-zarinpal-payment.md) |
 | B046 | S42 | Rate-limit sensitive anonymous Shop flows | planned | B045, B043 | [B046 Spec](backend/B046-shop-public-abuse-controls.md) |

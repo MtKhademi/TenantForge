@@ -38,11 +38,12 @@ Shop owns:
 - tenant-scoped shipping-rate and coupon administration;
 - the tenant storefront identity and customer policy pages (one profile per
   tenant, published or draft);
-- the permission-gated tenant-operator order reads (list + detail, B042);
+- the permission-gated tenant-operator order reads (list + detail, B042) and
+  the order-status mutations (fulfil/cancel, B043);
 - the `Shop.Catalog.Manage`/`Shop.Shipping.Manage`/`Shop.Settings.Manage`/
-  `Shop.Orders.View` permission keys, enforced by Shop's own authorization
-  code, plus the reserved `Shop.Orders.Manage` key (registered, not yet
-  enforced — B043 owns its mutations).
+  `Shop.Orders.View`/`Shop.Orders.Manage` permission keys, all enforced by
+  Shop's own authorization code (`Shop.Orders.Manage` gates the B043
+  order-status route).
 
 Shop explicitly does **not** own:
 
@@ -66,7 +67,7 @@ Shop explicitly does **not** own:
 | Database/context | PostgreSQL via `TenantForge.Modules.Shop.Infrastructure.ShopDbContext`, same physical database as IAM but its own `__ShopMigrationsHistory` table |
 | Identifier representations | PostgreSQL `bigint` ↔ .NET `Tsid` ↔ HTTP canonical 13-char string — same seam IAM uses, `TenantForge.BuildingBlocks.Identifiers.TsidId` |
 | No `.Contract` project | Shop's HTTP request/response records live beside each feature (`features/<area>/<Area>Contracts.cs`), not in a separate project — no second .NET consumer has proved that boundary yet |
-| Permission model | `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage`, `Shop.Orders.View` (enforced) + `Shop.Orders.Manage` (reserved for B043) — tenant Owner bypass, or an assigned `TenantRole` carrying the key (IAM-owned role storage, Shop-owned check) — see [Section 8](#8-tenantauth-rules) |
+| Permission model | `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage`, `Shop.Orders.View` and `Shop.Orders.Manage` (all enforced) — tenant Owner bypass, or an assigned `TenantRole` carrying the key (IAM-owned role storage, Shop-owned check) — see [Section 8](#8-tenantauth-rules) |
 | Test project | `tests/integration/TenantForge.Api.IntegrationTests/TenantForge.Api.IntegrationTests.csproj` |
 | Local SDK/runtime notes | No Linux `dotnet`; use `dotnet.exe` — see `docs/architecture.md#local-development-environment-wsl--windows-net-sdk` |
 | Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 17](#17-change-impact-checklist) |
@@ -135,7 +136,7 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | --- | --- | --- |
 | Shop composition seam | `src/modules/shop/TenantForge.Modules.Shop/ShopModule.cs` | The two public calls, activation order, fixed feature-mapping order |
 | Shop configuration | `src/modules/shop/TenantForge.Modules.Shop/ShopConfig.cs` | `Shop:ShopDb`/`Shop:MediaRoot` keys, DI registrations, fail-closed validation |
-| Domain entities | `src/modules/shop/TenantForge.Modules.Shop/domain/` | `ShopCategory`, `ShopProduct`, `ShopProductImage`, `ShopProductVariant`, `ShopSizeGuideColumn/Row/Cell`, `ShopShippingRate`, `ShopCoupon`, `ShopCart`, `ShopCartItem`, `ShopOrder`, `ShopOrderItem`, `ShopPaymentAttempt` and their enums |
+| Domain entities | `src/modules/shop/TenantForge.Modules.Shop/domain/` | `ShopCategory`, `ShopProduct`, `ShopProductImage`, `ShopProductVariant`, `ShopSizeGuideColumn/Row/Cell`, `ShopShippingRate`, `ShopCoupon`, `ShopCart`, `ShopCartItem`, `ShopOrder`, `ShopOrderItem`, `ShopPaymentAttempt`, `ShopOrderOperation` and their enums |
 | Authorization | `src/modules/shop/TenantForge.Modules.Shop/features/authorization/` | `ShopAuthorization` (membership + permission check via raw SQL against IAM's tables), `ShopPermissionCatalogContributor` (the `shop` catalog group) |
 | Category admin | `src/modules/shop/TenantForge.Modules.Shop/features/categories/` | `CategoriesFeature` (create/list/update, the `ValidateParentAsync` eligibility rule and the reparent guard, a `FOR UPDATE` row lock so the guard + save are atomic), `CategoryContracts`, `CategoryVisibility` (the shared "effective public activity" predicate used by every public read) |
 | Product admin | `src/modules/shop/TenantForge.Modules.Shop/features/products/` | `ProductsFeature` (combined product + variants + size-guide authoring), `ProductContracts` |
@@ -147,6 +148,7 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Checkout summary | `src/modules/shop/TenantForge.Modules.Shop/features/checkout/` | `CheckoutFeature`, `CheckoutContracts` (read/compute-only) |
 | Order creation | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` | `OrderCreationFeature`, `OrderContracts`, `OrderLookupFeature`, `OrderLookupContracts` |
 | Admin order reads | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B042) | `AdminOrdersFeature` (`Shop.Orders.View`-gated list + detail, non-leaking 404, 20-attempt cap), `AdminOrderContracts` |
+| Admin order operations | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B043) | `AdminOrdersFeature`'s `PATCH …/orders/{orderId}/status` (`Shop.Orders.Manage`-gated fulfil/cancel, optimistic `expectedVersion`, idempotent via the `shop_order_operations` unique key, exactly-once inventory release on cancel) — see [Section 11](#11-inventory-reservation) |
 | Sandbox payment | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway` — see [Section 13](#13-sandbox-payment) |
 | Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 14](#14-storefront-profile-and-policies) |
 | Pagination | `src/modules/shop/TenantForge.Modules.Shop/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` (Shop's own copy — not shared with IAM's) |
@@ -192,7 +194,8 @@ are `internal` (not reachable outside the module).
 | `ShopCoupon.cs` | `Tsid Id` | none | `Code`/`NormalizedCode` (upper-cased) unique per tenant; `DiscountType` is `Percentage` or `FixedAmount`; `Deactivate()` is the only state-removal path (no hard delete); B041 adds `MinimumSubtotal` (≥0), `MaximumDiscountAmount` (nullable, caps the discount), `RedemptionLimit` (nullable, `null`=unlimited, else `1..1,000,000`), `RedeemedCount` (≥0, only ever incremented atomically at order creation) and a client-managed `Version` (starts at `0`, bumped on every admin save incl. deactivate) — see [Section 12](#12-coupon-rules) |
 | `ShopCart.cs` | `Tsid Id` | optional `CouponId` | Anonymous — ownership is by opaque cart id alone, no account link; `Status` is `Active`/`Converted`/`Expired`, `LastTouchedAtUtc` and `ExpiresAtUtc` define the server-owned reservation lease, and `ClosedAtUtc` is set when the cart is converted or expired |
 | `ShopCartItem.cs` | `Tsid Id` | `CartId`, `ProductVariantId` | `UnitPriceSnapshot` frozen at add-time; `Quantity` must stay positive |
-| `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot; `Version` (int, default `1`) is the optimistic-concurrency token B043's order mutations will bump — B042 only persists and returns it |
+| `ShopOrder.cs` | `Tsid Id` | none (snapshots cart data, no live FK back to cart) | `Status` (`PendingPayment`/`Paid`/`Cancelled`/`Fulfilled`); `OrderNumber` and `TrackingCode` are generated, unique, unguessable strings; every money/address field is a point-in-time snapshot; `Version` (int, default `1`) is the optimistic-concurrency token the status actions bump; `FulfilledAtUtc`/`CancelledAtUtc`/`InventoryReleasedAtUtc` are nullable and each set exactly once (B043); `TryFulfill` (only from `Paid`) and `TryCancel` (only from `PendingPayment`) each check `expectedVersion == Version`, move the status, stamp the matching timestamp and bump `Version` — `MarkInventoryReleased` stamps `InventoryReleasedAtUtc` only when still null (the exactly-once guard) |
+| `ShopOrderOperation.cs` | `Tsid Id` | `OrderId` (cascade) | B043's idempotency record — one row per order-status action: the client `Key` (a UUID), the canonical `OrderStatusAction` (`Fulfill`/`Cancel`), a JSON `ResponseSnapshot`, the acting `ActorId` and `CreatedAtUtc`; the unique `(TenantId, Key)` constraint makes a key single-use per tenant |
 | `ShopOrderItem.cs` | `Tsid Id` | `OrderId` | Snapshots product name/variant label/unit price at order-creation time — never a live join back to the catalog |
 | `ShopPaymentAttempt.cs` | `Tsid Id` | `OrderId` (no `TenantId` column — filter through `ShopOrder` when tenant-scoping is required) | `Status` (`Initiated`/`Succeeded`/`Failed`); `TryResolve` is idempotent — a second callback for an already-resolved attempt returns `false` and changes nothing |
 | `ShopProfile.cs` | `Tsid Id` | `TenantId` (unique — exactly one profile row per tenant, enforced by a unique index, not a relationship) | All text is plain text (never HTML); every field is trimmed on the outside only, internal newlines preserved; `InstagramUrl` (nullable) must be HTTPS on `instagram.com`/a subdomain; `SupportPhone` is a conservative display allowlist (digits, spaces, `+`, `-`, `(`, `)`); `Version` is a client-managed optimistic-concurrency counter (starts at `1`, not a DB rowversion); `IsPublished` gates only the public profile/policy reads, never the catalog — see [Section 14](#14-storefront-profile-and-policies) |
@@ -210,10 +213,21 @@ Migration order (`infrastructure/Migrations/`, chronological):
 `AddShopOrders` → `AddShopPaymentAttempts` → `AddShopProductMedia` →
 `AddShopCategoryHierarchy` → `AddShopProfile` →
 `AddShopCartReservationExpiry` → `AddShopCouponRules` →
-`AddShopOrderVersion`. `AddShopOrderVersion` adds the single
+`AddShopOrderVersion` → `AddShopOrderOperations`.
+`AddShopOrderOperations` adds the three nullable timestamps to `shop_orders`
+(`fulfilled_at_utc`, `cancelled_at_utc`, `inventory_released_at_utc`) and the
+`shop_order_operations` table (B043's idempotency record: `id`, `tenant_id`,
+`order_id` with a cascade FK to `shop_orders`, `idempotency_key`
+(varchar(36)), `action` (varchar(20), the string-converted
+`OrderStatusAction`), `response_snapshot` (text), `actor_id`,
+`created_at_utc`) with the **unique** index
+`ix_shop_order_operations_tenant_idempotency_key` on
+`(tenant_id, idempotency_key)` — the constraint that makes an idempotency key
+single-use per tenant — plus a non-unique `ix_shop_order_operations_order_id`.
+`AddShopOrderVersion` adds the single
 `shop_orders.version` column (int, not nullable, default `1`) — the
-optimistic-concurrency token B043's order mutations will bump; B042 only
-persists and returns it. `AddShopCouponRules` adds
+optimistic-concurrency token the status actions bump (B043); B042 only
+persisted and returned it. `AddShopCouponRules` adds
 five columns to `shop_coupons` — `minimum_subtotal` (numeric, default `0`),
 `maximum_discount_amount` (numeric, nullable), `redemption_limit` (int,
 nullable), `redeemed_count` (int, default `0`) and `version` (int, default
@@ -302,7 +316,7 @@ aggregates every registered contributor's groups into
 | `Shop.Shipping.Manage` | `POST /api/tenants/{tenantId}/shop/shipping-rates`, `POST`/`PUT /api/tenants/{tenantId}/shop/coupons*`, `PATCH …/coupons/{couponId}/deactivate` |
 | `Shop.Settings.Manage` | `PUT /api/tenants/{tenantId}/shop/profile` (the admin profile read is membership-only, like every other read-only admin route) |
 | `Shop.Orders.View` | `GET /api/tenants/{tenantId}/shop/orders`, `GET …/orders/{orderId}` — the only Shop admin **reads** gated by a permission key rather than plain membership |
-| `Shop.Orders.Manage` | (reserved for B043's order-status mutations — registered in the catalog now, enforced nowhere yet) |
+| `Shop.Orders.Manage` | `PATCH /api/tenants/{tenantId}/shop/orders/{orderId}/status` — B043's order-status mutation (the key B042 registered but left reserved; this route is the one that enforces it) |
 
 Public/anonymous routes enforce tenant isolation only through the
 `{tenantId}` route segment and `IsActive`/status filters on the joined
@@ -313,7 +327,7 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 
 ## 9. Endpoint catalog
 
-37 routes, one row per literal `Map*` call in
+38 routes, one row per literal `Map*` call in
 `src/modules/shop/TenantForge.Modules.Shop/features/**`.
 
 | Method & path | Purpose | Auth | Feature file |
@@ -352,6 +366,7 @@ returns the same non-leaking result (`404` on public byte/detail routes,
 | `POST /api/shop/{tenantId}/orders/lookup` | Guest order lookup by tracking code + phone | Anonymous | `orders/OrderLookupFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/orders?pageNumber=&pageSize=&status=&q=&fromUtc=&toUtc=` | List the tenant's orders (paginated, filtered); always sorted `CreatedAtUtc desc, Id desc`; malformed/invalid filter → `400` | `Shop.Orders.View` | `orders/AdminOrdersFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/orders/{orderId}` | One order's full detail (customer, totals, item snapshots, ≤20 newest payment attempts, `version`); malformed/foreign/missing id → one identical non-leaking `404` | `Shop.Orders.View` | `orders/AdminOrdersFeature.cs` |
+| `PATCH /api/tenants/{tenantId}/shop/orders/{orderId}/status` | Fulfil (`Paid→Fulfilled`) or cancel (`PendingPayment→Cancelled`); `ChangeOrderStatusRequest { action, expectedVersion }` + `Idempotency-Key` UUID header; `400` for a bad action/key, `409 invalid_order_transition`, `409 stale_version`, `409 idempotency_key_conflict`; cancel restores stock exactly once and invalidates `Initiated` attempts; malformed/foreign/missing id → one identical non-leaking `404` | `Shop.Orders.Manage` | `orders/AdminOrdersFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/profile` | Read the tenant's storefront profile — `200 { profile: null }` before the first save | Membership | `profiles/ProfilesFeature.cs` |
 | `PUT /api/tenants/{tenantId}/shop/profile` | Create/update the profile (optimistic concurrency via `expectedVersion`) | `Shop.Settings.Manage` | `profiles/ProfilesFeature.cs` |
 | `GET /api/shop/{tenantId}/profile` | Public storefront profile — `404` when missing or unpublished | Anonymous, published-only | `profiles/ProfilesFeature.cs` |
@@ -463,6 +478,15 @@ stock, removes cart item rows and commits. The background
  RFC 7807 `410 Gone` with `type: "shop_cart_expired"` on cart, checkout-summary
  and order-creation routes.
 
+**Cancel inventory restore (B043)**: the order-status PATCH, when cancelling a
+`PendingPayment` order, runs inside one database transaction with the order
+row locked `FOR UPDATE` and the referenced variant rows locked `FOR UPDATE`
+before the restore — two concurrent cancels of the same order serialize so
+stock is restored exactly once. The restore is further guarded by the order's
+`InventoryReleasedAtUtc`: it is set in the same transaction only when still
+null, so even if cancel were somehow triggered twice, the stock delta is applied
+at most once. Fulfil (`Paid→Fulfilled`) never touches stock.
+
 ## 12. Coupon rules
 
 Introduced by B041. A coupon can now carry a minimum subtotal, a maximum
@@ -534,6 +558,12 @@ already-resolved attempt changes nothing and reports failure. There is no
 stored card data and no gateway webhook signature scheme beyond what the
 sandbox needs to demonstrate the seam is real.
 
+Two B043 interactions: the callback route answers any order that is no longer
+`PendingPayment` with a `409` (so a late callback for a `Cancelled` order can
+never mark it `Paid`), and a successful cancel invalidates the order's still-
+`Initiated` attempts to `Failed` in its transaction, so an un-paid attempt can
+no longer be completed.
+
 ## 14. Storefront profile and policies
 
 Introduced by B039. A tenant publishes its store identity and customer
@@ -594,6 +624,7 @@ lower-cased, and the suffix check anchors on the dot so
 | `ShopCouponRulesIntegrationTests.cs` | B041 coupon rules: `ShopCouponPolicy` ordered reason codes (`coupon_inactive`/`_expired`/`_minimum_not_met`/`_limit_reached` + the caller's `coupon_not_found`) with the exact stable code surfaced in the `couponCode` field error, percentage discount capped at `maximumDiscountAmount` (and never past the subtotal), checkout summary never incrementing `RedeemedCount`, order creation incrementing by exactly one and storing the evaluated discount, a forced downstream DB failure rolling the redemption back, the concurrent last-redemption race (one 201 with the discount, one 400 `coupon_limit_reached`, total +1, loser's cart left active), stale `expectedVersion` → `409 stale_version`, `redemptionLimit` below `redeemedCount` → `400` with no persisted change, and tenant B unable to read/update/redeem tenant A's coupon with a byte-identical `coupon_not_found` |
 | `ShopCouponRulesMigrationTests.cs` | B041 migration: a pre-`AddShopCouponRules` `shop_coupons` row backfills to `redemption_limit` NULL (unlimited), `redeemed_count` 0 and `version` 0, keeping its original fields so it stays usable |
 | `ShopAdminOrdersIntegrationTests.cs` | B042 admin order reads: `Shop.Orders.View` matrix (Owner bypass 200, granted member 200, no-key member 403, `Shop.Orders.Manage`-only member still 403, anonymous 401), tenant isolation (foreign orders never listed, cross-tenant id → the byte-identical generic 404), list filters `q`/`status`/`fromUtc`/`toUtc` valid + invalid (400 naming the field), stable two-page pagination, item-snapshot fidelity after the product is renamed/repriced, the 20-newest payment-attempt cap (21 real attempts → 20 returned, newest first), and the detail shape (customer, totals, items, `version: 1`) |
+| `ShopOrderOperationsIntegrationTests.cs` | B043 order-status mutations: fulfil a `Paid` order (`Fulfilled`, `FulfilledAtUtc` set, stock untouched, version 1→2), cancel a `PendingPayment` order (stock restored to full initial, `InventoryReleasedAtUtc` set, `Initiated` attempts invalidated to `Failed`), a late payment callback for a `Cancelled` order rejected `409` and never `Paid`, idempotent replay (same key + same action returns the byte-identical stored response, one operation row, stock restored once), same key + different action → `409 idempotency_key_conflict` with nothing performed, stale `expectedVersion` → `409 stale_version` with no change, two concurrent cancels (one `200`/one `409`, stock restored exactly once, one operation row), the `Shop.Orders.Manage` matrix (Owner 200, granted 200, no-key 403, `Shop.Orders.View`-only 403, anonymous 401), cross-tenant order id → the byte-identical generic 404, and validation `400`s (bad/missing action, non-UUID/missing `Idempotency-Key`) — all asserted against the real persisted rows, not just status codes |
 
 Commands:
 
@@ -635,11 +666,12 @@ Verified against current code (not aspirational):
   maximum-discount cap and total redemption limit only (see
   [Section 12](#12-coupon-rules)); customer-scoped or item-scoped coupons remain
   out of scope until their own slice.
-- **No admin order mutations or rate limiting** — B042 delivers read-only
-  order list/detail for operators; fulfil/cancel (and `Shop.Orders.Manage`
-  enforcement) arrive in B043, and rate limiting in B046 (see
+- **No paid-order refund, returns or partial fulfilment/cancellation** — B043
+  delivers the two operator transitions (`Paid→Fulfilled`,
+  `PendingPayment→Cancelled`); there is no `Paid→Cancelled` path and no refund
+  flow until its own slice. There is also still no rate limiting (B046) — see
   `tasks/TASKS.md`'s Backend queue for current status; do not treat a
-  `planned` row as already-delivered behavior).
+  `planned` row as already-delivered behavior.
 
 ## 17. Change-impact checklist
 

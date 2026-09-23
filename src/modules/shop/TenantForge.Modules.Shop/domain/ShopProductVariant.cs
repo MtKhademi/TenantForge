@@ -63,4 +63,21 @@ internal sealed class ShopProductVariant
         StockQuantity -= quantity;
         return true;
     }
+
+    /// <summary>
+    /// B043: returns <paramref name="quantity"/> to this variant's available
+    /// stock — the exact inverse of <see cref="TryReserve"/> — when an order
+    /// that reserved it is cancelled. The restore happens exactly once because
+    /// the caller gates it on the order's <c>InventoryReleasedAtUtc</c> being
+    /// null; this method only applies the delta.
+    /// </summary>
+    public void Release(int quantity)
+    {
+        if (quantity <= 0)
+        {
+            return;
+        }
+
+        StockQuantity += quantity;
+    }
 }

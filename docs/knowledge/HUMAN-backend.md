@@ -84,6 +84,11 @@ contract and the permission catalog contracts.
   list and a per-order detail showing the customer, the frozen item snapshots,
   the totals and the (capped) payment history — so staff can inspect a guest
   order without ever knowing its public tracking-code secret;
+- operator order operations: a tenant operator with the `Shop.Orders.Manage`
+  key can mark a paid order **fulfilled** or cancel an unpaid order. Cancelling
+  returns the reserved stock to the shelf exactly once and voids any payment
+  that has not yet completed. A paid order cannot be cancelled — refunds are a
+  separate, later capability.
 - a sandbox payment gateway;
 - a tenant storefront identity (store name, tagline, support phone, Instagram)
   and customer policy pages (about, shipping, payment, returns, privacy) that
@@ -120,8 +125,9 @@ gated by its own `Shop.Orders.View` key — an authenticated member without the
 key gets a `403`, an anonymous caller a `401`. The order-detail route answers a
 malformed id, another tenant's id and a missing id with the *identical* `404`,
 so an outsider cannot even tell whether a given id exists. An order also stores
-a `version` number now that it will one day be editable: two operators changing
-the same order at once will not silently overwrite each other.
+a `version` number: the operator status actions (fulfil/cancel) only apply when
+the caller echoes back the version they last saw, so two operators changing the
+same order at once cannot silently overwrite each other.
 
 **BuildingBlocks has an admission rule.** A type only moves there once it has
 proven cross-module value. This is deliberate friction — it stops the project
@@ -151,6 +157,18 @@ conflict carries a stable `type` (`stale_version`) so the frontend can react
 to it by name instead of parsing a message.
 
 **Cart stock leases are explicit.** Adding an item reserves stock immediately so checkout cannot oversell. That reservation now has a server-owned expiry; a row lock makes expiry and order creation race safely, so either the cart becomes an order or the stock is restored exactly once — never both.
+
+**Order status changes are idempotent and inventory-safe.** An operator's
+fulfil/cancel request carries a UUID idempotency key and the order's current
+version. The same key sent again returns the original result without re-doing
+the work; the same key with a *different* action is a conflict rather than a
+silent guess. Each key is stored once per tenant, backed by a database unique
+index — not a "check first, then write" that two racing requests could both
+pass. Cancelling an order locks the order and its product-variant rows, returns
+the reserved stock in the same transaction, and records a release timestamp so
+the stock comes back exactly once even if the action is somehow triggered
+twice. A late payment callback for a cancelled order is rejected, so a cancelled
+order can never be paid by accident.
 
 **Coupon rules have one owner, and spending capacity is race-safe.** Every
 coupon rule (minimum subtotal, discount cap, redemption limit, expiry, active
