@@ -72,8 +72,25 @@ adapter, not rewriting the screen.
   reservation runs out, all three pages swap to the same recovery panel with a
   "back to the store" action, and only that store's saved cart and order draft
   are cleared — a second store's cart in the same browser stays intact. The
-  header's cart count now follows the same reservation-aware data path. This is
-  still backed by the F048 mock (connected in F058).
+   header's cart count now follows the same reservation-aware data path. This is
+   still backed by the F048 mock (connected in F058).
+- advanced coupon rules: the admin coupon page now supports minimum subtotal, a
+   maximum-discount cap and a redemption limit alongside the original code and
+   discount. A blank cap or limit means "unlimited" and is shown as «نامحدود»,
+   never an empty cell. Each row shows its usage (how many times redeemed versus
+   its limit), and a coupon that has hit its limit is highlighted as exhausted.
+   Expired and inactive coupons are styled differently from an active one. Once a
+   coupon has been redeemed at least once, its code and discount type are locked
+   so they cannot change; everything else stays editable. Editing is protected by
+   an optimistic version check — if the coupon changed behind your back, you get a
+   clear "reload and try again" conflict instead of a silent overwrite. Money
+   inputs carry an explicit unit (toman / percent) and accept Persian digits,
+   which are converted to standard digits before anything is validated or sent.
+   At checkout, a typed coupon is checked against the live cart and every reason
+   the store can reject it (unknown, inactive, expired, below the minimum, limit
+   reached) shows its own distinct message, and a preview never changes the
+   redemption count — only a real order would. This is still backed by the F049
+   mock (connected in F059).
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -93,9 +110,9 @@ keeps error handling, timeouts and token attachment in one place per capability.
 client interface that its mock and later HTTP implementation both satisfy. The
 provider binds one slot per capability — `media` (product galleries),
 `discovery` (the all-products catalog), `categories` (the category hierarchy),
-`profile` (store identity and policies) and `cartLease` (cart reservation
-expiry) are bound today, each to its mock client. Screens consume
-`useShopClients()`; connecting a real API later
+`profile` (store identity and policies), `cartLease` (cart reservation expiry)
+and `coupons` (advanced coupon rules) are bound today, each to its mock client.
+Screens consume `useShopClients()`; connecting a real API later
 replaces exactly one provider slot and never touches the screen. The all-products catalog's filter state
 lives in the URL, so a filtered view is refreshable and back/forward-
 reproducible.

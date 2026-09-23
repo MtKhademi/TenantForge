@@ -100,19 +100,37 @@ Read the nearest existing adapter before writing a new one.
 `src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
 mounts one `ShopClientsProvider` around all routes; each bound slot is replaced
 individually by its connect task (F054 → `media`, F055 → `discovery`,
-F056 → `categories`, F057 → `profile`, F058 → `cartLease`). Bound so far:
-`media` → `mockShopMediaClient` (F044), `discovery` →
+F056 → `categories`, F057 → `profile`, F058 → `cartLease`, F059 → `coupons`).
+Bound so far: `media` → `mockShopMediaClient` (F044), `discovery` →
 `mockShopDiscoveryClient` (F045), `categories` → `mockShopCategoryClient`
-(F046), `profile` → `mockShopProfileClient` (F047) and `cartLease` →
-`mockShopCartLeaseClient` (F048). Mock Shop scenario controls are development-only
-and selected through the provider, never by importing fixtures into pages. Each
-capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx` that the
-provider's dev-only `DevScenarioToolbar` loads independently; new capabilities
-add their own switcher and position it so it does not overlap another switcher's
-fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
-categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`,
-cartLease: `bottom-[12.25rem] start-4`). See
+(F046), `profile` → `mockShopProfileClient` (F047), `cartLease` →
+`mockShopCartLeaseClient` (F048) and `coupons` → `mockShopCouponClient` (F049).
+Mock Shop scenario controls are development-only and selected through the
+provider, never by importing fixtures into pages. Each capability's dev switcher
+is a separate `Dev…ScenarioSwitcher.tsx` that the provider's dev-only
+`DevScenarioToolbar` loads independently; new capabilities add their own
+switcher and position it so it does not overlap another switcher's fixed corner
+(media: `bottom-4 end-4`, discovery: `bottom-4 start-4`, categories:
+`bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`, cartLease:
+`bottom-[12.25rem] start-4`, coupons: `bottom-[16rem] start-4`). See
 `docs/design/shop/frontend-contract-boundary.md`.
+
+The `coupons` slot (B041/F049) feeds the admin `CouponsPage` (create/edit/
+deactivate, null-rendered-as-«نامحدود», usage `redeemedCount`/`redemptionLimit`,
+distinct expired vs inactive, code+type locked when `redeemedCount > 0`,
+optimistic `expectedVersion` → `409 stale_version`) and the checkout coupon
+preview in `CheckoutPage`. The preview is a pure, read-only mirror of B041's
+`ShopCouponPolicy.Evaluate` (`evaluateCouponPreview` + `findCouponByCode` in
+`contracts/couponRulesContract.ts`): it maps each of the five reason codes
+(`coupon_not_found`/`inactive`/`expired`/`minimum_not_met`/`limit_reached`) to
+its own message and NEVER writes `redeemedCount`, so a preview can't decrease
+usage. Mixed-phase seam to preserve: with a coupon code typed, `CheckoutPage`
+skips the real `fetchCheckoutSummary` (the mock-minted cart 404s the real API)
+and the mock verdict owns the coupon line; F059 restores the single server-side
+summary. The B041 `Coupon` wire type in `couponRulesContract.ts` is distinct from
+the older pre-B041 admin `Coupon` in `shopCheckoutAdminTypes.ts` (the F033/B029
+shape, still consumed by `shippingAndCouponAdapter`) — different endpoints, not a
+duplicate.
 
 The `profile` slot (B039/F047) is the first client that also feeds the
 **anonymous storefront layout**: `StorefrontLayout` and the five `PolicyPage`
