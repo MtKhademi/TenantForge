@@ -333,6 +333,25 @@ type AdminOrderListResponse = {
   orders: AdminOrderSummaryResponse[]
   pagination: PaginationMetadata
 }
+type AdminOrderCustomerResponse = {
+  name: string
+  phone: string
+  shippingProvince: string
+  shippingCity: string
+  shippingAddressLine: string
+  shippingPostalCode: string
+}
+type AdminOrderTotalsResponse = {
+  subTotal: number
+  shippingCost: number
+  discountAmount: number
+  grandTotal: number
+}
+type AdminPaymentAttemptResponse = {
+  id: string
+  status: string
+  createdAtUtc: string
+}
 type AdminOrderDetailResponse = {
   id: string
   orderNumber: string
@@ -340,7 +359,7 @@ type AdminOrderDetailResponse = {
   status: AdminOrderStatus
   customer: AdminOrderCustomerResponse
   totals: AdminOrderTotalsResponse
-  items: AdminOrderItemResponse[]
+  items: OrderLookupItemResponse[]  // reused from S30 guest lookup
   paymentAttempts: AdminPaymentAttemptResponse[]
   version: number
   createdAtUtc: string
@@ -352,7 +371,34 @@ type AdminOrderDetailResponse = {
 | GET | `/api/tenants/{tenantId}/shop/orders?pageNumber=&pageSize=&status=&q=&fromUtc=&toUtc=` | `200 AdminOrderListResponse` |
 | GET | `/api/tenants/{tenantId}/shop/orders/{orderId}` | `200 AdminOrderDetailResponse` |
 
-Both require `Shop.Orders.View`.
+**Auth**: both require a valid JWT **and** `Shop.Orders.View`. Anonymous → `401`;
+authenticated member without the key → `403`. Tenant Owner bypasses the key
+check. `Shop.Orders.Manage` is registered in the catalog (B042) but is **not**
+enforced on these read-only routes — it is reserved for B043's mutations.
+
+**List filters** (all optional, combined with AND):
+
+| Param | Constraint | Failure |
+|---|---|---|
+| `q` | trimmed, ≤ 100 chars; case-insensitive contains on order number, tracking code, customer phone, customer name (OR) | `400` `q` field error |
+| `status` | must be one of the defined `AdminOrderStatus` values (case-sensitive) | `400` `status` field error |
+| `fromUtc` | parseable date-time, inclusive start | `400` `fromUtc` field error |
+| `toUtc` | parseable date-time, exclusive end; range ≤ 366 days from `fromUtc` | `400` `toUtc` field error |
+
+**Sort**: always `CreatedAtUtc desc, Id desc` — stable across pages.
+
+**Detail 404**: a malformed order ID, a well-formed ID belonging to a different
+tenant, or a non-existent order ID all return the **same** RFC 7807 `404`
+after the authorization check runs — the body does not reveal which case was
+hit. The anonymous tracking-code lookup path is not reused.
+
+**Payment attempts**: capped at the **20 newest** per order (descending by
+`CreatedAtUtc`, then `Id`). This cap is temporary until the payment-lifecycle
+task (B044) enforces a smaller, lifecycle-aware bound.
+
+**Snapshot fidelity**: item values (`ProductNameSnapshot`, `VariantLabelSnapshot`,
+`UnitPrice`) come from the order's frozen snapshot at creation time — never a
+live join to the current product name or price.
 
 ## S39 / B043 — order status actions
 

@@ -111,7 +111,7 @@ internal static class AdminOrdersFeature
                 pagination);
 
             return Results.Ok(response);
-        });
+        }).RequireAuthorization();
 
         endpoints.MapGet("/api/tenants/{tenantId}/shop/orders/{orderId}", async (
             string tenantId,
@@ -182,7 +182,7 @@ internal static class AdminOrdersFeature
                 order.CreatedAtUtc);
 
             return Results.Ok(response);
-        });
+        }).RequireAuthorization();
 
         return endpoints;
     }
