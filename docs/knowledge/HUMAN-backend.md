@@ -80,6 +80,10 @@ contract and the permission catalog contracts.
   one discount and one "limit reached", and the shopper who lost keeps their
   cart);
 - a checkout summary, order creation and guest order lookup;
+- admin order reading for tenant operators: a permission-gated, filterable
+  list and a per-order detail showing the customer, the frozen item snapshots,
+  the totals and the (capped) payment history — so staff can inspect a guest
+  order without ever knowing its public tracking-code secret;
 - a sandbox payment gateway;
 - a tenant storefront identity (store name, tagline, support phone, Instagram)
   and customer policy pages (about, shipping, payment, returns, privacy) that
@@ -109,6 +113,15 @@ has exactly one parser for errors.
 **Authorization is server-side, fail closed.** Missing tenant or permission
 context is a denial, not a default-allow. Hiding a button in the UI is never
 treated as a control.
+
+**Reading is a permission, and a "not found" never leaks why.** Most Shop admin
+reads only need tenant membership, but reading a tenant's guest orders is
+gated by its own `Shop.Orders.View` key — an authenticated member without the
+key gets a `403`, an anonymous caller a `401`. The order-detail route answers a
+malformed id, another tenant's id and a missing id with the *identical* `404`,
+so an outsider cannot even tell whether a given id exists. An order also stores
+a `version` number now that it will one day be editable: two operators changing
+the same order at once will not silently overwrite each other.
 
 **BuildingBlocks has an admission rule.** A type only moves there once it has
 proven cross-module value. This is deliberate friction — it stops the project

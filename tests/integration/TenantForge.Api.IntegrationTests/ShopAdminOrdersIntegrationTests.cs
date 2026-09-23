@@ -385,13 +385,18 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
 
         // fromUtc/toUtc: an empty window excludes both orders; a wide window
         // includes them (inclusive start / exclusive end are respected by the
-        // window choice).
+        // window choice). `DateTimeOffset`'s `:O` form for a UTC value carries
+        // a literal `+00:00`, which a raw query string decodes to a space
+        // (a real client would send `%2B`), so the test percent-encodes the
+        // value exactly as an HTTP client would before sending it.
+        static string Enc(DateTimeOffset value) => Uri.EscapeDataString(value.ToString("O"));
+
         var now = DateTimeOffset.UtcNow;
-        var emptyWindow = await ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?fromUtc={now.AddHours(1):O}&toUtc={now.AddHours(2):O}");
+        var emptyWindow = await ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?fromUtc={Enc(now.AddHours(1))}&toUtc={Enc(now.AddHours(2))}");
         Assert.Equal(HttpStatusCode.OK, emptyWindow.StatusCode);
         Assert.Equal(0, (await emptyWindow.Content.ReadFromJsonAsync<B042AdminOrderListDto>())!.Pagination.TotalCount);
 
-        var wideWindow = await ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?fromUtc={now.AddDays(-1):O}&toUtc={now.AddDays(1):O}");
+        var wideWindow = await ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?fromUtc={Enc(now.AddDays(-1))}&toUtc={Enc(now.AddDays(1))}");
         Assert.Equal(HttpStatusCode.OK, wideWindow.StatusCode);
         Assert.Equal(2, (await wideWindow.Content.ReadFromJsonAsync<B042AdminOrderListDto>())!.Pagination.TotalCount);
 
@@ -404,7 +409,9 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
         Assert.Equal(HttpStatusCode.BadRequest, badTo.StatusCode);
         Assert.Contains("\"toUtc\"", await badTo.Content.ReadAsStringAsync());
 
-        var tooWide = await ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?fromUtc={now.AddYears(-2):O}&toUtc={now:O}");
+        // Both dates parse here; the 400 must come from the range rule, not
+        // from a parse failure (which the two malformed-date cases above cover).
+        var tooWide = await ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?fromUtc={Enc(now.AddYears(-2))}&toUtc={Enc(now)}");
         Assert.Equal(HttpStatusCode.BadRequest, tooWide.StatusCode);
         Assert.Contains("\"toUtc\"", await tooWide.Content.ReadAsStringAsync());
     }
@@ -416,21 +423,21 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
     {
         var (tenantId, ownerClient, _, _) = await NewTenantAsync();
         var variant = await CreateSingleVariantAsync(ownerClient, tenantId, "Page Shirt", $"pg-{Guid.NewGuid():N}"[..14], 30, 900);
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 4; i++)
         {
             await CreateOrderAsync(tenantId, ownerClient, variant.VariantId, $"Page Customer {i}", $"0912555{i:0000}");
         }
 
         // Two pages of two, same filters, fetched twice: the second walk must
         // reproduce the first's exact ordering and contents (stable
-        // pagination), and the union must be all 5 rows with no overlap.
+        // pagination), and the union must be all 4 rows with no overlap.
         IReadOnlyList<string>? firstPassIds = null;
         for (var pass = 0; pass < 2; pass++)
         {
             var pageOne = await ReadJsonAsync<B042AdminOrderListDto>(ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?pageNumber=1&pageSize=2"));
             var pageTwo = await ReadJsonAsync<B042AdminOrderListDto>(ownerClient.GetAsync($"/api/tenants/{tenantId}/shop/orders?pageNumber=2&pageSize=2"));
 
-            Assert.Equal(5, pageOne.Pagination.TotalCount);
+            Assert.Equal(4, pageOne.Pagination.TotalCount);
             Assert.Equal(2, pageOne.Pagination.TotalPages);
             Assert.False(pageOne.Pagination.HasPreviousPage);
             Assert.True(pageOne.Pagination.HasNextPage);
@@ -438,9 +445,9 @@ public sealed class ShopAdminOrdersIntegrationTests(ShopAdminOrdersDbFixture db)
             Assert.False(pageTwo.Pagination.HasNextPage);
 
             var ids = pageOne.Orders.Select(o => o.Id).Concat(pageTwo.Orders.Select(o => o.Id)).ToList();
-            Assert.Equal(5, ids.Distinct().Count());
+            Assert.Equal(4, ids.Distinct().Count());
             Assert.Equal(2, pageOne.Orders.Count);
-            Assert.Single(pageTwo.Orders);
+            Assert.Equal(2, pageTwo.Orders.Count);
 
             if (pass == 0)
             {

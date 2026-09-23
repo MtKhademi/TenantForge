@@ -116,8 +116,13 @@ Copy the nearest existing feature in the same module before inventing a shape.
 - Tenant-scoped Shop routes check membership and permission through
   `ShopAuthorization`. Delivered permission keys today:
   `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage`
-  (gates `PUT …/shop/profile`). The tenant Owner role bypasses the permission
-  check.
+  (gates `PUT …/shop/profile`), `Shop.Orders.View` (gates the admin order
+  list/detail — the first Shop *read* gated by a permission key, not just
+  membership) and `Shop.Orders.Manage` (registered in the catalog but enforced
+  nowhere yet — reserved for B043's order mutations). The tenant Owner role
+  bypasses the permission check. Every authenticated admin route chain-ends with
+  `.RequireAuthorization()` so an anonymous caller gets `401` (JWT challenge),
+  not the `403` that `ShopAuthorization`'s `Results.Forbid()` would give.
 - Product media (`ShopProductImage`, `features/media/`) never trusts a
   client's filename or `Content-Type`: `ShopImageValidator` decodes the
   actual bytes with `SixLabors.ImageSharp` (pinned `3.1.11`), accepts only
@@ -263,6 +268,14 @@ dotnet.exe ef migrations add <Name> \
     also raises CS8863 "only a single partial type may have a parameter list").
     Prefix new DTO records with the task id (e.g. `B041CouponDto`) so they
     cannot collide with the existing per-feature shapes.
+18. When a test builds a query string by interpolation, a
+    `DateTimeOffset`'s `:O` round-trip form for a UTC value contains a literal
+    `+00:00`, and in a **raw query string a `+` decodes to a space** — so the
+    endpoint rejects it as an unparseable value. A real HTTP client sends
+    `%2B`; tests must percent-encode the value (`Uri.EscapeDataString(...)`)
+    before interpolating it, or the `400`/`400-where-200` failure looks like an
+    endpoint bug when it is a test URL-construction bug (B042 hit this on its
+    `fromUtc`/`toUtc` filter tests).
 
 ## Decisions future tasks must preserve
 
