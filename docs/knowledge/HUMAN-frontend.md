@@ -65,7 +65,15 @@ adapter, not rewriting the screen.
   counters, a published toggle and a live storefront preview; the storefront
   header and footer show the store's name, tagline, phone and Instagram, and
   five policy pages render the stored text as plain text with line breaks
-  preserved. This is still backed by the F047 mock (connected in F057).
+  preserved. This is still backed by the F047 mock (connected in F057);
+- cart reservation expiry: the cart, checkout and order-review pages show a
+  live "reservation expires in" countdown. Adding, changing or removing an
+  item pushes the deadline out; merely opening a page never does. When the
+  reservation runs out, all three pages swap to the same recovery panel with a
+  "back to the store" action, and only that store's saved cart and order draft
+  are cleared — a second store's cart in the same browser stays intact. The
+  header's cart count now follows the same reservation-aware data path. This is
+  still backed by the F048 mock (connected in F058).
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -84,9 +92,10 @@ keeps error handling, timeouts and token attachment in one place per capability.
 **New Shop capabilities use a client provider.** Each Shop capability exposes a
 client interface that its mock and later HTTP implementation both satisfy. The
 provider binds one slot per capability — `media` (product galleries),
-`discovery` (the all-products catalog), `categories` (the category hierarchy)
-and `profile` (store identity and policies) are bound today, each to its mock
-client. Screens consume `useShopClients()`; connecting a real API later
+`discovery` (the all-products catalog), `categories` (the category hierarchy),
+`profile` (store identity and policies) and `cartLease` (cart reservation
+expiry) are bound today, each to its mock client. Screens consume
+`useShopClients()`; connecting a real API later
 replaces exactly one provider slot and never touches the screen. The all-products catalog's filter state
 lives in the URL, so a filtered view is refreshable and back/forward-
 reproducible.

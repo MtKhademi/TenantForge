@@ -34,7 +34,8 @@ src/web/src/
   pages/                  # platform and tenant pages
    pages/shop/admin/       # CategoriesPage, ProductsPage, ShippingRatesPage, CouponsPage,
                             # ShopProfilePage (F047)
-    pages/shop/storefront/  # StorefrontLayout, StorefrontCatalogPage, CategoryPage,
+    pages/shop/storefront/  # StorefrontLayout (header cart badge reads the
+                            # cartLease slot, F048), StorefrontCatalogPage, CategoryPage,
                             # ProductDetailPage, CartPage, CheckoutPage, OrderReviewPage,
                             # SandboxBankPage, PaymentResultPage, OrderTrackingPage,
                             # PolicyPage (F047 — one reusable policy/about page)
@@ -99,17 +100,19 @@ Read the nearest existing adapter before writing a new one.
 `src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
 mounts one `ShopClientsProvider` around all routes; each bound slot is replaced
 individually by its connect task (F054 → `media`, F055 → `discovery`,
-F056 → `categories`, F057 → `profile`). Bound so far: `media` →
-`mockShopMediaClient` (F044), `discovery` → `mockShopDiscoveryClient` (F045),
-`categories` → `mockShopCategoryClient` (F046) and `profile` →
-`mockShopProfileClient` (F047). Mock Shop scenario controls are development-only
+F056 → `categories`, F057 → `profile`, F058 → `cartLease`). Bound so far:
+`media` → `mockShopMediaClient` (F044), `discovery` →
+`mockShopDiscoveryClient` (F045), `categories` → `mockShopCategoryClient`
+(F046), `profile` → `mockShopProfileClient` (F047) and `cartLease` →
+`mockShopCartLeaseClient` (F048). Mock Shop scenario controls are development-only
 and selected through the provider, never by importing fixtures into pages. Each
 capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx` that the
 provider's dev-only `DevScenarioToolbar` loads independently; new capabilities
 add their own switcher and position it so it does not overlap another switcher's
 fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
-categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`).
-See `docs/design/shop/frontend-contract-boundary.md`.
+categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`,
+cartLease: `bottom-[12.25rem] start-4`). See
+`docs/design/shop/frontend-contract-boundary.md`.
 
 The `profile` slot (B039/F047) is the first client that also feeds the
 **anonymous storefront layout**: `StorefrontLayout` and the five `PolicyPage`
@@ -120,6 +123,26 @@ neutral "not yet open" fallback for that null, so real content and the fallback
 never mix on different surfaces. Publication gates only the profile/policy
 surfaces, never the catalog (B039), so the catalog, category bar and cart keep
 working for an unpublished store.
+
+The `cartLease` slot (B040/F048) owns the reservation UX on the cart, checkout
+and order-review pages through the shared `useCartLease` hook (one recovery
+behavior on all three) plus `CartLeaseCountdown` (display-only tick, never
+polls or auto-extends) and `CartLeaseRecovery` (the shared 410 panel) in
+`features/shop/CartLeaseUi.tsx`. Two mixed-phase seams to preserve:
+- `StorefrontLayout`'s header cart badge reads the STORED cart id through the
+  mock `cartLease.getCart` — read-only, it never mints an id (F033 semantic).
+  F048 moved it off the real `cartAdapter`: the real adapter's 404 handler
+  (`clearCartId`) wiped the client-minted mock id and raced the lease, breaking
+  the cart→checkout SPA flow and 404ing the real API in the mock phase.
+- The product-detail "add to cart" button still routes through the REAL
+  `cartAdapter.addItem` (F033), so an add there 404s the mock's cart — expected
+  mixed-phase noise, out of F048 scope. The `cartLease.addItem` contract is
+  proven at the client level (F058 binds HTTP and restores the PDP path).
+`useCartLease` mints a stored cart id via `getOrCreateCartId` when none exists
+(mock-phase demonstrability); the real B028 flow creates the cart on
+add-to-cart and F058 restores that exact behavior. Expiry clears ONLY the
+current tenant's `cartStorage` entry + `orderDraftState` entry; both files are
+per-tenant records under one shared key.
 
 `CategoryPage` (storefront) is deliberately mixed until F055/F056: the grouped
 nav bar in `StorefrontLayout`, the max-two-level breadcrumb and the admin
@@ -228,6 +251,13 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
     console is no longer clean. Mock Shop clients ignore `tenantId` by design,
     so any valid member tenant exercises the same mock UI (the F046/F047 demos
     use `0RM4B8A9M008Q`).
+14. Playwright's `console` event reports a failed resource as
+    `"Failed to load resource: the server responded with a status of 404 (Not
+    Found)"` with NO URL, so filtering console text can never tell a real 404
+    from expected mixed-phase noise (F031 catalog/search/PDP still call the
+    real API for demo slugs). In evidence scripts, record failed URLs on the
+    `response` event and whitelist them there (`/api/shop/<demo-slug>/…`);
+    drop the URL-less console lines and judge the response list instead.
 
 
 ## Decisions future tasks must preserve
