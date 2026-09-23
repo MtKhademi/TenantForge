@@ -43,3 +43,13 @@ public sealed record AdminOrderDetailResponse(
     IReadOnlyList<OrderLookupItemResponse> Items,
     IReadOnlyList<AdminPaymentAttemptResponse> PaymentAttempts,
     int Version, DateTimeOffset CreatedAtUtc);
+
+/// <summary>
+/// B043: the request for <c>PATCH …/orders/{orderId}/status</c>. <see
+/// cref="Action"/> is nullable on the wire so the handler can distinguish an
+/// absent value (a field error) from a present-but-unknown one, and must name
+/// exactly <c>Fulfill</c> or <c>Cancel</c>. <see cref="ExpectedVersion"/> is the
+/// optimistic-concurrency token the client last saw for this order's
+/// <c>Version</c> — it is compared, never trusted, against the stored value.
+/// </summary>
+public sealed record ChangeOrderStatusRequest(string? Action, int ExpectedVersion);

@@ -118,11 +118,12 @@ Copy the nearest existing feature in the same module before inventing a shape.
   `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage`
   (gates `PUT …/shop/profile`), `Shop.Orders.View` (gates the admin order
   list/detail — the first Shop *read* gated by a permission key, not just
-  membership) and `Shop.Orders.Manage` (registered in the catalog but enforced
-  nowhere yet — reserved for B043's order mutations). The tenant Owner role
-  bypasses the permission check. Every authenticated admin route chain-ends with
-  `.RequireAuthorization()` so an anonymous caller gets `401` (JWT challenge),
-  not the `403` that `ShopAuthorization`'s `Results.Forbid()` would give.
+  membership) and `Shop.Orders.Manage` (gates B043's
+  `PATCH …/orders/{orderId}/status` order-status mutation). The tenant Owner
+  role bypasses the permission check. Every authenticated admin route
+  chain-ends with `.RequireAuthorization()` so an anonymous caller gets `401`
+  (JWT challenge), not the `403` that `ShopAuthorization`'s `Results.Forbid()`
+  would give.
 - Product media (`ShopProductImage`, `features/media/`) never trusts a
   client's filename or `Content-Type`: `ShopImageValidator` decodes the
   actual bytes with `SixLabors.ImageSharp` (pinned `3.1.11`), accepts only
@@ -233,6 +234,15 @@ dotnet.exe ef migrations add <Name> \
     {1} FOR UPDATE", …)` inside the transaction, then the guard check and
     `SaveChangesAsync` (B038's reparent guard uses this for `shop_categories`).
     A bare `AnyAsync` before the write does not close the race.
+    B043's order-status route is the standing example of the *same-key
+    idempotency* form: lock the owning row `FOR UPDATE` **first** (so a racing
+    same-key request blocks and then sees the winner's committed row), then
+    look up the `shop_order_operations` row by `(tenant_id, idempotency_key)`,
+    and rely on the **unique index** as the last-resort backstop (a caught
+    `PostgresException { SqlState: "23505" }` on that index → re-read and
+    answer replay/conflict, never a 500). Exactly-once side effects pair the
+    row lock with a nullable stamp column (`InventoryReleasedAtUtc`) that is
+    set only when still null, in the same transaction.
 14. Adding a Shop (or any module) permission key breaks two **hand-maintained
    exact rosters** in `RolePermissionIntegrationTests.cs` — the aggregated
    `/api/permissions/catalog` key list and the Owner's resolved

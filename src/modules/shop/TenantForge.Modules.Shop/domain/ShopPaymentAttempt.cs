@@ -54,4 +54,26 @@ internal sealed class ShopPaymentAttempt
         CallbackReceivedAtUtc = nowUtc.ToUniversalTime();
         return true;
     }
+
+    /// <summary>
+    /// B043: called inside a cancel's transaction for every attempt still in
+    /// <see cref="ShopPaymentAttemptStatus.Initiated"/>. Moving the attempt to
+    /// <see cref="ShopPaymentAttemptStatus.Failed"/> is what makes it
+    /// un-completable — a late payment callback for the (now cancelled) order
+    /// is already answered <c>409</c> by the order-status guard, and even if a
+    /// reference were presented, <see cref="TryResolve"/> would refuse to touch
+    /// an attempt that is no longer <c>Initiated</c>. Already-resolved attempts
+    /// return false and change nothing. No history row is ever deleted.
+    /// </summary>
+    public bool Invalidate(DateTimeOffset nowUtc)
+    {
+        if (Status != ShopPaymentAttemptStatus.Initiated)
+        {
+            return false;
+        }
+
+        Status = ShopPaymentAttemptStatus.Failed;
+        CallbackReceivedAtUtc = nowUtc.ToUniversalTime();
+        return true;
+    }
 }

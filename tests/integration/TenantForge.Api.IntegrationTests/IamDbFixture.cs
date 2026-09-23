@@ -402,3 +402,21 @@ public sealed class ShopAdminOrdersDbFixture : IamDbFixtureBase
 public sealed class ShopAdminOrdersIsolatedCollection : ICollectionFixture<ShopAdminOrdersDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B043's order-status mutation tests (fulfil/cancel
+/// transitions, idempotent replay, concurrent-cancel inventory restore, and the
+/// Shop.Orders.Manage permission matrix). Kept off the other Shop databases so
+/// their row-count and cart/order assertions stay stable.
+/// </summary>
+public sealed class ShopOrderOperationsDbFixture : IamDbFixtureBase
+{
+    public ShopOrderOperationsDbFixture() : base("tenantforge_shop_order_operations_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopOrderOperationsIsolatedCollection))]
+public sealed class ShopOrderOperationsIsolatedCollection : ICollectionFixture<ShopOrderOperationsDbFixture>
+{
+}

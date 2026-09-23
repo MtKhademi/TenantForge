@@ -373,8 +373,8 @@ type AdminOrderDetailResponse = {
 
 **Auth**: both require a valid JWT **and** `Shop.Orders.View`. Anonymous → `401`;
 authenticated member without the key → `403`. Tenant Owner bypasses the key
-check. `Shop.Orders.Manage` is registered in the catalog (B042) but is **not**
-enforced on these read-only routes — it is reserved for B043's mutations.
+check. `Shop.Orders.Manage` is a separate key enforced only on the S39
+order-status route — it does **not** unlock these read-only routes.
 
 **List filters** (all optional, combined with AND):
 
@@ -409,9 +409,54 @@ type ChangeOrderStatusRequest = {
 }
 ```
 
-`PATCH /api/tenants/{tenantId}/shop/orders/{orderId}/status` requires
-`Shop.Orders.Manage` and an `Idempotency-Key` UUID header, then returns the
-updated `AdminOrderDetailResponse`. Stale or invalid transition is `409`.
+| Method | Route | Request/success |
+|---|---|---|
+| PATCH | `/api/tenants/{tenantId}/shop/orders/{orderId}/status` | `ChangeOrderStatusRequest` + `Idempotency-Key` header; `200 AdminOrderDetailResponse` |
+
+**Request**: `action` must be exactly `Fulfill` or `Cancel` (absent or any other
+value → `400` naming `action`); `expectedVersion` is the optimistic-concurrency
+token the client last saw for the order's `version` (must be `≥ 1`). The
+`Idempotency-Key` header is required and must be a UUID (missing or non-UUID →
+`400` naming `Idempotency-Key`).
+
+**Auth**: a valid JWT **and** `Shop.Orders.Manage` (the key B042 registered but
+left reserved — this route is the one that enforces it). Anonymous → `401`; an
+authenticated member without the key → `403`; a tenant Owner bypasses the key
+check. Malformed, cross-tenant and missing order ids return the same generic
+`404` after authorization (S38's non-leaking behavior).
+
+**Transitions** (exactly these — no other move is legal, and there is no
+transition out of either terminal state):
+
+- `Fulfill`: `Paid → Fulfilled` — sets `FulfilledAtUtc`, bumps `version`. Never
+  touches stock or inventory.
+- `Cancel`: `PendingPayment → Cancelled` — sets `CancelledAtUtc`, bumps
+  `version`, and in the same transaction restores each order item's quantity to
+  its variant (exactly once, stamped by `InventoryReleasedAtUtc`) and invalidates
+  every still-`Initiated` payment attempt. No order history row is deleted.
+- Any other requested transition (including `Paid → Cancelled`, or anything from
+  `Fulfilled`/`Cancelled`) → `409` with RFC 7807 `type: "invalid_order_transition"`.
+- A valid transition whose `expectedVersion` no longer matches the stored
+  `version` → `409` with RFC 7807 `type: "stale_version"`; nothing changes.
+
+**Idempotency**: the first successful call persists one operation row keyed by
+the request's `Idempotency-Key` (unique per tenant) holding the response it
+returned. Re-sending the **same key with the same action** returns that stored
+response again (`200`, byte-identical) without re-running the transition.
+Re-sending the **same key with a different action** is a `409` with
+`type: "idempotency_key_conflict"` — neither action is performed.
+
+**Late payments**: a payment callback that arrives after an order is `Cancelled`
+is answered `409` and the order never moves to `Paid` (the callback route's
+existing status guard). This rule must keep holding through S40/S41.
+
+**F061 handoff**: the route, request, response (`AdminOrderDetailResponse`,
+S38), error codes (`invalid_order_transition`, `stale_version`,
+`idempotency_key_conflict`), and permission key are exactly as above. To
+exercise it end to end, seed a tenant + product variant, create an order through
+the anonymous flow, then either pay it (to fulfil) or cancel it straight from
+`PendingPayment`; send a fresh UUID `Idempotency-Key` per logical operation and
+the order's current `version` as `expectedVersion`.
 
 ## S40 / B044 — gateway-neutral payment lifecycle
 
