@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
@@ -8,6 +9,7 @@ using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Features.Coupons;
+using TenantForge.Modules.Shop.Features.RateLimiting;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Orders;
@@ -179,7 +181,7 @@ internal static class OrderCreationFeature
             return Results.Created($"/api/shop/{tenantId}/orders/{TsidId.Format(order.Id)}", new OrderCreatedResponse(
                 TsidId.Format(order.Id), order.OrderNumber, order.TrackingCode, order.Status.ToString(),
                 order.SubTotal, order.DiscountAmount, order.ShippingCost, order.GrandTotal));
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.CheckoutOrder);
 
         return endpoints;
     }

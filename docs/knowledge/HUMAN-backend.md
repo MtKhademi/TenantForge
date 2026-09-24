@@ -103,6 +103,11 @@ contract and the permission catalog contracts.
   and customer policy pages (about, shipping, payment, returns, privacy) that
   the storefront header/footer can publish, saved with an optimistic-concurrency
   version so two editors cannot silently overwrite each other;
+- abuse controls on the anonymous Shop flows: order lookup, cart changes,
+  checkout/order creation and payment initiation are each rate-limited per
+  tenant per IP, and oversized request bodies and callback query strings are
+  rejected before any work runs — a flood or a guessing attempt gets a
+  predictable `429` (or `413`) rather than a slow, leaking response;
 - Shop permission keys published through the shared catalog and enforced on
   every tenant-scoped route.
 
@@ -204,6 +209,22 @@ the order also undoes the redemption.
 
 **No speculative endpoints.** An endpoint is added only when a current or
 immediately dependent frontend task consumes it.
+
+**Rate limits are per tenant per IP, immediate, and never leak.** The four
+sensitive anonymous Shop flows each have a named per-minute budget, tracked per
+"tenant + effective remote IP" — so one abusive shopper cannot burn the budget
+of another tenant, and one tenant cannot burn it for another. "Effective" IP
+means the value the host resolves after checking `X-Forwarded-For` against an
+explicit trusted-proxy allowlist: a request that did not come through a listed
+proxy is bucketed by its own connection IP, so a client cannot dodge a limit by
+sending a fake forwarded header. The moment a budget is hit the next request is
+rejected at once (nothing is queued or delayed), and the `429` body is one
+generic message plus an integer `Retry-After` — identical whether the request
+was for a real order or a fabricated one, so a caller can never observe which
+input actually existed. The ZarinPal callback is deliberately not IP-limited
+(many legitimate callbacks share one provider egress IP, and it is already
+bounded by its signed state); public catalog reads are not limited. In
+Production every limit must be set explicitly or the app refuses to start.
 
 **Product media never trusts what the client claims.** An uploaded image's
 actual bytes are decoded (not its filename or `Content-Type` header) to

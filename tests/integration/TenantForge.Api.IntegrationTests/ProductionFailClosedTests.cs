@@ -105,7 +105,16 @@ internal sealed class UnsafeSeedApiFactory(IamDbFixture db) : Microsoft.AspNetCo
             // validation (the unsafe password), but Shop validation would also
             // run, so a valid non-Sandbox value keeps the test's intent
             // (the unsafe-password message) intact.
-            ["Shop:Payments:Provider"] = "ZarinPal"
+            ["Shop:Payments:Provider"] = "ZarinPal",
+            // B046: the Shop:RateLimiting section is required in Production
+            // (fail closed). Give it explicit values so, if the IAM unsafe-
+            // password check is ever reordered, Shop's rate-limit check cannot
+            // preempt the message this fact asserts.
+            ["Shop:RateLimiting:OrderLookupPerMinute"] = "30",
+            ["Shop:RateLimiting:CartMutationPerMinute"] = "120",
+            ["Shop:RateLimiting:CheckoutOrderPerMinute"] = "30",
+            ["Shop:RateLimiting:PaymentInitiationPerMinute"] = "20",
+            ["Shop:RateLimiting:MaxRequestBodyBytes"] = "524288"
         };
 
         builder.ConfigureAppConfiguration((_, configuration) =>

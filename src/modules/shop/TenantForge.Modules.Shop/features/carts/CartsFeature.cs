@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -8,6 +9,7 @@ using TenantForge.Modules.Shop;
 using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.RateLimiting;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Carts;
@@ -33,7 +35,7 @@ internal static class CartsFeature
             await db.SaveChangesAsync(ct);
 
             return Results.Created($"/api/shop/{tenantId}/carts/{TsidId.Format(cart.Id)}", new CreateCartResponse(TsidId.Format(cart.Id), cart.ExpiresAtUtc));
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.CartMutation);
 
         endpoints.MapPost("/api/shop/{tenantId}/carts/{cartId}/items", async (
             string tenantId,
@@ -94,7 +96,7 @@ internal static class CartsFeature
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.CartMutation);
 
         endpoints.MapPatch("/api/shop/{tenantId}/carts/{cartId}/items/{itemId}", async (
             string tenantId,
@@ -150,7 +152,7 @@ internal static class CartsFeature
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.CartMutation);
 
         endpoints.MapDelete("/api/shop/{tenantId}/carts/{cartId}/items/{itemId}", async (
             string tenantId,
@@ -187,7 +189,7 @@ internal static class CartsFeature
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(await BuildCartResponseAsync(db, tenantTsid, cartTsid, ct));
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.CartMutation);
 
         endpoints.MapGet("/api/shop/{tenantId}/carts/{cartId}", async (
             string tenantId,

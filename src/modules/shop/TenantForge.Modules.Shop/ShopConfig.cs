@@ -134,6 +134,15 @@ public sealed class ShopConfig : IModuleConfig
         _ = GetCartCleanupIntervalSeconds(configuration);
 
         ValidatePaymentsProvider(environment, configuration);
+
+        // B046: the rate-limit section must be complete and in-range before the
+        // host starts. In Development an absent value falls back to its
+        // documented default; in Production every per-minute value and the
+        // request-body bound are required and must be within the documented
+        // maxima. A missing or out-of-range value fails startup (fail closed).
+        var rateLimitOptions = new Features.RateLimiting.ShopRateLimitOptions();
+        rateLimitOptions.Bind(environment, configuration);
+        rateLimitOptions.Validate();
     }
 
     /// <summary>

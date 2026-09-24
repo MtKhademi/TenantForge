@@ -146,7 +146,7 @@ one valid Spec link.
 | B043 | S39 | Fulfil or cancel orders with inventory-safe transitions | done | B042, B040 | — |
 | B044 | S40 | Make payment initiation and verification gateway-neutral and idempotent | done | B032, B043 | — |
 | B045 | S41 | Integrate ZarinPal request and server-side verification | done | B044 | — |
-| B046 | S42 | Rate-limit sensitive anonymous Shop flows | planned | B045, B043 | [B046 Spec](backend/B046-shop-public-abuse-controls.md) |
+| B046 | S42 | Rate-limit sensitive anonymous Shop flows | done | B045, B043 | — |
 
 ## Shop continuation: S32–S42
 

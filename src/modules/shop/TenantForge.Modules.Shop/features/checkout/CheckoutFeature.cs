@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
@@ -7,6 +8,7 @@ using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Carts;
 using TenantForge.Modules.Shop.Features.Coupons;
+using TenantForge.Modules.Shop.Features.RateLimiting;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Checkout;
@@ -92,7 +94,7 @@ internal static class CheckoutFeature
 
             var grandTotal = subTotal - discountAmount + shippingCost;
             return Results.Ok(new CheckoutSummaryResponse(subTotal, discountAmount, shippingCost, grandTotal));
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.CheckoutOrder);
 
         return endpoints;
     }

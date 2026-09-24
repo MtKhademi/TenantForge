@@ -22,9 +22,10 @@ mismatch and verify before trusting either.
 12. [Coupon rules](#12-coupon-rules)
 13. [Payment lifecycle (gateway-neutral)](#13-payment-lifecycle-gateway-neutral)
 14. [Storefront profile and policies](#14-storefront-profile-and-policies)
-15. [Test map and commands](#15-test-map-and-commands)
-16. [Current limitations](#16-current-limitations)
-17. [Change-impact checklist](#17-change-impact-checklist)
+15. [Public abuse controls (rate limiting and request-size bounds)](#15-public-abuse-controls-rate-limiting-and-request-size-bounds)
+16. [Test map and commands](#16-test-map-and-commands)
+17. [Current limitations](#17-current-limitations)
+18. [Change-impact checklist](#18-change-impact-checklist)
 
 ## 1. Purpose and non-goals
 
@@ -41,6 +42,10 @@ Shop owns:
   tenant, published or draft);
 - the permission-gated tenant-operator order reads (list + detail, B042) and
   the order-status mutations (fulfil/cancel, B043);
+- the public-abuse controls on the sensitive anonymous flows — per-policy
+  per-minute rate limiting (per tenant + effective IP) on order lookup, cart
+  mutation, checkout/order creation and payment initiation, plus the
+  request-body / callback-query size bounds (B046);
 - the `Shop.Catalog.Manage`/`Shop.Shipping.Manage`/`Shop.Settings.Manage`/
   `Shop.Orders.View`/`Shop.Orders.Manage` permission keys, all enforced by
   Shop's own authorization code (`Shop.Orders.Manage` gates the B043
@@ -73,7 +78,7 @@ Shop explicitly does **not** own:
 | Permission model | `Shop.Catalog.Manage`, `Shop.Shipping.Manage`, `Shop.Settings.Manage`, `Shop.Orders.View` and `Shop.Orders.Manage` (all enforced) — tenant Owner bypass, or an assigned `TenantRole` carrying the key (IAM-owned role storage, Shop-owned check) — see [Section 8](#8-tenantauth-rules) |
 | Test project | `tests/integration/TenantForge.Api.IntegrationTests/TenantForge.Api.IntegrationTests.csproj` |
 | Local SDK/runtime notes | No Linux `dotnet`; use `dotnet.exe` — see `docs/architecture.md#local-development-environment-wsl--windows-net-sdk` |
-| Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 17](#17-change-impact-checklist) |
+| Primary handbook update rule | Every Shop-touching backend task updates this file or states `SHOP.md impact: none — <specific reason>` — see [Section 18](#18-change-impact-checklist) |
 
 ## 3. Dependency and composition boundary
 
@@ -94,8 +99,8 @@ directly with raw SQL (`ShopAuthorization`, see
 physical PostgreSQL database (a named B025 decision), not through a project
 reference.
 
-The API host composes Shop through exactly two calls
-(`src/api/TenantForge.Api/Program.cs`), in the same
+The API host composes Shop through its two module calls plus the B046
+rate-limiting wiring, all in `src/api/TenantForge.Api/Program.cs`, in the
 registration-before-`Build` / activation-after-`Build` order IAM uses:
 
 ```csharp
@@ -105,7 +110,20 @@ builder.Services.AddShopModule(builder.Environment);
 builder.Services.AddSingleton<IAggregatedPermissionCatalog>(sp =>
     new AggregatedPermissionCatalog(sp.GetServices<IPermissionCatalogContributor>()));
 
+// B046: the host's one AddRateLimiter call, contributed by Shop; plus the
+// ForwardedHeaders trusted-proxy options (empty = no proxy trusted).
+builder.Services.AddShopRateLimiter();
+builder.Services.Configure<ForwardedHeadersOptions>(
+    builder.Configuration.GetSection("ForwardedHeaders"));
+
 var app = builder.Build();
+
+// B046: the first middleware, then the limiter + body-size guard, all before
+// the module activation below maps the endpoints.
+app.UseForwardedHeaders();
+app.UseCors();
+app.UseRateLimiter();
+app.UseShopRequestBodySizeLimit();
 
 await app.UseIamModuleAsync();
 await app.UseShopModuleAsync();
@@ -156,11 +174,12 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Admin order operations | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B043) | `AdminOrdersFeature`'s `PATCH …/orders/{orderId}/status` (`Shop.Orders.Manage`-gated fulfil/cancel, optimistic `expectedVersion`, idempotent via the `shop_order_operations` unique key, exactly-once inventory release on cancel) — see [Section 11](#11-inventory-reservation) |
 | Payment lifecycle | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway`, `ShopPaymentGatewayResolver`, `ShopPaymentCompletionService`, plus `ZarinPal/` (`ZarinPalOptions`, `ZarinPalPaymentGateway`, `ZarinPalCallbackFeature`, signed callback-state protector and amount converter) — see [Section 13](#13-payment-lifecycle-gateway-neutral) |
 | Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 14](#14-storefront-profile-and-policies) |
+| Public abuse controls | `src/modules/shop/TenantForge.Modules.Shop/features/rateLimiting/` | `ShopRateLimitOptions` (public, `Shop:RateLimiting` bind + Production fail-closed), `ShopRateLimiterHostExtensions` (public `AddShopRateLimiter`/`UseShopRequestBodySizeLimit`, the internal `ShopRateLimitPolicies`, the generic `429` handler and the `413` guard) — see [Section 15](#15-public-abuse-controls-rate-limiting-and-request-size-bounds) |
 | Pagination | `src/modules/shop/TenantForge.Modules.Shop/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` (Shop's own copy — not shared with IAM's) |
 | Persistence context/maps | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/` | `ShopDbContext`, `*Map.cs`, `ShopTsidValueConverter` |
 | Migrations | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/Migrations/` | Chronological schema history, see [Section 7](#7-persistence) |
 | Integration test fixtures | `tests/integration/TenantForge.Api.IntegrationTests/ApiFactory.cs`, `IamDbFixture.cs` | `WebApplicationFactory` setup, per-suite Postgres fixtures (Shop uses its own isolated collections) |
-| Focused test classes | `tests/integration/TenantForge.Api.IntegrationTests/Shop*.cs` | See [Section 15](#15-test-map-and-commands) |
+| Focused test classes | `tests/integration/TenantForge.Api.IntegrationTests/Shop*.cs` | See [Section 16](#16-test-map-and-commands) |
 | Persistent HTTP contract reference | `docs/design/shop/http-contracts.md` | The wire-shape source of truth per slice, kept in step with delivered code |
 | BuildingBlocks permissions seam | `src/building-blocks/TenantForge.BuildingBlocks/Permissions/` | `IPermissionCatalogContributor`, `PermissionGroup`, `PermissionDescriptor`, `IAggregatedPermissionCatalog` |
 
@@ -181,6 +200,13 @@ All keys are read by `ShopConfig`
 | `Shop:Payments:ZarinPal:RequestEndpoint` / `VerifyEndpoint` / `GatewayBaseUrl` | Shop | Required when `Provider=ZarinPal` | Startup throws if missing; outside Development each must be HTTPS and its host must be exactly one of `api.zarinpal.com`, `checkout.zarinpal.com`, `dev.zarinpal.com` |
 | `Shop:Payments:ZarinPal:PublicApiBaseUrl` / `FrontendResultBaseUrl` | Shop | Required when `Provider=ZarinPal` | Startup throws if missing; outside Development each must be HTTPS. `PublicApiBaseUrl` builds the backend callback URL sent to ZarinPal, and `FrontendResultBaseUrl` is the browser 302 target after verification |
 | `Shop:Payments:ZarinPal:TimeoutSeconds` | Shop | Optional when `Provider=ZarinPal`; default `10` | Startup throws unless the integer is `1..300`; the gateway applies it per provider call through cancellation tokens |
+| `Shop:RateLimiting:OrderLookupPerMinute` | Shop (B046) | Required outside Development; Development defaults to `30` when blank | Startup throws unless the integer is within `1..10000` |
+| `Shop:RateLimiting:CartMutationPerMinute` | Shop (B046) | Required outside Development; Development defaults to `120` when blank | Startup throws unless the integer is within `1..10000` |
+| `Shop:RateLimiting:CheckoutOrderPerMinute` | Shop (B046) | Required outside Development; Development defaults to `30` when blank | Startup throws unless the integer is within `1..10000` |
+| `Shop:RateLimiting:PaymentInitiationPerMinute` | Shop (B046) | Required outside Development; Development defaults to `20` when blank | Startup throws unless the integer is within `1..10000` |
+| `Shop:RateLimiting:MaxRequestBodyBytes` | Shop (B046) | Required outside Development; Development defaults to `524288` (512 KiB) when blank | Startup throws unless the integer is within `1..5242880` (5 MiB) |
+| `Shop:RateLimiting:QueueLength` | Shop (B046) | Optional; defaults to `0` | Startup throws unless it is exactly `0` (a non-zero value is refused — the limiter never queues) |
+| `ForwardedHeaders:*` | host (B046) | Optional | The trusted-proxy allowlist `UseForwardedHeaders` uses; empty means no proxy is trusted and the direct remote IP is always used |
 
 `Shop:ShopDb` deliberately points at the same physical database as
 `IAM:IamDb` (see [Section 3](#3-dependency-and-composition-boundary)); each
@@ -384,17 +410,17 @@ sandbox-resolve route is mapped conditionally but is still a mapped route).
 | `GET /api/tenants/{tenantId}/shop/coupons` | List coupons | Membership | `coupons/CouponsFeature.cs` |
 | `PUT /api/tenants/{tenantId}/shop/coupons/{couponId}` | Update a coupon (optimistic concurrency via `expectedVersion` → `409 stale_version`; `redemptionLimit` below `redeemedCount` → `400`) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
 | `PATCH /api/tenants/{tenantId}/shop/coupons/{couponId}/deactivate` | Deactivate a coupon (the only state-removal path — no hard delete) | `Shop.Shipping.Manage` | `coupons/CouponsFeature.cs` |
-| `POST /api/shop/{tenantId}/carts` | Create an anonymous cart and return its server-owned `expiresAtUtc` lease | Anonymous | `carts/CartsFeature.cs` |
-| `POST /api/shop/{tenantId}/carts/{cartId}/items` | Add/merge an item, reserving live stock and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
-| `PATCH /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Update an item's quantity (re-reserving or releasing stock) and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
-| `DELETE /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Remove an item, releasing stock and extending the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
+| `POST /api/shop/{tenantId}/carts` | Create an anonymous cart and return its server-owned `expiresAtUtc` lease; over the per-minute limit → generic `429` `shop_rate_limit` (`shop-cart-mutation`) | Anonymous, rate-limited | `carts/CartsFeature.cs` |
+| `POST /api/shop/{tenantId}/carts/{cartId}/items` | Add/merge an item, reserving live stock and extending the lease; expired carts return `410 shop_cart_expired`; rate-limited (`shop-cart-mutation`) | Anonymous, rate-limited | `carts/CartsFeature.cs` |
+| `PATCH /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Update an item's quantity (re-reserving or releasing stock) and extending the lease; expired carts return `410 shop_cart_expired`; rate-limited (`shop-cart-mutation`) | Anonymous, rate-limited | `carts/CartsFeature.cs` |
+| `DELETE /api/shop/{tenantId}/carts/{cartId}/items/{itemId}` | Remove an item, releasing stock and extending the lease; expired carts return `410 shop_cart_expired`; rate-limited (`shop-cart-mutation`) | Anonymous, rate-limited | `carts/CartsFeature.cs` |
 | `GET /api/shop/{tenantId}/carts/{cartId}` | Fetch an active cart with computed subtotal and `expiresAtUtc`; read does not extend the lease; expired carts return `410 shop_cart_expired` | Anonymous | `carts/CartsFeature.cs` |
-| `POST /api/shop/{tenantId}/checkout/summary` | Price an active cart against an address + optional coupon; expired carts return `410 shop_cart_expired` | Anonymous | `checkout/CheckoutFeature.cs` |
-| `POST /api/shop/{tenantId}/orders` | Create an order from an active validated cart, mark the cart `Converted`, and leave the cart row as history | Anonymous | `orders/OrderCreationFeature.cs` |
-| `POST /api/shop/{tenantId}/orders/{orderId}/payments/initiate` | Start a payment attempt — `Idempotency-Key` UUID header, no body; `400` naming the header when missing/non-UUID; `409` when the order is not `PendingPayment`; `409 idempotency_key_conflict` on a same-key/different-request reuse; `409 too_many_payment_attempts` on the 11th attempt; a same-key replay returns the stored response byte-identically; a fresh key for an order with a live attempt returns that attempt's response | Anonymous | `payments/PaymentsFeature.cs` |
+| `POST /api/shop/{tenantId}/checkout/summary` | Price an active cart against an address + optional coupon; expired carts return `410 shop_cart_expired`; rate-limited (`shop-checkout-order`) | Anonymous, rate-limited | `checkout/CheckoutFeature.cs` |
+| `POST /api/shop/{tenantId}/orders` | Create an order from an active validated cart, mark the cart `Converted`, and leave the cart row as history; rate-limited (`shop-checkout-order`) | Anonymous, rate-limited | `orders/OrderCreationFeature.cs` |
+| `POST /api/shop/{tenantId}/orders/{orderId}/payments/initiate` | Start a payment attempt — `Idempotency-Key` UUID header, no body; `400` naming the header when missing/non-UUID; `409` when the order is not `PendingPayment`; `409 idempotency_key_conflict` on a same-key/different-request reuse; `409 too_many_payment_attempts` on the 11th attempt; a same-key replay returns the stored response byte-identically; a fresh key for an order with a live attempt returns that attempt's response; rate-limited (`shop-payment`) | Anonymous, rate-limited | `payments/PaymentsFeature.cs` |
 | `GET /api/shop/{tenantId}/orders/{orderId}/payments/status?token={resultToken}` | Token-protected order status — fixed-time hash comparison; only `orderNumber`/`status`/`providerReference`; every miss (missing/blank/wrong token, wrong order, wrong tenant, no attempts) is the one identical generic `404` | Anonymous | `payments/PaymentsFeature.cs` |
 | `POST /api/shop/{tenantId}/orders/{orderId}/payments/sandbox/resolve` | Development-only sandbox simulation — `{ authority, approved }`; blank `authority` → `400` naming `authority`; a success for an unpayable order → `409`; a success for an already-resolved attempt returns the stored outcome without re-applying | Anonymous, Development-only | `payments/PaymentsFeature.cs` |
-| `POST /api/shop/{tenantId}/orders/lookup` | Guest order lookup by tracking code + phone | Anonymous | `orders/OrderLookupFeature.cs` |
+| `POST /api/shop/{tenantId}/orders/lookup` | Guest order lookup by tracking code + phone; over the per-minute limit → generic `429` `shop_rate_limit` (`shop-order-lookup`) | Anonymous, rate-limited | `orders/OrderLookupFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/orders?pageNumber=&pageSize=&status=&q=&fromUtc=&toUtc=` | List the tenant's orders (paginated, filtered); always sorted `CreatedAtUtc desc, Id desc`; malformed/invalid filter → `400` | `Shop.Orders.View` | `orders/AdminOrdersFeature.cs` |
 | `GET /api/tenants/{tenantId}/shop/orders/{orderId}` | One order's full detail (customer, totals, item snapshots, ≤20 newest payment attempts, `version`); malformed/foreign/missing id → one identical non-leaking `404` | `Shop.Orders.View` | `orders/AdminOrdersFeature.cs` |
 | `PATCH /api/tenants/{tenantId}/shop/orders/{orderId}/status` | Fulfil (`Paid→Fulfilled`) or cancel (`PendingPayment→Cancelled`); `ChangeOrderStatusRequest { action, expectedVersion }` + `Idempotency-Key` UUID header; `400` for a bad action/key, `409 invalid_order_transition`, `409 stale_version`, `409 idempotency_key_conflict`; cancel restores stock exactly once and invalidates `Initiated` attempts; malformed/foreign/missing id → one identical non-leaking `404` | `Shop.Orders.Manage` | `orders/AdminOrdersFeature.cs` |
@@ -707,7 +733,58 @@ lower-cased, and the suffix check anchors on the dot so
 `instagram.com.evil.example` is rejected). Any violation is a `400`
 `ValidationProblem` naming the field.
 
-## 15. Test map and commands
+## 15. Public abuse controls (rate limiting and request-size bounds)
+
+Introduced by B046. The four sensitive **anonymous** Shop flows are rate-limited
+with named per-minute policies; the ZarinPal provider callback and all public
+catalog reads are **not** limited (the callback is already bounded by its signed
+state and many legitimate callbacks share one provider egress IP; catalog reads
+are not a flood/ enumeration target in this task).
+
+**Composition.** The host's one `AddRateLimiter` call is contributed by Shop
+(`AddShopRateLimiter`), placed after both modules' registrations and before
+`Build` in `Program.cs`. `UseForwardedHeaders` is the first middleware in the
+pipeline (before `UseCors`) so the connection's remote IP — and therefore the
+rate-limit partition key — reflects the value resolved through the
+`ForwardedHeaders` trusted-proxy allowlist; `UseRateLimiter` and
+`UseShopRequestBodySizeLimit` run before the module activation maps the
+endpoints, so the `RequireRateLimiting` metadata is attached first.
+
+**Policies and partition key** (`ShopRateLimitPolicies`, applied via
+`RequireRateLimiting` on the mapped routes):
+
+| Policy | Routes |
+| --- | --- |
+| `shop-order-lookup` | `POST /api/shop/{tenantId}/orders/lookup` |
+| `shop-cart-mutation` | cart create / add item / update item / delete item |
+| `shop-checkout-order` | `POST …/checkout/summary` and `POST /api/shop/{tenantId}/orders` |
+| `shop-payment` | `POST …/orders/{orderId}/payments/initiate` |
+
+Each policy is a per-key **fixed window** (one minute) with **queue length
+exactly zero**: the bucket key is the normalized (lower-cased) route `tenantId`
+plus the effective remote IP, so one tenant+IP pair has its own budget that
+cannot drain or be drained by any other pair. `QueueLength` is refused at
+startup if it is not `0` — an over-limit request is rejected immediately, never
+queued or delayed.
+
+**The 429.** Every over-limit request (valid or invalid input alike) receives
+the one generic RFC 7807 `429`: `application/problem+json`, `type:
+"shop_rate_limit"`, a generic Persian-safe detail that names no tenant, cart,
+order, phone, tracking code, coupon or authority, an integer `Retry-After`
+header of `1` and the matching integer `retryAfter` in the body. The policy name
+and tenant ID are logged for operators; phone numbers, tracking codes, coupon
+codes and the ZarinPal authority are never logged.
+
+**Request-size bounds.** `UseShopRequestBodySizeLimit` (host-level, scoped to
+Shop paths) rejects a Shop `Content-Length` above the bound with a generic
+`413` (`type: "shop_request_too_large"`) before any model binding/validation
+runs: a JSON body is capped at `MaxRequestBodyBytes` (Development default
+512 KiB), anything else (e.g. the multipart media upload) at the 5 MiB hard
+ceiling. The ZarinPal callback route separately rejects a query string above
+16,000 characters with a generic `413` (`type: "shop_callback_too_large"`)
+before the (untrusted) query is parsed.
+
+## 16. Test map and commands
 
 | Test class | Protects |
 | --- | --- |
@@ -728,6 +805,7 @@ lower-cased, and the suffix check anchors on the dot so
 | `ShopCouponRulesMigrationTests.cs` | B041 migration: a pre-`AddShopCouponRules` `shop_coupons` row backfills to `redemption_limit` NULL (unlimited), `redeemed_count` 0 and `version` 0, keeping its original fields so it stays usable |
 | `ShopAdminOrdersIntegrationTests.cs` | B042 admin order reads: `Shop.Orders.View` matrix (Owner bypass 200, granted member 200, no-key member 403, `Shop.Orders.Manage`-only member still 403, anonymous 401), tenant isolation (foreign orders never listed, cross-tenant id → the byte-identical generic 404), list filters `q`/`status`/`fromUtc`/`toUtc` valid + invalid (400 naming the field), stable two-page pagination, item-snapshot fidelity after the product is renamed/repriced, the 20-newest payment-attempt cap (21 Failed attempt rows seeded directly — B044's API caps a live order at 10 attempts — → 20 returned, newest first), and the detail shape (customer, totals, items, `version: 1`) |
 | `ShopOrderOperationsIntegrationTests.cs` | B043 order-status mutations (payments driven through B044's sandbox resolve): fulfil a `Paid` order (`Fulfilled`, `FulfilledAtUtc` set, stock untouched, version 1→2 — a payment does not bump the order version), cancel a `PendingPayment` order (stock restored to full initial, `InventoryReleasedAtUtc` set, the `Initiated` attempt invalidated to `Invalidated`, none `Failed`), a late success for a `Cancelled` order returns the already-computed `Cancelled` outcome (`200`) and never pays (the attempt stays `Invalidated`, none `Succeeded`), idempotent replay (same key + same action returns the byte-identical stored response, one operation row, stock restored once), same key + different action → `409 idempotency_key_conflict` with nothing performed, stale `expectedVersion` → `409 stale_version` with no change, two concurrent cancels (one `200`/one `409`, stock restored exactly once, one operation row), the `Shop.Orders.Manage` matrix (Owner 200, granted 200, no-key 403, `Shop.Orders.View`-only 403, anonymous 401), cross-tenant order id → the byte-identical generic 404, and validation `400`s (bad/missing action, non-UUID/missing `Idempotency-Key`) — all asserted against the real persisted rows, not just status codes |
+| `ShopRateLimitIntegrationTests.cs` | B046 public abuse controls (dedicated DB, tiny per-minute limits so each fact fills a policy in a few requests): each of the four policies (`shop-order-lookup`/`shop-cart-mutation`/`shop-checkout-order`/`shop-payment`) admits its limit and returns the exact RFC 7807 `429 shop_rate_limit` (integer `Retry-After: 1` + body `retryAfter: 1`) on the next request; two tenant partitions on the same IP — exhausting one leaves the other's quota intact; a valid-lookup `429` and an invalid-lookup `429` are byte-identical (indistinguishable); an untrusted `X-Forwarded-For` is ignored and the direct remote IP is used for partitioning; Production with a missing `Shop:RateLimiting` value fails closed at startup; the rejection log line names the policy + tenant id but never the phone/tracking code; a normal (non-abuse) customer journey plus a catalog-read burst is not globally throttled; an oversized JSON Shop body → generic `413 shop_request_too_large` (no tenant leaked); an oversized ZarinPal callback query → generic `413 shop_callback_too_large` |
 
 Commands:
 
@@ -742,7 +820,7 @@ for the WSL/Windows host-binding notes instead of repeating them here. The
 integration tests use Testcontainers; Docker must be running before any test
 command.
 
-## 16. Current limitations
+## 17. Current limitations
 
 Verified against current code (not aspirational):
 
@@ -770,12 +848,18 @@ Verified against current code (not aspirational):
   out of scope until their own slice.
 - **No paid-order refund, returns or partial fulfilment/cancellation** — B043
   delivers the two operator transitions (`Paid→Fulfilled`,
-  `PendingPayment→Cancelled`); there is no `Paid→Cancelled` path and no refund
-  flow until its own slice. There is also still no rate limiting (B046) — see
-  `tasks/TASKS.md`'s Backend queue for current status; do not treat a
-  `planned` row as already-delivered behavior.
+   `PendingPayment→Cancelled`); there is no `Paid→Cancelled` path and no refund
+   flow until its own slice.
+- **Rate limiting is in-memory, per-process and per tenant+IP** — B046 adds the
+   four anonymous-flow policies plus the request/callback-size bounds, but there
+   is no distributed (Redis) counter, so each process keeps its own buckets; a
+   horizontal scale-out would double the effective per-IP budget per node.
+   Public catalog reads and the ZarinPal callback are not limited, and the
+   limiter never queues (queue length is exactly zero — over-limit requests are
+   rejected immediately). No CAPTCHA, WAF, bot scoring, caching or account
+   lockout (all explicit non-goals).
 
-## 17. Change-impact checklist
+## 18. Change-impact checklist
 
 | Change | Mandatory SHOP.md sections |
 | --- | --- |
@@ -789,6 +873,7 @@ Verified against current code (not aspirational):
 | coupon rule/limit/redemption behavior | Coupon rules |
 | payment gateway behavior | Payment lifecycle (gateway-neutral) |
 | storefront profile/policy behavior | Storefront profile and policies |
+| rate-limit / request-size behavior | Public abuse controls; Configuration; affected endpoint rows; composition/startup |
 | test/verification path | Test map |
 | implemented limitation | Current limitations |
 

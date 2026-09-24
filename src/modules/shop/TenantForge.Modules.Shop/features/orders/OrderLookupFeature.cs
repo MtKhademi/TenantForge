@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TSID.Creator.NET;
 using TenantForge.BuildingBlocks.Identifiers;
+using TenantForge.Modules.Shop.Features.RateLimiting;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Orders;
@@ -71,7 +73,7 @@ internal static class OrderLookupFeature
                 items);
 
             return Results.Ok(response);
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.OrderLookup);
 
         return endpoints;
     }

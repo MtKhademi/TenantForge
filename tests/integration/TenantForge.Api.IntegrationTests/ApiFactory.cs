@@ -68,6 +68,16 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
             ["Shop:MediaRoot"] = Path.Combine(_contentRoot, "shop-media"),
             ["Shop:CartReservationMinutes"] = "30",
             ["Shop:CartCleanupIntervalSeconds"] = "3600",
+            // B046: in Production the Shop:RateLimiting section is required
+            // (fail closed); give every test host explicit values so the shared
+            // factory stays usable by both Development and Production hosts.
+            // These are the documented Development defaults — no test in this
+            // factory drives a policy to its limit.
+            ["Shop:RateLimiting:OrderLookupPerMinute"] = "30",
+            ["Shop:RateLimiting:CartMutationPerMinute"] = "120",
+            ["Shop:RateLimiting:CheckoutOrderPerMinute"] = "30",
+            ["Shop:RateLimiting:PaymentInitiationPerMinute"] = "20",
+            ["Shop:RateLimiting:MaxRequestBodyBytes"] = "524288",
             // B044: outside Development the payments provider is required and
             // the Sandbox value is refused (fail closed). Every test host is
             // given an explicit value rather than relying on the Development
