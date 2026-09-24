@@ -82,7 +82,7 @@ one valid Spec link.
 | F047 | S35 | Build contract-shaped storefront identity and policy mocks | done | F046 | — |
 | F048 | S36 | Build contract-shaped cart expiry mocks | done | F047 | — |
 | F049 | S37 | Build contract-shaped advanced coupon mocks | done | F048 | — |
-| F050 | S38 | Build contract-shaped admin order list and detail mocks | planned | F049 | [F050 Spec](front/F050-shop-admin-orders-mock.md) |
+| F050 | S38 | Build contract-shaped admin order list and detail mocks | done | F049 | — |
 | F051 | S39 | Build contract-shaped fulfil and cancel mocks | planned | F050 | [F051 Spec](front/F051-shop-order-operations-mock.md) |
 | F052 | S40 | Build contract-shaped gateway-neutral payment mocks | planned | F051 | [F052 Spec](front/F052-shop-payment-lifecycle-mock.md) |
 | F053 | S42 | Build contract-shaped Shop rate-limit mocks | planned | F052 | [F053 Spec](front/F053-shop-rate-limit-mock.md) |

@@ -14,6 +14,8 @@ import { LoginPage } from './pages/LoginPage'
 import { RolesPage } from './pages/RolesPage'
 import { CategoriesPage } from './pages/shop/admin/CategoriesPage'
 import { CouponsPage } from './pages/shop/admin/CouponsPage'
+import { OrderDetailPage } from './pages/shop/admin/OrderDetailPage'
+import { OrdersPage } from './pages/shop/admin/OrdersPage'
 import { ProductsPage } from './pages/shop/admin/ProductsPage'
 import { ShopProfilePage } from './pages/shop/admin/ShopProfilePage'
 import { ShippingRatesPage } from './pages/shop/admin/ShippingRatesPage'
@@ -173,6 +175,9 @@ export default function App() {
           <Route path="/t/:tenantId/shop/products" element={<ProductsPage />} />
           <Route path="/t/:tenantId/shop/shipping-rates" element={<ShippingRatesPage />} />
           <Route path="/t/:tenantId/shop/coupons" element={<CouponsPage />} />
+          {/* S38 (F050): permission-gated admin order list + read-only detail. */}
+          <Route path="/t/:tenantId/shop/orders" element={<OrdersPage />} />
+          <Route path="/t/:tenantId/shop/orders/:orderId" element={<OrderDetailPage />} />
           {/* S35 (F047): admin storefront identity + policies settings form. */}
           <Route path="/t/:tenantId/shop/profile" element={<ShopProfilePage />} />
         </Route>

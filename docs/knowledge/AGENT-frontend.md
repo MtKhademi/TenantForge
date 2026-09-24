@@ -33,7 +33,8 @@ src/web/src/
   features/<area>/        # data access + types + context for one capability
   pages/                  # platform and tenant pages
    pages/shop/admin/       # CategoriesPage, ProductsPage, ShippingRatesPage, CouponsPage,
-                            # ShopProfilePage (F047)
+                             # ShopProfilePage (F047), OrdersPage + OrderDetailPage +
+                             # OrderStatusBadge (F050)
     pages/shop/storefront/  # StorefrontLayout (header cart badge reads the
                             # cartLease slot, F048), StorefrontCatalogPage, CategoryPage,
                             # ProductDetailPage, CartPage, CheckoutPage, OrderReviewPage,
@@ -104,16 +105,29 @@ F056 → `categories`, F057 → `profile`, F058 → `cartLease`, F059 → `coupo
 Bound so far: `media` → `mockShopMediaClient` (F044), `discovery` →
 `mockShopDiscoveryClient` (F045), `categories` → `mockShopCategoryClient`
 (F046), `profile` → `mockShopProfileClient` (F047), `cartLease` →
-`mockShopCartLeaseClient` (F048) and `coupons` → `mockShopCouponClient` (F049).
-Mock Shop scenario controls are development-only and selected through the
-provider, never by importing fixtures into pages. Each capability's dev switcher
-is a separate `Dev…ScenarioSwitcher.tsx` that the provider's dev-only
-`DevScenarioToolbar` loads independently; new capabilities add their own
-switcher and position it so it does not overlap another switcher's fixed corner
-(media: `bottom-4 end-4`, discovery: `bottom-4 start-4`, categories:
-`bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`, cartLease:
-`bottom-[12.25rem] start-4`, coupons: `bottom-[16rem] start-4`). See
+`mockShopCartLeaseClient` (F048), `coupons` → `mockShopCouponClient` (F049) and
+`orders` → `mockShopOrdersClient` (F050). Mock Shop scenario controls are
+development-only and selected through the provider, never by importing fixtures
+into pages. Each capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx`
+that the provider's dev-only `DevScenarioToolbar` loads independently; new
+capabilities add their own switcher and position it so it does not overlap another
+switcher's fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
+categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`,
+cartLease: `bottom-[12.25rem] start-4`, coupons: `bottom-[16rem] start-4`,
+orders: `bottom-[19.75rem] start-4`). See
 `docs/design/shop/frontend-contract-boundary.md`.
+
+The `orders` slot (B042/F050) feeds the permission-gated admin `OrdersPage`
+(list + URL filters `q`/`status`/`fromUtc`/`toUtc` + pagination, desktop table /
+mobile cards) and read-only `OrderDetailPage` (snapshot items, customer/address,
+totals, payment attempts capped at the **20 newest**). Both branch on
+`Shop.Orders.View` via `useTenantPermissions`; a user without the key sees the
+denied panel and the nav item is inert. Filters are **server-shaped**: the URL is
+the source of truth, search is debounced 300 ms, and every filter change is a
+history **push** (not `replace`) so back/forward traverses filter states. No
+fulfil/cancel controls here — those belong to F051. Mock IDs are canonical 13-char
+TSIDs; `mockShopOrdersClient` is seeded only for the demo tenant (see trap 15) so a
+foreign tenant scope 404s like a missing id.
 
 The `coupons` slot (B041/F049) feeds the admin `CouponsPage` (create/edit/
 deactivate, null-rendered-as-«نامحدود», usage `redeemedCount`/`redemptionLimit`,
@@ -179,12 +193,23 @@ expected console noise on anonymous storefront routes.
   `src/web/src/features/roles/permissionCatalog.ts` and
   `src/web/src/features/roles/roleTypes.ts`
   (`SHOP_CATALOG_MANAGE_KEY = 'Shop.Catalog.Manage'`,
-  `SHOP_SHIPPING_MANAGE_KEY = 'Shop.Shipping.Manage'`). Adding a key means
-  updating both files, and the backend must already expose it.
-- `Shop.Settings.Manage` (the profile-page key, B039) is **not** in this mirror
-  yet — it is added by F057 once the backend delivers the key. Until then the
-  `هویت و سیاست‌های فروشگاه` nav item renders un-gated (F047 mock phase) and the
-  page still surfaces the client's 403 state.
+  `SHOP_SHIPPING_MANAGE_KEY = 'Shop.Shipping.Manage'`,
+  `SHOP_SETTINGS_MANAGE_KEY = 'Shop.Settings.Manage'`,
+  `SHOP_ORDERS_VIEW_KEY = 'Shop.Orders.View'`,
+  `SHOP_ORDERS_MANAGE_KEY = 'Shop.Orders.Manage'`). Adding a key means updating
+  **both** files, and the backend must already expose it.
+- The mirror is **fail-closed and whole-set**: `roleAdapter.parseCurrentPermissions`
+  rejects the *entire* resolved set (and the server catalog parse rejects the whole
+  matrix) if **any one** key is missing from `CATALOG_KEY_ORDER`. A single un-mirrored
+  server key therefore blanks every permission-gated page and nav item to denied.
+  Keep the mirror in lock-step with the live server catalog
+  (`GET /api/permissions/catalog`) — before adding a new key, check the catalog for
+  any other un-mirrored key and add them together. (F050 hit exactly this: the server
+  resolves `Shop.Settings.Manage` for the demo owner but the mirror lacked it, so the
+  new orders page rendered denied until the key was added.)
+- The `هویت و سیاست‌های فروشگاه` nav item (F047) is still un-gated: `ShopProfilePage`
+  gates nothing, and F057 binds it to `Shop.Settings.Manage` (the key now exists in the
+  mirror). The page still surfaces the client's 403 state.
 - **Hiding a control is presentation, never authorization.** Still render the
   403 state the task names.
 
@@ -263,19 +288,32 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
     value reverts to the seed). In a browser-evidence script, first wait until
     the name field holds the seeded value (proof the reset ran), then fill, and
     re-fill once if the value does not stick.
-13. When browser evidence hits a PROTECTED page with a real session, the URL's
+ 13. When browser evidence hits a PROTECTED page with a real session, the URL's
     `tenantId` must be a tenant the signed-in account actually belongs to, or
     the page's tenant-scope `GET /api/tenants/{id}/me/permissions` 403s and the
-    console is no longer clean. Mock Shop clients ignore `tenantId` by design,
-    so any valid member tenant exercises the same mock UI (the F046/F047 demos
-    use `0RM4B8A9M008Q`).
+    console is no longer clean. For **permission-gated** pages (F050 orders) the
+    member tenant must also *resolve* the required key, or the page renders the
+    denied panel regardless of the mock. The dev admin belongs to
+    `0RN590ZYXKNZ2` (F029 Demo Boutique), which resolves the full Shop set incl.
+    `Shop.Orders.View`; `0RM4B8A9M008Q` 403s for the admin (not a member). Use
+    `0RN590ZYXKNZ2` for the orders pages.
 14. Playwright's `console` event reports a failed resource as
     `"Failed to load resource: the server responded with a status of 404 (Not
     Found)"` with NO URL, so filtering console text can never tell a real 404
     from expected mixed-phase noise (F031 catalog/search/PDP still call the
     real API for demo slugs). In evidence scripts, record failed URLs on the
     `response` event and whitelist them there (`/api/shop/<demo-slug>/…`);
-    drop the URL-less console lines and judge the response list instead.
+     drop the URL-less console lines and judge the response list instead.
+ 15. Mock Shop clients must model **tenant isolation**, not just per-tenant
+     seeding: a capability whose backend scopes reads to the route tenant (B042
+     orders) must return the SAME non-leaking `404`/empty for a *foreign* tenant
+     scope as for a missing id. Seed only the demo tenant
+     (`DEMO_TENANT_ID = '0RN590ZYXKNZ2'`); any other tenant gets an empty store.
+     (F050's mock initially seeded every tenant, so a foreign-tenant order id
+     wrongly 200'd.) A **non-member** tenant is a different path: the page's
+     `useTenantPermissions` gate renders the denied panel before any fetch, so a
+     foreign-tenant *route* shows denied while a foreign order id *within* the
+     current tenant's scope shows the 404.
 
 
 ## Decisions future tasks must preserve

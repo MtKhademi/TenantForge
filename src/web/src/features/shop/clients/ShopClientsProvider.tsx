@@ -3,12 +3,14 @@ import { mockShopCartLeaseClient } from './mockShopCartLeaseClient'
 import { mockShopCategoryClient } from './mockShopCategoryClient'
 import { mockShopCouponClient } from './mockShopCouponClient'
 import { mockShopDiscoveryClient } from './mockShopDiscoveryClient'
+import { mockShopOrdersClient } from './mockShopOrdersClient'
 import { mockShopMediaClient } from './mockShopMediaClient'
 import { mockShopProfileClient } from './mockShopProfileClient'
 import type { ShopCartLeaseClient } from './ShopCartLeaseClient'
 import type { ShopCategoryClient } from './ShopCategoryClient'
 import type { ShopCouponClient } from './ShopCouponClient'
 import type { ShopDiscoveryClient } from './ShopDiscoveryClient'
+import type { ShopOrdersClient } from './ShopOrdersClient'
 import type { ShopMediaClient } from './ShopMediaClient'
 import type { ShopProfileClient } from './ShopProfileClient'
 
@@ -24,7 +26,7 @@ export type ShopClients = {
   profile: ShopProfileClient // F047 mock -> F057 HTTP
   cartLease: ShopCartLeaseClient // F048 mock -> F058 HTTP
   coupons: ShopCouponClient // F049 mock -> F059 HTTP
-  // F050 adds:  orders: ShopOrdersClient              -> F060 HTTP
+  orders: ShopOrdersClient // F050 mock -> F060 HTTP
   // F051 adds:  orderOperations: ShopOrderOperationsClient -> F061 HTTP
   // F052 adds:  payments: ShopPaymentsClient          -> F062 HTTP
 }
@@ -37,6 +39,7 @@ export function createShopClients(): ShopClients {
     profile: mockShopProfileClient,
     cartLease: mockShopCartLeaseClient,
     coupons: mockShopCouponClient,
+    orders: mockShopOrdersClient,
   }
 }
 
@@ -76,6 +79,7 @@ function DevScenarioToolbar() {
   const [ProfileSwitcher, setProfileSwitcher] = useState<ComponentType | null>(null)
   const [CartLeaseSwitcher, setCartLeaseSwitcher] = useState<ComponentType | null>(null)
   const [CouponSwitcher, setCouponSwitcher] = useState<ComponentType | null>(null)
+  const [OrdersSwitcher, setOrdersSwitcher] = useState<ComponentType | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -97,6 +101,9 @@ function DevScenarioToolbar() {
     void import('../DevCouponScenarioSwitcher').then((module) => {
       if (!cancelled) setCouponSwitcher(() => module.DevCouponScenarioSwitcher)
     })
+    void import('../DevOrdersScenarioSwitcher').then((module) => {
+      if (!cancelled) setOrdersSwitcher(() => module.DevOrdersScenarioSwitcher)
+    })
     return () => {
       cancelled = true
     }
@@ -110,6 +117,7 @@ function DevScenarioToolbar() {
       {ProfileSwitcher ? <ProfileSwitcher /> : null}
       {CartLeaseSwitcher ? <CartLeaseSwitcher /> : null}
       {CouponSwitcher ? <CouponSwitcher /> : null}
+      {OrdersSwitcher ? <OrdersSwitcher /> : null}
     </>
   )
 }

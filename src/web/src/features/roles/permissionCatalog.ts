@@ -21,6 +21,9 @@ const CATALOG_KEY_ORDER: PermissionKey[] = [
   'IAM.Audit.View',
   'Shop.Catalog.Manage',
   'Shop.Shipping.Manage',
+  'Shop.Settings.Manage',
+  'Shop.Orders.View',
+  'Shop.Orders.Manage',
 ]
 
 const keySet = new Set<string>(CATALOG_KEY_ORDER)
