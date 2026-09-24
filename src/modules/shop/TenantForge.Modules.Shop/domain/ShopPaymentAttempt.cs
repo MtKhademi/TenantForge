@@ -70,16 +70,25 @@ internal sealed class ShopPaymentAttempt
 
     public static ShopPaymentAttempt Create(
         Tsid orderId, string provider, string gatewayReference,
-        decimal amountSnapshot, string callbackTokenHash, DateTimeOffset nowUtc)
+        decimal amountSnapshot, string callbackTokenHash, DateTimeOffset nowUtc,
+        Tsid? preMintedId = null)
     {
         if (TsidId.IsDefault(orderId))
         {
             throw new ArgumentException("Order id is required.", nameof(orderId));
         }
 
+        if (preMintedId is not null && TsidId.IsDefault(preMintedId.Value))
+        {
+            throw new ArgumentException("Pre-minted id must not be the default value.", nameof(preMintedId));
+        }
+
         return new ShopPaymentAttempt
         {
-            Id = TsidId.NewId(),
+            // B045: a caller (the ZarinPal initiation) may pre-mint the id so a
+            // signed callback state can bind the attempt before its row exists.
+            // Sandbox passes null and gets a fresh id, exactly as before.
+            Id = preMintedId ?? TsidId.NewId(),
             OrderId = orderId,
             Provider = provider,
             Status = ShopPaymentAttemptStatus.Initiated,

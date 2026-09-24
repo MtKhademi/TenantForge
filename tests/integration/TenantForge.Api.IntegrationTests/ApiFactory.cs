@@ -71,12 +71,26 @@ public sealed class ApiFactory(string environment, IamSeedMode seedMode, IamDbFi
             // B044: outside Development the payments provider is required and
             // the Sandbox value is refused (fail closed). Every test host is
             // given an explicit value rather than relying on the Development
-            // default: Development hosts use the Sandbox gateway (the only one
-            // registered until B045); Production hosts use ZarinPal, which
-            // validates at startup and is only resolved to a gateway on a real
-            // payment call — none of these hosts makes one, so they start and
-            // serve their IAM/dashboard/account routes normally.
-            ["Shop:Payments:Provider"] = environment == "Production" ? "ZarinPal" : "Sandbox"
+            // default: Development hosts use the Sandbox gateway; Production
+            // hosts use ZarinPal, which B045 validates at startup (the full
+            // section below is what makes those hosts pass validation and
+            // start) and resolves to a gateway on a real payment call — none
+            // of these hosts makes one, so they start and serve their
+            // IAM/dashboard/account routes normally.
+            ["Shop:Payments:Provider"] = environment == "Production" ? "ZarinPal" : "Sandbox",
+            // B045: a minimal, valid ZarinPal section so every host (including
+            // the Production ones) passes the provider's startup validation.
+            // The three provider-facing URLs use the dev.* host from the
+            // module's allowlist (Development hosts skip the HTTPS/host
+            // checks; Production hosts pass both with https).
+            ["Shop:Payments:ZarinPal:MerchantId"] = "test-merchant-id",
+            ["Shop:Payments:ZarinPal:Currency"] = "IRT",
+            ["Shop:Payments:ZarinPal:RequestEndpoint"] = "https://dev.zarinpal.com/v4/payment/request",
+            ["Shop:Payments:ZarinPal:VerifyEndpoint"] = "https://dev.zarinpal.com/v4/payment/verify",
+            ["Shop:Payments:ZarinPal:GatewayBaseUrl"] = "https://dev.zarinpal.com/payment",
+            ["Shop:Payments:ZarinPal:PublicApiBaseUrl"] = "https://api.tenantforge.local",
+            ["Shop:Payments:ZarinPal:FrontendResultBaseUrl"] = "https://frontend.tenantforge.local",
+            ["Shop:Payments:ZarinPal:TimeoutSeconds"] = "10"
         };
 
         switch (seedMode)

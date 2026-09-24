@@ -11,6 +11,7 @@ namespace TenantForge.Modules.Shop.Features.Payments;
 /// caller's job to freeze as the attempt's <c>AmountSnapshot</c>);
 /// <see cref="CallbackUri"/> is the server-owned URL the provider is told to
 /// redirect back to (ZarinPal's return/failure URLs in B045).
+///
 /// </summary>
 internal sealed record PaymentContext(Tsid TenantId, Tsid OrderId, decimal Amount, Uri CallbackUri);
 
@@ -30,9 +31,16 @@ internal sealed record GatewayInitiation(string Authority, Uri RedirectUri);
 /// handed back (<see cref="CallbackValues"/>). A real provider (ZarinPal in
 /// B045) uses these to make its own server-to-server verification call; the
 /// sandbox derives its outcome directly from them.
+///
+/// <see cref="Amount"/> (B045) is the server-stored, frozen order total (the
+/// attempt's <c>AmountSnapshot</c>) in the module's own Toman units — never a
+/// value from the callback's query string. A provider that verifies
+/// server-to-server uses it to re-derive the exact integer it sent at
+/// initiation, so the verify call checks the same amount the provider actually
+/// charged.
 /// </summary>
 internal sealed record PaymentVerificationRequest(
-    string Authority, IReadOnlyDictionary<string, string> CallbackValues);
+    string Authority, IReadOnlyDictionary<string, string> CallbackValues, decimal? Amount = null);
 
 /// <summary>
 /// B044: exactly the two outcomes a gateway verification can produce. The
@@ -57,8 +65,16 @@ internal enum GatewayOutcome
 /// every failure (e.g. <c>payment_declined</c>, <c>verification_failed</c>)
 /// and null on success — it is what the completion service persists as the
 /// attempt's <c>FailureCode</c>, so it must be safe to log and store.
+///
+/// <see cref="VerifyCode"/> (B045, optional) is the raw provider verification
+/// code behind a <c>Succeeded</c> outcome — ZarinPal's <c>100</c> (fresh
+/// success) or <c>101</c> (already verified). It exists only so a caller that
+/// needs to reconcile a 101 against a previously stored reference can tell the
+/// two success cases apart; it is not itself trusted as proof of anything and
+/// carries no meaning for a provider that never emits it (Sandbox: null).
 /// </summary>
-internal sealed record GatewayVerification(GatewayOutcome Outcome, string? ReferenceId, string? ErrorCode);
+internal sealed record GatewayVerification(
+    GatewayOutcome Outcome, string? ReferenceId, string? ErrorCode, int? VerifyCode = null);
 
 /// <summary>
 /// B044: the seam a real provider implements. <see cref="Provider"/> is the

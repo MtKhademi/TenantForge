@@ -440,3 +440,24 @@ public sealed class ShopPaymentLifecycleDbFixture : IamDbFixtureBase
 public sealed class ShopPaymentLifecycleIsolatedCollection : ICollectionFixture<ShopPaymentLifecycleDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B045's ZarinPal provider tests (initiation
+/// request/redirect, IRR/IRT conversion, the server-verified callback with
+/// codes 100/101/other, the signed-state tamper/expiry misses, decline
+/// without verify, timeout leaving the attempt Initiated, the late success
+/// for a cancelled order, the Production fail-closed startup, and the
+/// secret-free response/log assertion). Kept off the other Shop databases so
+/// their row-count and attempt-count assertions stay stable.
+/// </summary>
+public sealed class ShopZarinPalPaymentDbFixture : IamDbFixtureBase
+{
+    public ShopZarinPalPaymentDbFixture() : base("tenantforge_shop_zarinpal_payment_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopZarinPalPaymentIsolatedCollection))]
+public sealed class ShopZarinPalPaymentIsolatedCollection : ICollectionFixture<ShopZarinPalPaymentDbFixture>
+{
+}

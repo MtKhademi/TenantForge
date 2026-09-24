@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
+using TenantForge.Modules.Shop.Features.Payments.ZarinPal;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Payments;
@@ -52,6 +54,10 @@ internal static class PaymentsFeature
 
     public static IEndpointRouteBuilder MapPaymentsFeature(this IEndpointRouteBuilder endpoints)
     {
+        // B045: the provider-specific callback route (ZarinPal today) is mapped
+        // alongside the gateway-neutral routes.
+        endpoints.MapZarinPalCallbackFeature();
+
         endpoints.MapPost("/api/shop/{tenantId}/orders/{orderId}/payments/initiate", async (
             string tenantId,
             string orderId,
@@ -59,6 +65,8 @@ internal static class PaymentsFeature
             IShopPaymentGatewayResolver gatewayResolver,
             ShopDbContext db,
             TimeProvider timeProvider,
+            ZarinPalCallbackStateProtector callbackStateProtector,
+            IOptions<ZarinPalOptions> zarinPalOptions,
             CancellationToken ct) =>
         {
             if (!TsidId.TryParse(tenantId, out var tenantTsid)) return PaymentNotFoundProblem();
@@ -188,12 +196,55 @@ internal static class PaymentsFeature
                 var token = DeriveToken(tokenSeed);
                 var tokenHash = HashToken(token);
 
-                var initiation = await gateway.InitiateAsync(
-                    new PaymentContext(tenantTsid, orderTsid, order.GrandTotal, callbackUri), ct);
+                // B045: the attempt id is pre-minted so a real provider can
+                // bind its signed callback state to the attempt BEFORE the row
+                // exists: the state is what the provider hands back in the
+                // callback query string, and it must name the very attempt
+                // this initiation mints. The Sandbox path (whose "callback" is
+                // the status route above) never names an attempt, so the
+                // pre-minting is invisible to it. The row is persisted only
+                // after the gateway call succeeds — a provider failure leaves
+                // no orphan attempt row.
+                var attemptId = TsidId.NewId();
+                var providerCallbackUri = callbackUri;
+                if (string.Equals(gateway.Provider, ZarinPalPaymentGateway.ProviderName, StringComparison.Ordinal))
+                {
+                    // The callback URL the provider is told to redirect the
+                    // browser back to: the server's own ZarinPal callback
+                    // route, carrying ONLY the signed state. The state binds
+                    // tenant, order, attempt and the raw token — the callback
+                    // route trusts none of those from the query string — and
+                    // it is deliberately never persisted.
+                    var stateToken = callbackStateProtector.Protect(new ZarinPalCallbackState(
+                        TsidId.Format(tenantTsid), TsidId.Format(orderTsid),
+                        TsidId.Format(attemptId), token));
+                    providerCallbackUri = new Uri(
+                        zarinPalOptions.Value.PublicApiBaseUrl,
+                        $"/api/shop/{tenantId}/payments/zarinpal/callback?state={Uri.EscapeDataString(stateToken)}");
+                }
+
+                GatewayInitiation initiation;
+                try
+                {
+                    initiation = await gateway.InitiateAsync(
+                        new PaymentContext(tenantTsid, orderTsid, order.GrandTotal, providerCallbackUri), ct);
+                }
+                catch (ZarinPalProviderException exception)
+                {
+                    // The provider could not start the payment (unavailable,
+                    // rejected, an empty authority, or an unpayable amount).
+                    // No attempt row is persisted: the order stays
+                    // PendingPayment and payable with a fresh key. The
+                    // response carries only the stable code — never the
+                    // provider's response text, which may echo request
+                    // fields.
+                    await transaction.RollbackAsync(ct);
+                    return ProviderUnavailableProblem(exception.StableCode);
+                }
 
                 var attempt = ShopPaymentAttempt.Create(
                     order.Id, gateway.Provider, initiation.Authority,
-                    order.GrandTotal, tokenHash, now);
+                    order.GrandTotal, tokenHash, now, preMintedId: attemptId);
                 db.PaymentAttempts.Add(attempt);
 
                 var record = ShopPaymentInitiation.Create(
@@ -424,6 +475,22 @@ internal static class PaymentsFeature
         Type = "idempotency_key_conflict",
         Title = "Idempotency key conflict",
         Detail = "This idempotency key was already used for a different request."
+    });
+
+    /// <summary>
+    /// B045: the safe response to a ZarinPal provider failure during
+    /// initiation. 503 — the provider is unavailable to complete the payment
+    /// right now — carrying only the stable code as the RFC 7807 type. The
+    /// merchant id, the provider's message and the raw authority never reach
+    /// this body; a network timeout is one of these codes and leaves the
+    /// order payable (no attempt row was persisted).
+    /// </summary>
+    private static IResult ProviderUnavailableProblem(string stableCode) => Results.Problem(new ProblemDetails
+    {
+        Status = StatusCodes.Status503ServiceUnavailable,
+        Type = stableCode,
+        Title = "Payment provider unavailable",
+        Detail = "The payment provider could not start this payment. The order is still payable; try again."
     });
 
     private static IResult TooManyAttemptsProblem() => Results.Problem(new ProblemDetails

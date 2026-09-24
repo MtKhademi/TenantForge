@@ -160,10 +160,11 @@ Copy the nearest existing feature in the same module before inventing a shape.
 - `ApiFactory` / `IamDbFixture` boot the real host against a Testcontainers
   PostgreSQL instance. **Docker must be running.**
 - `ApiFactory` sets `Shop:Payments:Provider` per environment (Development →
-  `Sandbox`, Production → `ZarinPal`) so every test host starts after B044 made
-  the value required outside Development (and refused `Sandbox` there).
-  Production hosts never make a payment call, so `ZarinPal` validates at
-  startup and is never resolved to a gateway.
+  `Sandbox`, Production → `ZarinPal`) and includes a minimal valid
+  `Shop:Payments:ZarinPal` section so every test host starts after B044/B045
+  made the provider required and validated outside Development. Production
+  hosts that are not payment tests normally do not call the gateway, but the
+  config still passes ZarinPal startup validation.
 - Every security-sensitive behavior needs both the happy path and the
   relevant unauthorized/forbidden path.
 - `BuildingBlocksArchitectureTests` and `IamContractArchitectureTests` lock the
@@ -291,7 +292,15 @@ dotnet.exe ef migrations add <Name> \
     (the B043 flow pays an order at version 1, then fulfils it with
     `expectedVersion: 1`). Bumping the version on payment is a regression, not
     a missing fix (B044 tripped this).
-19. When a test builds a query string by interpolation, a
+19. ZarinPal payment callbacks live under
+    `features/payments/ZarinPal/`. The gateway is still a pure decision
+    function: `PaymentsFeature` pre-mints the attempt id, signs the callback
+    state and persists the attempt only after provider initiation succeeds;
+    `ZarinPalCallbackFeature` unprotects the state and routes every terminal
+    outcome through `ShopPaymentCompletionService`. Never log merchant ids,
+    card PANs, callback tokens or gateway authorities. Provider timeout/5xx/
+    malformed verify responses return `503` and leave the attempt `Initiated`.
+20. When a test builds a query string by interpolation, a
     `DateTimeOffset`'s `:O` round-trip form for a UTC value contains a literal
     `+00:00`, and in a **raw query string a `+` decodes to a space** — so the
     endpoint rejects it as an unparseable value. A real HTTP client sends

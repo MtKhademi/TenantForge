@@ -54,9 +54,10 @@ Shop explicitly does **not** own:
   [Section 8](#8-tenantauth-rules)) instead of referencing IAM;
 - cloud object storage, video, image-cropping UI or CDN signing for product
   media (see [Section 10](#10-product-media));
-- real payment-gateway integration (only an in-app sandbox exists behind the
-  gateway-neutral seam — see
-  [Section 13](#13-payment-lifecycle-gateway-neutral));
+- payment capabilities beyond the delivered gateways: refunds, inquiry
+  schedulers, webhooks, split payments, fee calculation and multiple merchant
+  accounts remain outside the module today — see
+  [Section 13](#13-payment-lifecycle-gateway-neutral);
 - customer accounts (every Shop-facing flow outside the authenticated admin
   routes is deliberately anonymous, matching a guest-first storefront).
 
@@ -153,7 +154,7 @@ class is `internal`; the host only calls the two `ShopModule` methods above.
 | Order creation | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` | `OrderCreationFeature`, `OrderContracts`, `OrderLookupFeature`, `OrderLookupContracts` |
 | Admin order reads | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B042) | `AdminOrdersFeature` (`Shop.Orders.View`-gated list + detail, non-leaking 404, 20-attempt cap), `AdminOrderContracts` |
 | Admin order operations | `src/modules/shop/TenantForge.Modules.Shop/features/orders/` (B043) | `AdminOrdersFeature`'s `PATCH …/orders/{orderId}/status` (`Shop.Orders.Manage`-gated fulfil/cancel, optimistic `expectedVersion`, idempotent via the `shop_order_operations` unique key, exactly-once inventory release on cancel) — see [Section 11](#11-inventory-reservation) |
- | Payment lifecycle | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway`, `ShopPaymentGatewayResolver`, `ShopPaymentCompletionService` — see [Section 13](#13-sandbox-payment) |
+| Payment lifecycle | `src/modules/shop/TenantForge.Modules.Shop/features/payments/` | `PaymentsFeature`, `PaymentContracts`, `IShopPaymentGateway`, `SandboxPaymentGateway`, `ShopPaymentGatewayResolver`, `ShopPaymentCompletionService`, plus `ZarinPal/` (`ZarinPalOptions`, `ZarinPalPaymentGateway`, `ZarinPalCallbackFeature`, signed callback-state protector and amount converter) — see [Section 13](#13-payment-lifecycle-gateway-neutral) |
 | Storefront profile & policies | `src/modules/shop/TenantForge.Modules.Shop/features/profiles/` | `ProfilesFeature`, `ProfileContracts` — see [Section 14](#14-storefront-profile-and-policies) |
 | Pagination | `src/modules/shop/TenantForge.Modules.Shop/features/pagination/` | `PaginationSupport`, `PaginationQuery`, `PaginationMetadata` (Shop's own copy — not shared with IAM's) |
 | Persistence context/maps | `src/modules/shop/TenantForge.Modules.Shop/infrastructure/` | `ShopDbContext`, `*Map.cs`, `ShopTsidValueConverter` |
@@ -175,6 +176,11 @@ All keys are read by `ShopConfig`
 | `Shop:CartReservationMinutes` | Shop | Required outside Development; Development defaults to `30` when blank | Startup throws unless the integer value is within `5..1440` inclusive |
 | `Shop:CartCleanupIntervalSeconds` | Shop | Always required | Startup throws unless the integer value is within `30..3600` inclusive |
 | `Shop:Payments:Provider` | Shop | Required outside Development; Development defaults to `Sandbox` when blank | Startup throws unless the value is exactly `Sandbox` or `ZarinPal` (case-sensitive); outside Development the value is additionally required and `Sandbox` is refused — the browser-driven payment simulation fails closed in Production |
+| `Shop:Payments:ZarinPal:MerchantId` | Shop | Required when `Provider=ZarinPal` | Startup throws if blank; the value is a secret and is never logged, returned or persisted per order |
+| `Shop:Payments:ZarinPal:Currency` | Shop | Required when `Provider=ZarinPal`; defaults to `IRT` in the options type | Startup throws unless exactly `IRT` or `IRR`; stored Shop totals are Tomans, so `IRT` sends the total as-is and `IRR` sends a checked ×10 conversion |
+| `Shop:Payments:ZarinPal:RequestEndpoint` / `VerifyEndpoint` / `GatewayBaseUrl` | Shop | Required when `Provider=ZarinPal` | Startup throws if missing; outside Development each must be HTTPS and its host must be exactly one of `api.zarinpal.com`, `checkout.zarinpal.com`, `dev.zarinpal.com` |
+| `Shop:Payments:ZarinPal:PublicApiBaseUrl` / `FrontendResultBaseUrl` | Shop | Required when `Provider=ZarinPal` | Startup throws if missing; outside Development each must be HTTPS. `PublicApiBaseUrl` builds the backend callback URL sent to ZarinPal, and `FrontendResultBaseUrl` is the browser 302 target after verification |
+| `Shop:Payments:ZarinPal:TimeoutSeconds` | Shop | Optional when `Provider=ZarinPal`; default `10` | Startup throws unless the integer is `1..300`; the gateway applies it per provider call through cancellation tokens |
 
 `Shop:ShopDb` deliberately points at the same physical database as
 `IAM:IamDb` (see [Section 3](#3-dependency-and-composition-boundary)); each
@@ -574,12 +580,12 @@ so the two call sites (checkout preview and order consumption) cannot drift.
 ## 13. Payment lifecycle (gateway-neutral)
 
 `IShopPaymentGateway` (`features/payments/IShopPaymentGateway.cs`) is the
-seam a real provider implements. Two implementations are registered
-(`SandboxPaymentGateway` today; ZarinPal lands in B045) and exactly one is
-chosen per request by `ShopPaymentGatewayResolver` from the
-`Shop:Payments:Provider` value — never by registration order. A gateway is a
-pure decision function: it never sees the order aggregate, never touches the
-database, and never mutates an attempt or order.
+seam a payment provider implements. Two implementations are registered:
+`SandboxPaymentGateway` and `ZarinPalPaymentGateway`. Exactly one is chosen per
+request by `ShopPaymentGatewayResolver` from the `Shop:Payments:Provider` value
+— never by registration order. A gateway is a pure decision function: it never
+sees the order aggregate, never touches the database, and never mutates an
+attempt or order.
 
 **Trust boundary**: the browser never declares success. Initiation carries no
 body at all — the `Idempotency-Key` header is the only input and every value
@@ -631,6 +637,27 @@ simulation: it is mapped only when the environment is Development, and
 the simulation cannot be enabled silently in Production. There is no stored
 card data and no webhook signature scheme — B045's real provider verifies
 server-to-server through the same seam.
+
+**ZarinPal gateway and callback**: `ZarinPalPaymentGateway` calls the configured
+v4 request endpoint with the merchant id, checked integer amount, currency,
+description and a backend callback URL. Request code `100` plus a non-empty
+authority is the only initiation success; the authority is stored in the
+existing `GatewayReference` column and the browser redirect is
+`GatewayBaseUrl + authority`. The real callback route is
+`GET /api/shop/{tenantId}/payments/zarinpal/callback?Authority=&Status=&state=`.
+The browser does not call verify and never supplies amount/order success:
+`state` is an ASP.NET Core Data Protection token (purpose
+`TenantForge.Shop.ZarinPal.Callback.v1`, 30-minute lifetime) binding tenant id,
+order id, attempt id and the raw callback token. `Status != OK` resolves the
+attempt as `Failed` with `payment_declined` and does **not** call ZarinPal
+verify. `Status == OK` calls verify server-to-server using the stored authority
+and the attempt's frozen `AmountSnapshot`; code `100` succeeds, code `101`
+("already verified") is accepted only when it matches a success reference already
+stored for that same attempt, and every other code fails closed. A timeout or
+malformed/5xx provider response returns a safe `503` and leaves the attempt
+`Initiated` so a later callback/reconciliation can still complete it. The 302
+back to `FrontendResultBaseUrl` carries only route context, `outcome` and the
+opaque token — no merchant id, amount, card PAN, provider payload or order totals.
 
 **B043 interaction**: a cancel invalidates the order's still-`Initiated`
 attempts to `Invalidated` (in the cancel's transaction, via
@@ -694,6 +721,7 @@ lower-cased, and the suffix check anchors on the dot so
 | `ShopCheckoutIntegrationTests.cs` | Checkout-summary pricing, unshippable-province handling, coupon application |
 | `ShopOrderIntegrationTests.cs` | Order creation, no double-decrement, concurrent-order race safety |
 | `ShopPaymentLifecycleIntegrationTests.cs` | B044 payment lifecycle: valid initiation (sandbox provider, bank redirect, one `Initiated` attempt, only the token hash stored), same-key replay byte-identical with no duplicate attempt, two fresh keys → one live attempt, `AmountSnapshot` frozen before a later catalog price change, the 10-attempt cap (`409 too_many_payment_attempts`, 11th rejected), sandbox approve → `Paid`/`Succeeded`, sandbox decline → `PendingPayment`/`Failed` (`payment_declined`), duplicate success returns the stored outcome without re-applying, a late success for a `Cancelled` order returns the `Cancelled` outcome and never pays (cancel invalidated the attempt), only the SHA-256 of the token is stored (never the raw token), status endpoint: wrong token/wrong order/wrong tenant/no-attempts all return the one generic `404` (correct token `200`), sandbox resolve works in Development (approve + decline), Production + `Sandbox` provider fails closed at startup, the new migration applies cleanly on the existing history (adds exactly the six attempt columns + `shop_payment_initiations`), the redirect is the relative same-origin bank path, and `Idempotency-Key` missing/non-UUID → `400` naming the header — all asserted against real persisted rows |
+| `ShopZarinPalPaymentIntegrationTests.cs` | B045 ZarinPal integration: request JSON/redirect URL/authority persistence, `IRT` and `IRR` amount conversion, verify code `100` success, code `101` matching prior success replay, code `101` mismatch fail-closed, `Status != OK` decline without verify, other verify codes fail, forged callback authority ignored in favor of stored authority/amount, tampered and expired signed state generic `404`, duplicate callback idempotency, provider timeout → `503` with attempt still `Initiated`, late success after cancel never pays, unsafe Production URL startup failure, no merchant/card-PAN leakage in response/logs, and `gateway_reference` vs `provider_reference` persistence |
 | `ShopOrderLookupIntegrationTests.cs` | Guest lookup contract, non-leaking generic not-found |
 | `ShopProfileIntegrationTests.cs` | B039 storefront profile: admin GET null-empty-state, create→update→GET round-trip with version bump, stale-version `409 stale_version`, concurrent first-create race (one `200`, one `409`, one row), tenant isolation (A cannot read/write B), `Shop.Settings.Manage` denial + role grant + Owner bypass, outside-trim / preserved-newlines / over-length validation, phone allowlist, Instagram URL rules (non-HTTPS / wrong host / look-alike domain), public `404` for missing/unpublished/malformed-id, public `200` shape with no `version`/`id`/`tenantId`/`updatedAtUtc`, and publication NOT gating the storefront catalog |
 | `ShopCouponRulesIntegrationTests.cs` | B041 coupon rules: `ShopCouponPolicy` ordered reason codes (`coupon_inactive`/`_expired`/`_minimum_not_met`/`_limit_reached` + the caller's `coupon_not_found`) with the exact stable code surfaced in the `couponCode` field error, percentage discount capped at `maximumDiscountAmount` (and never past the subtotal), checkout summary never incrementing `RedeemedCount`, order creation incrementing by exactly one and storing the evaluated discount, a forced downstream DB failure rolling the redemption back, the concurrent last-redemption race (one 201 with the discount, one 400 `coupon_limit_reached`, total +1, loser's cart left active), stale `expectedVersion` → `409 stale_version`, `redemptionLimit` below `redeemedCount` → `400` with no persisted change, and tenant B unable to read/update/redeem tenant A's coupon with a byte-identical `coupon_not_found` |
@@ -726,11 +754,7 @@ Verified against current code (not aspirational):
 - **No customer accounts** — every public/anonymous route is by design;
   there is no login, no saved address book, no order history beyond the
   guest tracking-code lookup.
-- **Sandbox payment only** — the gateway-neutral seam (initiation, token-protected
-  status, completion service, `Shop:Payments:Provider` + resolver) is in place,
-  but only the in-app `Sandbox` gateway is registered; a real provider (ZarinPal)
-  lands in B045 and until then `ZarinPal` fails closed at resolution. See
-  [Section 13](#13-payment-lifecycle-gateway-neutral).
+- **Payments are request/verify only** — `Sandbox` and `ZarinPal` are registered behind the gateway-neutral seam, but refunds, provider inquiry/reconciliation scheduler, webhook handling, split payments, fees and multiple live merchant accounts are not implemented. See [Section 13](#13-payment-lifecycle-gateway-neutral).
 - **No full-text search engine, popularity/rating sort, recommendations,
   tags or faceted color/size filters** — B037's storefront discovery is
   name search + the four `newest`/`price-asc`/`price-desc`/`name` sorts only

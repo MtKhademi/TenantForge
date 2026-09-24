@@ -95,8 +95,10 @@ contract and the permission catalog contracts.
   lookup (the raw callback token is returned once and only its hash is stored),
   and a single completion service that is the only place an attempt or an order
   can move — the browser can never declare a payment succeeded. The in-app
-  sandbox is one registered gateway behind this seam (a real provider plugs in
-  the same way); a production host configured with the sandbox refuses to start;
+  sandbox is one registered gateway behind this seam, and ZarinPal is now the
+  real provider implementation: checkout redirects to ZarinPal, the backend
+  verifies the callback server-to-server with the stored authority and amount,
+  and only then marks the order paid. Production refuses the sandbox provider;
 - a tenant storefront identity (store name, tagline, support phone, Instagram)
   and customer policy pages (about, shipping, payment, returns, privacy) that
   the storefront header/footer can publish, saved with an optimistic-concurrency
@@ -179,6 +181,15 @@ the same transaction, so a payment result that arrives late finds an attempt
 that can no longer be completed and simply reports the order's current
 (cancelled) status — a cancelled order can never be paid by accident.
 
+**Real gateway callbacks are verified by the server.** ZarinPal can redirect a
+shopper's browser back to TenantForge, but that browser return is only a hint.
+The backend signs an expiring `state` token before sending the shopper to
+ZarinPal; when the callback arrives, it unpacks that state, loads the stored
+attempt, and calls ZarinPal's verify endpoint with the stored authority and
+amount. If ZarinPal says "already verified", TenantForge accepts it only when it
+matches a success reference already stored for that exact attempt. A provider
+outage leaves the attempt open instead of falsely failing or paying it.
+
 **Coupon rules have one owner, and spending capacity is race-safe.** Every
 coupon rule (minimum subtotal, discount cap, redemption limit, expiry, active
 flag) lives in a single pure function that reads a coupon and returns a verdict
@@ -227,11 +238,9 @@ Full environment notes are in `docs/architecture.md`.
 - Invitations are records only. Nothing is emailed, and acceptance,
   registration-from-invite, resend and revoke are not implemented.
 - Sessions use a single access token; there is no refresh-token rotation.
-- Payments run against the in-app sandbox gateway only. The gateway-neutral
-  seam (provider selection, token-protected status, the completion service) is
-  in place, but a real provider (ZarinPal) is a later slice — until then the
-  production provider value `ZarinPal` is configured-but-unimplemented and the
-  sandbox simulation is Development-only.
+- Payments support the in-app sandbox gateway and ZarinPal request/verify flow,
+  but refunds, scheduled provider inquiry/reconciliation, webhooks, split
+  payments, fees and multiple merchant accounts are not implemented yet.
 - There is no metrics, tracing or background-job infrastructure yet.
 
 ## Where to look next
