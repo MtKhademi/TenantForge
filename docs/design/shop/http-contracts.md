@@ -538,13 +538,24 @@ status lookup with the `resultToken` reports the order's current status.
 
 ## S41 / B045 — ZarinPal callback
 
-The browser does not call the provider callback itself.
+The browser does not verify payment itself and never authors success, amount,
+merchant id, order id or provider reference.
 
 `GET /api/shop/{tenantId}/payments/zarinpal/callback?Authority=&Status=&state=`
-validates signed state, verifies with ZarinPal when appropriate, and responds
-with `302` to the configured frontend result route carrying only the opaque
-result token/order route context. Merchant ID, amount and provider response
-payload are never browser-authored.
+validates signed state (tenant id, order id, attempt id, raw result token;
+30-minute lifetime). `Status != OK` resolves the stored attempt as declined and
+**does not** call ZarinPal verify. `Status == OK` verifies server-to-server with
+the stored authority and frozen amount. Verification code `100` succeeds; code
+`101` succeeds only as a duplicate when its `RefId` matches a success reference
+already stored for the same attempt; every other code fails closed. Timeout/5xx
+or malformed provider replies return a safe `503` and leave the attempt
+`Initiated`.
+
+Success and declined terminal outcomes respond with `302` to
+`{FrontendResultBaseUrl}/shop/{tenantId}/payment-result?outcome=approved|declined&token={resultToken}`.
+The redirect carries only route context, outcome and the opaque result token;
+merchant id, amount, card PAN and provider response payload are never echoed to
+the browser.
 
 ## S42 / B046 — rate-limit problem
 

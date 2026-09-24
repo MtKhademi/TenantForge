@@ -145,7 +145,7 @@ one valid Spec link.
 | B042 | S38 | Expose tenant order list and detail for operators | done | B035, B033 | — |
 | B043 | S39 | Fulfil or cancel orders with inventory-safe transitions | done | B042, B040 | — |
 | B044 | S40 | Make payment initiation and verification gateway-neutral and idempotent | done | B032, B043 | — |
-| B045 | S41 | Integrate ZarinPal request and server-side verification | planned | B044 | [B045 Spec](backend/B045-shop-zarinpal-payment.md) |
+| B045 | S41 | Integrate ZarinPal request and server-side verification | done | B044 | — |
 | B046 | S42 | Rate-limit sensitive anonymous Shop flows | planned | B045, B043 | [B046 Spec](backend/B046-shop-public-abuse-controls.md) |
 
 ## Shop continuation: S32–S42
