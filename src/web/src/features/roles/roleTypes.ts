@@ -15,6 +15,9 @@ export type PermissionKey =
   | 'IAM.Audit.View'
   | 'Shop.Catalog.Manage'
   | 'Shop.Shipping.Manage'
+  | 'Shop.Settings.Manage'
+  | 'Shop.Orders.View'
+  | 'Shop.Orders.Manage'
 
 export const ROLES_MANAGE_KEY = 'IAM.Roles.Manage'
 export const INVITATIONS_VIEW_KEY = 'IAM.Invitations.View'
@@ -22,6 +25,9 @@ export const INVITATIONS_CREATE_KEY = 'IAM.Invitations.Create'
 export const AUDIT_VIEW_KEY = 'IAM.Audit.View'
 export const SHOP_CATALOG_MANAGE_KEY = 'Shop.Catalog.Manage'
 export const SHOP_SHIPPING_MANAGE_KEY = 'Shop.Shipping.Manage'
+export const SHOP_SETTINGS_MANAGE_KEY = 'Shop.Settings.Manage'
+export const SHOP_ORDERS_VIEW_KEY = 'Shop.Orders.View'
+export const SHOP_ORDERS_MANAGE_KEY = 'Shop.Orders.Manage'
 
 export type PermissionItem = {
   key: PermissionKey

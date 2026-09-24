@@ -87,10 +87,25 @@ adapter, not rewriting the screen.
    inputs carry an explicit unit (toman / percent) and accept Persian digits,
    which are converted to standard digits before anything is validated or sent.
    At checkout, a typed coupon is checked against the live cart and every reason
-   the store can reject it (unknown, inactive, expired, below the minimum, limit
-   reached) shows its own distinct message, and a preview never changes the
-   redemption count — only a real order would. This is still backed by the F049
-   mock (connected in F059).
+    the store can reject it (unknown, inactive, expired, below the minimum, limit
+    reached) shows its own distinct message, and a preview never changes the
+    redemption count — only a real order would. This is still backed by the F049
+    mock (connected in F059).
+ - shop order review: a permission-gated "orders" list and a read-only order
+   detail. The list shows order number, customer, phone, status, total and
+   created date, and filters by search (order number, tracking code, customer
+   name or phone), status and a date range; every filter is kept in the URL so a
+   filtered view survives a reload and the browser back/forward button moves
+   between filter states. It paginates, renders as a table on a wide screen and
+   as cards on a phone, and shows the right state for empty, an invalid filter
+   (400), no permission (403) and an unreachable request (with retry). The detail
+   shows the order as it was captured at purchase — the item's stored name,
+   variant and price (later product changes do not alter it) — alongside the
+   customer, the shipping address, the totals, and the payment-attempt history
+   limited to the 20 newest attempts. A malformed, missing or other-tenant order
+   id all show the same generic "order not found", and there is deliberately no
+   fulfil or cancel control here yet. This is still backed by the F050 mock
+   (connected in F060).
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -110,12 +125,23 @@ keeps error handling, timeouts and token attachment in one place per capability.
 client interface that its mock and later HTTP implementation both satisfy. The
 provider binds one slot per capability — `media` (product galleries),
 `discovery` (the all-products catalog), `categories` (the category hierarchy),
-`profile` (store identity and policies), `cartLease` (cart reservation expiry)
-and `coupons` (advanced coupon rules) are bound today, each to its mock client.
+`profile` (store identity and policies), `cartLease` (cart reservation expiry),
+`coupons` (advanced coupon rules) and `orders` (order review) are bound today,
+each to its mock client.
 Screens consume `useShopClients()`; connecting a real API later
-replaces exactly one provider slot and never touches the screen. The all-products catalog's filter state
+replaces exactly one provider slot and never touches the screen. The order list's filter state
 lives in the URL, so a filtered view is refreshable and back/forward-
 reproducible.
+
+**Permission keys are mirrored from the server, fail-closed.** The app keeps a
+small local list of the permission keys it knows how to branch on. The server is
+the authority and this list is a guard, not a substitute: if the server ever
+reports a key the local list does not contain, the app treats the whole
+permission set as unknown and every permission-gated screen and nav item safely
+collapses to its "not allowed" state instead of guessing. When a new backend
+permission is introduced, that key is added to this local list in the same work
+that first branches on it (F050 added `Shop.Orders.View`, `Shop.Orders.Manage`
+and the long-missing `Shop.Settings.Manage`).
 
 **Publishing a store only hides its identity, not its goods.** The "publish"
 toggle controls whether the storefront shows the store's name, tagline, contact
