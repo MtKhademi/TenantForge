@@ -461,3 +461,23 @@ public sealed class ShopZarinPalPaymentDbFixture : IamDbFixtureBase
 public sealed class ShopZarinPalPaymentIsolatedCollection : ICollectionFixture<ShopZarinPalPaymentDbFixture>
 {
 }
+
+/// <summary>
+/// A dedicated database for B046's public-abuse-control tests (the per-policy
+/// 429s, the tenant+IP partitioning, the generic-429 indistinguishability, the
+/// untrusted-forwarded-header ignore, the body/callback size 413s, the
+/// secret-free log line, and the Production fail-closed startup). Kept off the
+/// other Shop databases so their row-count and attempt-count assertions stay
+/// stable.
+/// </summary>
+public sealed class ShopRateLimitDbFixture : IamDbFixtureBase
+{
+    public ShopRateLimitDbFixture() : base("tenantforge_shop_rate_limit_tests")
+    {
+    }
+}
+
+[CollectionDefinition(nameof(ShopRateLimitIsolatedCollection))]
+public sealed class ShopRateLimitIsolatedCollection : ICollectionFixture<ShopRateLimitDbFixture>
+{
+}

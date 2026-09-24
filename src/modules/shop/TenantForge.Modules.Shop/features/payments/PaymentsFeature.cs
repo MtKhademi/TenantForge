@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,7 @@ using Npgsql;
 using TenantForge.BuildingBlocks.Identifiers;
 using TenantForge.Modules.Shop.Domain;
 using TenantForge.Modules.Shop.Features.Payments.ZarinPal;
+using TenantForge.Modules.Shop.Features.RateLimiting;
 using TenantForge.Modules.Shop.Infrastructure;
 
 namespace TenantForge.Modules.Shop.Features.Payments;
@@ -275,7 +277,7 @@ internal static class PaymentsFeature
 
                 return BuildReplayResponse(gateway, winner);
             }
-        });
+        }).RequireRateLimiting(ShopRateLimitPolicies.Payment);
 
         endpoints.MapGet("/api/shop/{tenantId}/orders/{orderId}/payments/status", async (
             string tenantId,

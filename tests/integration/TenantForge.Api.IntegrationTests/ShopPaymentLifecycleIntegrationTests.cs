@@ -850,7 +850,17 @@ internal sealed class ShopSandboxProductionApiFactory(IamDbFixtureBase db)
             ["Shop:CartReservationMinutes"] = "30",
             ["Shop:CartCleanupIntervalSeconds"] = "3600",
             // The exact value that must be refused outside Development.
-            ["Shop:Payments:Provider"] = "Sandbox"
+            ["Shop:Payments:Provider"] = "Sandbox",
+            // B046: the rate-limit body-size middleware resolves these options
+            // during pipeline setup, before the module's own provider
+            // validation runs — so this Production host must carry them too, or
+            // the failure message would be about the rate-limit section rather
+            // than the refused Sandbox provider this fact asserts on.
+            ["Shop:RateLimiting:OrderLookupPerMinute"] = "30",
+            ["Shop:RateLimiting:CartMutationPerMinute"] = "120",
+            ["Shop:RateLimiting:CheckoutOrderPerMinute"] = "30",
+            ["Shop:RateLimiting:PaymentInitiationPerMinute"] = "20",
+            ["Shop:RateLimiting:MaxRequestBodyBytes"] = "524288"
         };
 
         builder.ConfigureAppConfiguration((_, configuration) =>

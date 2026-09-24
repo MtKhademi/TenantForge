@@ -35,7 +35,10 @@ tests/integration/TenantForge.Api.IntegrationTests/
 ```
 
 Shop has **no** `.Contract` project. Its DTOs live beside the feature in
-`features/<area>/<Area>Contracts.cs`.
+`features/<area>/<Area>Contracts.cs`. The B046 rate limiter lives in
+`features/rateLimiting/` (`ShopRateLimitOptions` — public, `Shop:RateLimiting`;
+`ShopRateLimiterHostExtensions` — public host seam `AddShopRateLimiter` /
+`UseShopRequestBodySizeLimit`, plus the `internal` `ShopRateLimitPolicies`).
 
 ## Architecture boundaries
 
@@ -165,6 +168,12 @@ Copy the nearest existing feature in the same module before inventing a shape.
   made the provider required and validated outside Development. Production
   hosts that are not payment tests normally do not call the gateway, but the
   config still passes ZarinPal startup validation.
+- B046: `ApiFactory` also sets explicit `Shop:RateLimiting:*` values (the
+  documented Development defaults) because the rate-limit body-size middleware
+  resolves those options during pipeline setup — a Production host without the
+  section fails before it can serve. Any new hand-built `WebApplicationFactory`
+  in a **Production** environment needs the same five keys (see the known trap
+  about required config keys).
 - Every security-sensitive behavior needs both the happy path and the
   relevant unauthorized/forbidden path.
 - `BuildingBlocksArchitectureTests` and `IamContractArchitectureTests` lock the
@@ -307,7 +316,26 @@ dotnet.exe ef migrations add <Name> \
     `%2B`; tests must percent-encode the value (`Uri.EscapeDataString(...)`)
     before interpolating it, or the `400`/`400-where-200` failure looks like an
     endpoint bug when it is a test URL-construction bug (B042 hit this on its
-    `fromUtc`/`toUtc` filter tests).
+     `fromUtc`/`toUtc` filter tests).
+21. .NET 10 rate-limiting is **policy-per-endpoint**, and its API differs from
+    the .NET 8/9 docs many examples online use: there is no `AddPolicy(name,
+    RateLimitPartition)` overload with a key selector, and no
+    `GetPerKeyFixedWindowLimiter`. Register each named policy with
+    `options.AddPolicy<string>(policyName, httpContext => …)` whose lambda
+    computes the per-request key (e.g. tenant + effective remote IP) and returns
+    `RateLimitPartition.GetFixedWindowLimiter<string>(key, _ => new
+    FixedWindowRateLimiterOptions { … })`; the framework then keeps one
+    fixed-window limiter per distinct key. `OnRejected` is
+    `Func<OnRejectedContext, CancellationToken, ValueTask>` (write the response
+    yourself). Endpoints opt in with `.RequireRateLimiting(policyName)`.
+22. A rate-limit (or any) `IOptions<T>` bound via `services.AddOptions<T>()
+    .Configure<IConfiguration, IHostEnvironment>(…)` runs its `Configure`
+    delegate the **first time `.Value` is read** — and the B046 body-size
+    middleware reads `IOptions<ShopRateLimitOptions>.Value` during pipeline
+    setup, i.e. before the module's `ValidateConfiguration` runs. So a missing
+    Production `Shop:RateLimiting` value surfaces from the options bind, not
+    from the module validation, and every Production test factory needs the
+    section to boot (the failure message still names the missing path).
 
 ## Decisions future tasks must preserve
 

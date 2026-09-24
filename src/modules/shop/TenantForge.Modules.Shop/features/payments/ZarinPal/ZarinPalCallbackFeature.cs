@@ -52,6 +52,7 @@ internal static class ZarinPalCallbackFeature
             string? authority,
             string? status,
             string? state,
+            HttpContext httpContext,
             IShopPaymentGatewayResolver gatewayResolver,
             ShopPaymentCompletionService completionService,
             ZarinPalCallbackStateProtector stateProtector,
@@ -68,6 +69,17 @@ internal static class ZarinPalCallbackFeature
                 "TenantForge.Modules.Shop.Features.Payments.ZarinPal.Callback");
             try
             {
+                // B046: bound the callback's query-string length before any
+                // model-binding work. A query string above the bound is
+                // rejected with a generic 413 — the forged or truncated
+                // state is never parsed, and no request-specific value is
+                // echoed.
+                var queryLength = httpContext.Request.QueryString.Value?.Length ?? 0;
+                if (queryLength > RateLimiting.ShopRateLimitOptions.MaxCallbackQueryLength)
+                {
+                    return CallbackTooLargeProblem();
+                }
+
                 return await HandleCallbackAsync(
                     tenantId, status, state, gatewayResolver, completionService,
                     stateProtector, options, db, timeProvider, logger, ct);
@@ -257,6 +269,17 @@ internal static class ZarinPalCallbackFeature
         title: "Payment not found",
         detail: "No payment was found.",
         statusCode: StatusCodes.Status404NotFound);
+
+    /// <summary>
+    /// B046: the one generic 413 for a callback whose query string exceeds
+    /// the configured bound. It names only the size bound — never the tenant,
+    /// the (forged) state, or any other request value.
+    /// </summary>
+    private static IResult CallbackTooLargeProblem() => Results.Problem(
+        type: "shop_callback_too_large",
+        title: "Callback too large",
+        detail: "The callback request exceeds the permitted size.",
+        statusCode: StatusCodes.Status413PayloadTooLarge);
 }
 
 /// <summary>

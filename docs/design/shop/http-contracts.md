@@ -557,20 +557,61 @@ The redirect carries only route context, outcome and the opaque result token;
 merchant id, amount, card PAN and provider response payload are never echoed to
 the browser.
 
-## S42 / B046 — rate-limit problem
+## S42 / B046 — rate-limit and request-size problems
 
-Sensitive endpoints may return:
+Four anonymous Shop flows are rate-limited by named per-minute policies,
+partitioned by **normalized tenant id + effective remote IP** (the value
+`UseForwardedHeaders` resolved through the configured trusted-proxy allowlist;
+a request not arriving through a trusted proxy is partitioned by its direct
+remote IP, never by a client-supplied `X-Forwarded-For`). Buckets are fixed
+windows with **queue length exactly zero**: once a policy's limit is hit, the
+next request is rejected immediately (never queued or delayed).
+
+| Policy name | Routes it covers |
+| --- | --- |
+| `shop-order-lookup` | `POST /api/shop/{tenantId}/orders/lookup` |
+| `shop-cart-mutation` | cart create / add item / update item / delete item |
+| `shop-checkout-order` | `POST …/checkout/summary` and `POST /api/shop/{tenantId}/orders` |
+| `shop-payment` | `POST …/orders/{orderId}/payments/initiate` |
+
+Not limited: the ZarinPal provider callback (many legitimate callbacks share a
+provider egress IP; B045 already bounds it) and all public catalog reads.
+
+Over-limit responses are the one generic RFC 7807 429 — identical for a valid
+and an invalid input alike, so a caller can never observe which input "really"
+existed. It carries `application/problem+json`, an integer `Retry-After` header
+of `1`, and the matching integer `retryAfter` in the body. The policy name and
+tenant id are logged for operators; the phone number, tracking code, coupon code
+and gateway authority never are.
 
 ```ts
 type RateLimitedProblem = ShopProblem & {
   status: 429
   type: 'shop_rate_limit'
-  retryAfterSeconds: number
+  title: 'Too many requests'
+  detail: string       // one generic, Persian-safe message; names no tenant/cart/order/phone/tracking code
+  retryAfter: number   // integer seconds (1), matching the Retry-After header
 }
 ```
 
-The response also carries integer `Retry-After`. The same public shape is used
-whether a lookup/cart/order input exists or not.
+Request-size bounds reject before any model binding/validation runs. The JSON
+Shop body bound is `Shop:RateLimiting:MaxRequestBodyBytes` (Development default
+512 KiB; the media-upload endpoint's 5 MiB ceiling is a hard maximum); the
+ZarinPal callback query string is capped at 16,000 characters. Both return a
+generic 413 (never echoing the tenant, route or any request value):
+
+```ts
+type RequestTooLargeProblem = ShopProblem & { status: 413; type: 'shop_request_too_large' }
+type CallbackTooLargeProblem = ShopProblem & { status: 413; type: 'shop_callback_too_large' }
+```
+
+Configuration (`Shop:RateLimiting`): `OrderLookupPerMinute` (30),
+`CartMutationPerMinute` (120), `CheckoutOrderPerMinute` (30),
+`PaymentInitiationPerMinute` (20), `MaxRequestBodyBytes` (512 KiB) and optional
+`QueueLength` (defaults 0; a non-zero value is refused at startup). Each
+per-minute value is `1..10000` and the body bound is `1..5 MiB`. In Development
+an absent value falls back to its default; in **Production every value is
+required** and a missing or out-of-range value fails startup (fail closed).
 
 ## Change gate
 

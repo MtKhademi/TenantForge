@@ -738,7 +738,16 @@ internal sealed class ShopZarinPalApiFactory(
         ["Shop:Payments:ZarinPal:GatewayBaseUrl"] = "https://dev.zarinpal.com/payment/",
         ["Shop:Payments:ZarinPal:PublicApiBaseUrl"] = "https://api.tenantforge.local",
         ["Shop:Payments:ZarinPal:FrontendResultBaseUrl"] = "https://frontend.tenantforge.local",
-        ["Shop:Payments:ZarinPal:TimeoutSeconds"] = "10"
+        ["Shop:Payments:ZarinPal:TimeoutSeconds"] = "10",
+        // B046: the rate-limit body-size middleware resolves these options during
+        // pipeline setup, so a Production host (the unsafe-URL factory reuses
+        // this base) must carry them too. Development hosts use them as their
+        // explicit defaults.
+        ["Shop:RateLimiting:OrderLookupPerMinute"] = "30",
+        ["Shop:RateLimiting:CartMutationPerMinute"] = "120",
+        ["Shop:RateLimiting:CheckoutOrderPerMinute"] = "30",
+        ["Shop:RateLimiting:PaymentInitiationPerMinute"] = "20",
+        ["Shop:RateLimiting:MaxRequestBodyBytes"] = "524288"
     };
 
     public new void Dispose()
