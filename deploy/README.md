@@ -1,7 +1,8 @@
 # TenantForge deployment
 
-This follows Oracle's `release-*` workflow: GitHub Actions builds the images,
-streams them over SSH to the same Ubuntu server, and starts Docker Compose.
+This follows Oracle's `release-*` workflow: GitHub Actions builds the app images,
+pulls the PostgreSQL image, streams all three over SSH to the same Ubuntu server,
+and starts Docker Compose. The server does not need to reach Docker Hub.
 There is no registry. Oracle's `oracle` container and port `8580` are untouched.
 TenantForge uses its own Compose project, database volume, media volume and
 Data Protection key volume. This initial deployment is a **private Development
@@ -103,6 +104,12 @@ browser:
 ssh -N -i ~/.ssh/tenantforge_deploy -o IdentitiesOnly=yes \
   -L 127.0.0.1:8581:127.0.0.1:8581 oracle-deploy@45.82.137.126
 ```
+
+The UI is `http://localhost:8581/`, the interactive API documentation is
+`http://localhost:8581/scalar/v1` (Scalar, not Swashbuckle Swagger UI), and the
+OpenAPI JSON is `http://localhost:8581/openapi/v1.json`. All three require the
+tunnel. There is no public `45.82.137.126:8581` URL while the service is bound
+to loopback.
 
 The release workflow waits for the web health check, which in turn checks the
 API. A successful health check confirms the server started; verify sign-in,

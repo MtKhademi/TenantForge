@@ -47,6 +47,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f deploy/Dockerfile.api -t tenantforge-api:ci .
       - run: docker build -f deploy/Dockerfile.web -t tenantforge-web:ci .
+      - run: docker run --rm --add-host api:127.0.0.1 tenantforge-web:ci nginx -t
+      - run: docker pull postgres:16-alpine
 
   deploy:
     if: startsWith(github.ref, 'refs/tags/release-')
@@ -65,6 +67,7 @@ jobs:
         run: |
           docker build -f deploy/Dockerfile.api -t "tenantforge-api:${GITHUB_REF_NAME}" .
           docker build -f deploy/Dockerfile.web -t "tenantforge-web:${GITHUB_REF_NAME}" .
+          docker pull postgres:16-alpine
       - name: Transfer images and deploy
         shell: bash
         env:
@@ -85,7 +88,7 @@ jobs:
               echo 'Server prerequisite missing: readable /opt/tenantforge/tenantforge.env or Docker Compose access'; exit 1;
             }
           scp "${SSH_OPTIONS[@]}" deploy/compose.yml "$TARGET:/opt/tenantforge/compose.yml"
-          docker save "tenantforge-api:${GITHUB_REF_NAME}" "tenantforge-web:${GITHUB_REF_NAME}" | gzip -1 | \
+          docker save "tenantforge-api:${GITHUB_REF_NAME}" "tenantforge-web:${GITHUB_REF_NAME}" postgres:16-alpine | gzip -1 | \
             ssh "${SSH_OPTIONS[@]}" "$TARGET" 'gzip -dc | docker load'
           ssh "${SSH_OPTIONS[@]}" "$TARGET" \
             "cd /opt/tenantforge && TENANTFORGE_IMAGE_TAG=${GITHUB_REF_NAME} docker compose --env-file tenantforge.env -f compose.yml config --quiet && TENANTFORGE_IMAGE_TAG=${GITHUB_REF_NAME} docker compose --env-file tenantforge.env -f compose.yml up -d --wait --wait-timeout 180"
