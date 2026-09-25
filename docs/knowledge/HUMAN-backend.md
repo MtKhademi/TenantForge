@@ -244,7 +244,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet.exe run \
 curl http://localhost:5000/health
 ```
 
-Migrations are applied and the development administrator is seeded at startup.
+Migrations are applied and the development administrator is seeded at startup. The Development settings also include the required Shop cart-cleanup interval, so the background cart-expiry worker can start with the same fail-closed validation the module uses in other environments.
 
 ```bash
 dotnet.exe build TenantForge.sln

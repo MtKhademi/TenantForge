@@ -336,6 +336,12 @@ dotnet.exe ef migrations add <Name> \
     Production `Shop:RateLimiting` value surfaces from the options bind, not
     from the module validation, and every Production test factory needs the
     section to boot (the failure message still names the missing path).
+23. Development app startup uses the repository's real
+    `src/api/TenantForge.Api/appsettings.Development.json`, not the hermetic
+    integration-test config. When Shop adds an always-required activation-time
+    config key (for example `Shop:CartCleanupIntervalSeconds`), update that file
+    as well as test factories or `dotnet.exe run --project src/api/TenantForge.Api`
+    can fail before endpoint mapping even though tests pass.
 
 ## Decisions future tasks must preserve
 
