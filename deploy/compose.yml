@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
     env_file: /opt/tenantforge/tenantforge.env
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       IAM__IamDb: Host=postgres;Port=5432;Database=tenantforge;Username=tenantforge;Password=${TENANTFORGE_DB_PASSWORD}
       Shop__ShopDb: Host=postgres;Port=5432;Database=tenantforge;Username=tenantforge;Password=${TENANTFORGE_DB_PASSWORD}
