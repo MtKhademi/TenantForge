@@ -1,0 +1,12 @@
+.git
+.github
+.opencode
+docs
+tasks
+tests
+**/bin
+**/obj
+**/node_modules
+**/dist
+.local
+*.md
