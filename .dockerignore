@@ -9,4 +9,7 @@ tests
 **/node_modules
 **/dist
 .local
+**/.env*
+**/secrets.json
+**/appsettings.Development.local.json
 *.md
