@@ -5,9 +5,9 @@ pulls the PostgreSQL image, streams all three over SSH to the same Ubuntu server
 and starts Docker Compose. The server does not need to reach Docker Hub.
 There is no registry. Oracle's `oracle` container and port `8580` are untouched.
 TenantForge uses its own Compose project, database volume, media volume and
-Data Protection key volume. This initial deployment is a **private Development
+Data Protection key volume. This initial deployment is a **public Development
 demo** using the Sandbox payment provider. The web service binds
-`127.0.0.1:8581`; it is not exposed to the internet.
+`0.0.0.0:8581` on the server, separate from Oracle's port `8580`.
 
 ## One-time setup
 
@@ -64,8 +64,8 @@ demo** using the Sandbox payment provider. The web service binds
 4. Choose a long random PostgreSQL password, JWT signing key and demo admin
    password. Set all placeholders in the env file. IAM and Shop both connect
    to the same Compose database using `TENANTFORGE_DB_PASSWORD`; PostgreSQL
-   does not expose a host port. Payment simulation is enabled in this private
-   Development environment. Never publish it on a public interface.
+   does not expose a host port. Payment simulation is enabled in this
+   Development test environment.
 5. Optionally create a GitHub **staging** environment if environment policies or
    reviewers are desired. The workflow references this environment; its
    absence is not a substitute for the two repository secrets.
@@ -95,33 +95,30 @@ and start `tenantforge-api` and `tenantforge-web`. `docker compose up` keeps
 the three persistent volumes across releases. Never use `docker compose down -v`
 on this installation.
 
-The deployed site should respond to `curl http://127.0.0.1:8581/health` on
-the server. To browse it privately on your own computer, open an SSH tunnel
-from WSL, leave it running, then open `http://localhost:8581` in the Windows
-browser:
+After this Compose file is deployed, the public test addresses are:
 
-```bash
-ssh -N -i ~/.ssh/tenantforge_deploy -o IdentitiesOnly=yes \
-  -L 127.0.0.1:8581:127.0.0.1:8581 oracle-deploy@45.82.137.126
-```
+| Service | URL |
+| --- | --- |
+| UI | `http://45.82.137.126:8581/` |
+| Interactive API docs (Scalar) | `http://45.82.137.126:8581/scalar/v1` |
+| OpenAPI JSON | `http://45.82.137.126:8581/openapi/v1.json` |
+| Health | `http://45.82.137.126:8581/health` |
 
-The UI is `http://localhost:8581/`, the interactive API documentation is
-`http://localhost:8581/scalar/v1` (Scalar, not Swashbuckle Swagger UI), and the
-OpenAPI JSON is `http://localhost:8581/openapi/v1.json`. All three require the
-tunnel. There is no public `45.82.137.126:8581` URL while the service is bound
-to loopback.
+If the server firewall or hosting provider blocks inbound port `8581`, allow
+TCP `8581` there as well. `TENANTFORGE_BIND_ADDRESS` in an existing env file
+is ignored by this Compose file; the web service publishes on all interfaces.
 
 The release workflow waits for the web health check, which in turn checks the
 API. A successful health check confirms the server started; verify sign-in,
-catalog and sandbox payment separately. Do not change `TENANTFORGE_BIND_ADDRESS`
-to `0.0.0.0` in Development. Public Production deployment is a separate change
-that needs HTTPS, real payment provider configuration and production secrets.
+catalog and sandbox payment separately. This public HTTP binding is for the
+requested test stage; a later Production deployment needs HTTPS, a real payment
+provider and production configuration.
 
 Check the installation from the server:
 
 ```bash
 cd /opt/tenantforge
-TENANTFORGE_IMAGE_TAG=release-1.0.0 docker compose --env-file tenantforge.env -f compose.yml ps
+TENANTFORGE_IMAGE_TAG=release-1.0.2 docker compose --env-file tenantforge.env -f compose.yml ps
 curl --fail http://127.0.0.1:8581/health
 ```
 
