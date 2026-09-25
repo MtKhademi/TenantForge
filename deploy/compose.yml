@@ -36,7 +36,7 @@ services:
     image: tenantforge-web:${TENANTFORGE_IMAGE_TAG:?Set TENANTFORGE_IMAGE_TAG}
     restart: unless-stopped
     ports:
-      - "${TENANTFORGE_BIND_ADDRESS:-127.0.0.1}:${TENANTFORGE_PORT:-8581}:80"
+      - "0.0.0.0:${TENANTFORGE_PORT:-8581}:80"
     depends_on:
       - api
     healthcheck:
