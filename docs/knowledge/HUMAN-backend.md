@@ -111,6 +111,13 @@ contract and the permission catalog contracts.
 - Shop permission keys published through the shared catalog and enforced on
   every tenant-scoped route.
 
+**API reference (host-wide)**
+
+- an interactive API reference in the browser (Scalar) at `/scalar/v1`, fed by
+  the built-in OpenAPI document at `/openapi/v1.json`. The host generates the
+  document from the endpoints the modules register, so it always lists the real
+  routes — nothing is hand-maintained.
+
 Live status for everything else is in `tasks/TASKS.md`.
 
 ## Decisions worth knowing, and why
@@ -243,6 +250,9 @@ ASPNETCORE_ENVIRONMENT=Development dotnet.exe run \
   --project src/api/TenantForge.Api/TenantForge.Api.csproj --urls http://0.0.0.0:5000
 curl http://localhost:5000/health
 ```
+
+Open the API reference in a browser at `http://localhost:5000/scalar/v1` (the
+OpenAPI document itself is at `http://localhost:5000/openapi/v1.json`).
 
 Migrations are applied and the development administrator is seeded at startup. The Development settings also include the required Shop cart-cleanup interval, so the background cart-expiry worker can start with the same fail-closed validation the module uses in other environments.
 
