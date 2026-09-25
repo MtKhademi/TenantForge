@@ -99,13 +99,24 @@ adapter, not rewriting the screen.
    between filter states. It paginates, renders as a table on a wide screen and
    as cards on a phone, and shows the right state for empty, an invalid filter
    (400), no permission (403) and an unreachable request (with retry). The detail
-   shows the order as it was captured at purchase — the item's stored name,
-   variant and price (later product changes do not alter it) — alongside the
-   customer, the shipping address, the totals, and the payment-attempt history
-   limited to the 20 newest attempts. A malformed, missing or other-tenant order
-   id all show the same generic "order not found", and there is deliberately no
-   fulfil or cancel control here yet. This is still backed by the F050 mock
-   (connected in F060).
+    shows the order as it was captured at purchase — the item's stored name,
+    variant and price (later product changes do not alter it) — alongside the
+    customer, the shipping address, the totals, and the payment-attempt history
+    limited to the 20 newest attempts. A malformed, missing or other-tenant order
+    id all show the same generic "order not found". This is still backed by the
+    F050 mock (connected in F060).
+  - shop order operations: on that same order detail, a member who can manage
+    orders sees an "order operations" region. A paid order offers "fulfil the
+    order" and a pending-payment order offers "cancel the order"; both are
+    irreversible, so the button opens a confirmation dialog (fully keyboard-
+    operable, Escape cancels without sending anything) before the action is
+    sent. The status badge only changes after the action really succeeds — the
+    page never shows the new status optimistically — and the order version
+    bumps accordingly. If the order changed in the meantime, a conflict message
+    with a "reload" action appears; if the order is no longer in a state that
+    allows the action, a separate message explains the invalid transition.
+    Members who can only view orders see no action controls at all. This is
+    still backed by the F051 mock (connected in F061).
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -126,8 +137,9 @@ client interface that its mock and later HTTP implementation both satisfy. The
 provider binds one slot per capability — `media` (product galleries),
 `discovery` (the all-products catalog), `categories` (the category hierarchy),
 `profile` (store identity and policies), `cartLease` (cart reservation expiry),
-`coupons` (advanced coupon rules) and `orders` (order review) are bound today,
-each to its mock client.
+`coupons` (advanced coupon rules), `orders` (order review) and
+`orderOperations` (fulfil and cancel an order) are bound today, each to its
+mock client.
 Screens consume `useShopClients()`; connecting a real API later
 replaces exactly one provider slot and never touches the screen. The order list's filter state
 lives in the URL, so a filtered view is refreshable and back/forward-
@@ -173,6 +185,14 @@ the happy path is not considered done.
 **Hiding UI is not security.** Permission-aware navigation exists for clarity;
 the server still rejects the request. The 403 state is implemented and
 reachable.
+
+**Order actions are never optimistic.** Fulfil and cancel change the status
+badge only after the mutation actually succeeds, and each action carries a
+stable idempotency key per order-and-action: repeating the same unchanged
+action reuses the key (so a double click cannot be mistaken for a new attempt),
+while switching to the other action mints a fresh one. A failed action leaves
+the previous status and version untouched and shows the backend's reason
+instead of guessing.
 
 **RTL first, LTR compatible.** Components use logical direction properties, so
 the same primitives work if a left-to-right locale is added later.

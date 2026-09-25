@@ -105,8 +105,9 @@ F056 → `categories`, F057 → `profile`, F058 → `cartLease`, F059 → `coupo
 Bound so far: `media` → `mockShopMediaClient` (F044), `discovery` →
 `mockShopDiscoveryClient` (F045), `categories` → `mockShopCategoryClient`
 (F046), `profile` → `mockShopProfileClient` (F047), `cartLease` →
-`mockShopCartLeaseClient` (F048), `coupons` → `mockShopCouponClient` (F049) and
-`orders` → `mockShopOrdersClient` (F050). Mock Shop scenario controls are
+`mockShopCartLeaseClient` (F048), `coupons` → `mockShopCouponClient` (F049),
+`orders` → `mockShopOrdersClient` (F050) and `orderOperations` →
+`mockShopOrderOperationsClient` (F051). Mock Shop scenario controls are
 development-only and selected through the provider, never by importing fixtures
 into pages. Each capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx`
 that the provider's dev-only `DevScenarioToolbar` loads independently; new
@@ -114,8 +115,8 @@ capabilities add their own switcher and position it so it does not overlap anoth
 switcher's fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
 categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`,
 cartLease: `bottom-[12.25rem] start-4`, coupons: `bottom-[16rem] start-4`,
-orders: `bottom-[19.75rem] start-4`). See
-`docs/design/shop/frontend-contract-boundary.md`.
+orders: `bottom-[19.75rem] start-4`, orderOperations: `bottom-[23.5rem] start-4`).
+See `docs/design/shop/frontend-contract-boundary.md`.
 
 The `orders` slot (B042/F050) feeds the permission-gated admin `OrdersPage`
 (list + URL filters `q`/`status`/`fromUtc`/`toUtc` + pagination, desktop table /
@@ -124,10 +125,28 @@ totals, payment attempts capped at the **20 newest**). Both branch on
 `Shop.Orders.View` via `useTenantPermissions`; a user without the key sees the
 denied panel and the nav item is inert. Filters are **server-shaped**: the URL is
 the source of truth, search is debounced 300 ms, and every filter change is a
-history **push** (not `replace`) so back/forward traverses filter states. No
-fulfil/cancel controls here — those belong to F051. Mock IDs are canonical 13-char
-TSIDs; `mockShopOrdersClient` is seeded only for the demo tenant (see trap 15) so a
-foreign tenant scope 404s like a missing id.
+history **push** (not `replace`) so back/forward traverses filter states. Mock
+IDs are canonical 13-char TSIDs; `mockShopOrdersClient` is seeded only for the
+demo tenant (see trap 15) so a foreign tenant scope 404s like a missing id.
+
+The `orderOperations` slot (B043/F051) owns the fulfil/cancel actions on
+`OrderDetailPage` through `OrderOperationsPanel` and the shared `ConfirmDialog`
+(`components/ui/ConfirmDialog.tsx` — base-ui AlertDialog, `role="alertdialog"`,
+controlled, destructive tone for Cancel). `OrderDetailPage` branches Fulfil/Cancel
+visibility on `Shop.Orders.Manage` (view-only members see NO action controls at
+all, not disabled ones), and offers no action from a terminal status
+(`Fulfilled`/`Cancelled`). The idempotency key is a stable UUID per (order,
+action): a re-click of the same unchanged action reuses it, a different action
+mints a fresh one; a sync `submittingRef` guard blocks a double fire. Status is
+rendered only after the mutation resolves (never optimistic) — the panel re-reads
+through the `orders` slot, whose mock shares the same in-memory `SeedOrder[]`
+via `findSeedOrder`. The 409 `reason` maps to its own visible message
+(`stale_version` offers a re-read; `invalid_order_transition` does not); the
+dev-only `DevOrderOperationsScenarioSwitcher` (sessionStorage
+`tfOrderOperationsScenario`) forces `stale_version` / `invalid_order_transition` /
+unavailable, and a `view-only` evidence pass strips `Shop.Orders.Manage` from
+`/me/permissions` by route interception because no seeded non-owner member
+resolves it.
 
 The `coupons` slot (B041/F049) feeds the admin `CouponsPage` (create/edit/
 deactivate, null-rendered-as-«نامحدود», usage `redeemedCount`/`redemptionLimit`,
