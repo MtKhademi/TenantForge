@@ -59,12 +59,12 @@ jobs:
       - name: Transfer images and deploy
         shell: bash
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
-          SSH_HOST_KEY: ${{ secrets.ORACLE_SSH_HOST_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.TENANTFORGE_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.TENANTFORGE_SSH_HOST_KEY }}
         run: |
           set -euo pipefail
-          test -n "$SSH_PRIVATE_KEY" || { echo 'Missing ORACLE_SSH_PRIVATE_KEY in TenantForge'; exit 1; }
-          test -n "$SSH_HOST_KEY" || { echo 'Missing ORACLE_SSH_HOST_KEY in TenantForge'; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo 'Missing TENANTFORGE_SSH_PRIVATE_KEY'; exit 1; }
+          test -n "$SSH_HOST_KEY" || { echo 'Missing TENANTFORGE_SSH_HOST_KEY'; exit 1; }
           install -m 700 -d "$HOME/.ssh"
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
           printf '%s\n' "$SSH_HOST_KEY" > "$HOME/.ssh/known_hosts"
