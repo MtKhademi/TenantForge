@@ -16,13 +16,14 @@ Data Protection key volume. The web service binds `127.0.0.1:8581` by default.
    ```bash
    install -m 700 -d ~/.ssh
    ssh-keygen -t ed25519 -f ~/.ssh/tenantforge_deploy -C tenantforge-github-actions -N ''
-   ssh-copy-id -i ~/.ssh/tenantforge_deploy.pub oracle-deploy@45.82.137.126
+   ssh-copy-id -i ~/.ssh/tenantforge_deploy.pub \
+     -o IdentityFile="$HOME/.ssh/oracle_deploy" -o IdentitiesOnly=yes \
+     oracle-deploy@45.82.137.126
    ssh -i ~/.ssh/tenantforge_deploy -o IdentitiesOnly=yes oracle-deploy@45.82.137.126 'docker info >/dev/null && echo ready'
    ```
 
-   If the existing Oracle SSH credential is not offered automatically during
-   `ssh-copy-id`, pass `-o IdentityFile=/path/to/existing/oracle/private/key`
-   to that command. `ssh-copy-id` appends the new public key to the deploy
+   This uses the existing `~/.ssh/oracle_deploy` key to authenticate only the
+   one-time public-key installation. `ssh-copy-id` appends the new public key to the deploy
    user's `~/.ssh/authorized_keys` and leaves Oracle's key in place.
 2. In **MtKhademi/TenantForge** repository Actions secrets, set
    `TENANTFORGE_SSH_PRIVATE_KEY` to the **complete contents** of
