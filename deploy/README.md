@@ -87,8 +87,9 @@ exit
 ## Release
 
 Merge the deployment PR to `main` first. Create and push a new tag pointing
-at the tested commit, e.g. `release-1.0.0`. CI runs backend integration tests,
-frontend lint and build; only after they pass does the deploy job build, transfer
+at the tested commit, e.g. `release-1.0.0`. PR CI runs backend integration tests,
+frontend lint/build and both Docker image builds; on the tag the backend/frontend
+checks run again, and only after they pass does the deploy job build, transfer
 and start `tenantforge-api` and `tenantforge-web`. `docker compose up` keeps
 the three persistent volumes across releases. Never use `docker compose down -v`
 on this installation.
