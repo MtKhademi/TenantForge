@@ -105,7 +105,7 @@ public sealed class IamContractArchitectureTests
             .Descendants("ProjectReference")
             .Select(element => element.Attribute("Include")?.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => Path.GetFullPath(Path.Combine(projectDirectory, value!)))
+            .Select(value => Path.GetFullPath(Path.Combine(projectDirectory, value!.Replace('\\', Path.DirectorySeparatorChar))))
             .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace(Path.DirectorySeparatorChar, '/'))
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
