@@ -1,0 +1,52 @@
+name: tenantforge
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tenantforge
+      POSTGRES_USER: tenantforge
+      POSTGRES_PASSWORD: ${TENANTFORGE_DB_PASSWORD:?Set TENANTFORGE_DB_PASSWORD in tenantforge.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenantforge -d tenantforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: tenantforge-api:${TENANTFORGE_IMAGE_TAG:?Set TENANTFORGE_IMAGE_TAG}
+    restart: unless-stopped
+    env_file: /opt/tenantforge/tenantforge.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      IAM__IamDb: Host=postgres;Port=5432;Database=tenantforge;Username=tenantforge;Password=${TENANTFORGE_DB_PASSWORD}
+      Shop__ShopDb: Host=postgres;Port=5432;Database=tenantforge;Username=tenantforge;Password=${TENANTFORGE_DB_PASSWORD}
+      Shop__MediaRoot: /app/data/shop-media
+    volumes:
+      - shop-media:/app/data/shop-media
+      - data-protection-keys:/app/.aspnet/DataProtection-Keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: tenantforge-web:${TENANTFORGE_IMAGE_TAG:?Set TENANTFORGE_IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      - "${TENANTFORGE_BIND_ADDRESS:-127.0.0.1}:${TENANTFORGE_PORT:-8581}:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 15s
+
+volumes:
+  postgres-data:
+  shop-media:
+  data-protection-keys:
