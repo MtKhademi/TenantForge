@@ -19,6 +19,7 @@ Human-facing explanations live in [HUMAN-backend.md](HUMAN-backend.md) and
 | Modules today | `iam`, `shop` |
 | Test project | `tests/integration/TenantForge.Api.IntegrationTests` (xUnit + Testcontainers) |
 | CLI on this machine | `dotnet.exe`, **not** `dotnet` |
+| API docs | Scalar UI at `/scalar/v1`, OpenAPI document at `/openapi/v1.json` (host-only; `AddOpenApi` + `MapOpenApi` + `MapScalarApiReference` in `Program.cs`) |
 
 ## Layout
 

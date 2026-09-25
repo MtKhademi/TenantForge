@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.HttpOverrides;
+using Scalar.AspNetCore;
 using TenantForge.Api;
 using TenantForge.BuildingBlocks.Permissions;
 using TenantForge.Modules.Iam;
@@ -45,6 +46,10 @@ builder.Services.AddShopRateLimiter();
 builder.Services.Configure<ForwardedHeadersOptions>(
     builder.Configuration.GetSection("ForwardedHeaders"));
 
+// API documentation. The official OpenAPI document generator (replaces the
+// deprecated Swashbuckle generator) plus the Scalar interactive reference UI.
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
 
 // B046: the first middleware in the pipeline. Runs before UseCors so that the
@@ -79,6 +84,12 @@ await app.UseIamModuleAsync();
 await app.UseShopModuleAsync();
 
 app.MapHealth();
+
+// API documentation. The built-in OpenAPI document (the route Scalar reads)
+// and the Scalar interactive reference UI. Both mapped last so every IAM,
+// Shop and health route is already registered when the document is generated.
+app.MapOpenApi("openapi/v1.json");
+app.MapScalarApiReference();
 
 app.Run();
 
