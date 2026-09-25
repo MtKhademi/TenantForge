@@ -16,15 +16,18 @@ Data Protection key volume. The web service binds `127.0.0.1:8581` by default.
    ```bash
    install -m 700 -d ~/.ssh
    ssh-keygen -t ed25519 -f ~/.ssh/tenantforge_deploy -C tenantforge-github-actions -N ''
-   ssh-copy-id -i ~/.ssh/tenantforge_deploy.pub \
-     -o IdentityFile="$HOME/.ssh/oracle_deploy" -o IdentitiesOnly=yes \
-     oracle-deploy@45.82.137.126
+   ssh -i ~/.ssh/oracle_deploy -o IdentitiesOnly=yes \
+     oracle-deploy@45.82.137.126 \
+     'umask 077; mkdir -p ~/.ssh; read -r key; grep -qxF "$key" ~/.ssh/authorized_keys 2>/dev/null || printf "%s\n" "$key" >> ~/.ssh/authorized_keys' \
+     < ~/.ssh/tenantforge_deploy.pub
    ssh -i ~/.ssh/tenantforge_deploy -o IdentitiesOnly=yes oracle-deploy@45.82.137.126 'docker info >/dev/null && echo ready'
    ```
 
    This uses the existing `~/.ssh/oracle_deploy` key to authenticate only the
-   one-time public-key installation. `ssh-copy-id` appends the new public key to the deploy
-   user's `~/.ssh/authorized_keys` and leaves Oracle's key in place.
+   one-time public-key installation. It adds the new public key to the deploy
+   user's `~/.ssh/authorized_keys` if absent and leaves Oracle's key in place.
+   Do not use `ssh-copy-id` with `IdentityFile=oracle_deploy` here: its
+   already-installed check may succeed with the old key and skip the new one.
 2. In **MtKhademi/TenantForge** repository Actions secrets, set
    `TENANTFORGE_SSH_PRIVATE_KEY` to the **complete contents** of
    `~/.ssh/tenantforge_deploy` (including BEGIN/END lines). For
@@ -36,7 +39,7 @@ Data Protection key volume. The web service binds `127.0.0.1:8581` by default.
    ```bash
    ssh-keyscan -t ed25519 45.82.137.126 2>/dev/null > ~/.ssh/tenantforge_host_key
    ssh-keygen -lf ~/.ssh/tenantforge_host_key
-   ssh oracle-deploy@45.82.137.126 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub'
+   ssh -i ~/.ssh/oracle_deploy -o IdentitiesOnly=yes oracle-deploy@45.82.137.126 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub'
    ```
 
    To set both secrets without printing the private key in a terminal, use
