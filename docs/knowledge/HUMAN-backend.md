@@ -116,7 +116,9 @@ contract and the permission catalog contracts.
 - an interactive API reference in the browser (Scalar) at `/scalar/v1`, fed by
   the built-in OpenAPI document at `/openapi/v1.json`. The host generates the
   document from the endpoints the modules register, so it always lists the real
-  routes — nothing is hand-maintained.
+  routes — nothing is hand-maintained. The reference is grouped per module
+  (IAM, Shop, Host): the host tags every operation with its owning module by
+  its path, so the sidebar is browsable instead of one flat list.
 
 Live status for everything else is in `tasks/TASKS.md`.
 
