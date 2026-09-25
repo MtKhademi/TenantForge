@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using TenantForge.Api;
 using TenantForge.BuildingBlocks.Permissions;
@@ -48,7 +49,27 @@ builder.Services.Configure<ForwardedHeadersOptions>(
 
 // API documentation. The official OpenAPI document generator (replaces the
 // deprecated Swashbuckle generator) plus the Scalar interactive reference UI.
-builder.Services.AddOpenApi();
+// One document transformer groups every operation under its owning module
+// (IAM / Shop / Host) by its path, so the reference is browsable per module
+// instead of as one flat list. This is a presentation concern owned by the
+// host — it reads the real registered paths and never touches module code.
+builder.Services.AddOpenApi(options =>
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        foreach (var (path, item) in document.Paths)
+        {
+            var module = ModuleTagForPath(path);
+            foreach (var operation in item.Operations.Values)
+            {
+                // Replace the generator's default tag so each operation is
+                // grouped under exactly one module.
+                operation.Tags =
+                    new HashSet<OpenApiTagReference> { new(module, document, null) };
+            }
+        }
+
+        return Task.CompletedTask;
+    }));
 
 var app = builder.Build();
 
@@ -92,5 +113,15 @@ app.MapOpenApi("openapi/v1.json");
 app.MapScalarApiReference();
 
 app.Run();
+
+// Maps a registered route path to the module tag shown in the API reference.
+// A path carrying a "/shop" segment is Shop (both the public
+// "/api/shop/{tenantId}/..." prefix and the tenant-scoped admin
+// "/api/tenants/{tenantId}/shop/..." prefix); "/health" is the host; every
+// other route belongs to IAM.
+static string ModuleTagForPath(string path) =>
+    path.Contains("/shop", StringComparison.Ordinal) ? "Shop"
+        : path is "/health" ? "Host"
+            : "IAM";
 
 public partial class Program;
