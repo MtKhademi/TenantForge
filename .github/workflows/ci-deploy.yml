@@ -43,7 +43,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/release-')
     needs: [backend, frontend]
     runs-on: ubuntu-latest
-    environment: production
+    environment: staging
     steps:
       - uses: actions/checkout@v4
       - name: Validate release tag
