@@ -148,8 +148,13 @@ const PRODUCT_SNAPSHOTS = [
 const ANCHOR_CREATED_UTC = Date.parse('2026-09-20T09:00:00.000Z')
 const STEP_MS = 2 * 24 * 60 * 60 * 1000
 
-/** A full, non-paginated order record the mock seeds (not a wire type). */
-interface SeedOrder {
+/**
+ * A full, non-paginated order record the mock seeds (not a wire type).
+ * Exported so `mockShopOrderOperationsClient` (F051) can read and write the
+ * SAME records — a successful status change mutates this in place and is
+ * therefore visible the next time `orders.get` reads it.
+ */
+export interface SeedOrder {
   id: string
   orderNumber: string
   trackingCode: string
@@ -236,6 +241,20 @@ function cappedAttempts(orderId: string, createdAtUtc: string) {
 /** In-memory store: one order list per tenant, lazily seeded per scenario. */
 const storeByTenant = new Map<string, SeedOrder[]>()
 const seededFor = new Map<string, ShopOrdersScenarioKey>()
+
+/**
+ * Shared read access for the order-operations mock (F051). Resolves the
+ * tenant's seeded order list (tenant-isolated, scenario-aware — same rules as
+ * `getOrSeed`) and returns the mutable record for `orderId`, or `undefined`
+ * when the id is malformed, missing or belongs to another tenant. The
+ * operations mock mutates this record in place, so the change is visible to a
+ * subsequent `orders.get` call without a second data source.
+ */
+export function findSeedOrder(tenantId: string, orderId: string): SeedOrder | undefined {
+  const orders = getOrSeed(tenantId)
+  if (isMalformedId(orderId)) return undefined
+  return orders.find((order) => order.id === orderId)
+}
 
 function getOrSeed(tenantId: string): SeedOrder[] {
   // Tenant isolation: only the demo tenant is seeded. A foreign tenant scope

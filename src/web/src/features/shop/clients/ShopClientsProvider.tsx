@@ -3,6 +3,7 @@ import { mockShopCartLeaseClient } from './mockShopCartLeaseClient'
 import { mockShopCategoryClient } from './mockShopCategoryClient'
 import { mockShopCouponClient } from './mockShopCouponClient'
 import { mockShopDiscoveryClient } from './mockShopDiscoveryClient'
+import { mockShopOrderOperationsClient } from './mockShopOrderOperationsClient'
 import { mockShopOrdersClient } from './mockShopOrdersClient'
 import { mockShopMediaClient } from './mockShopMediaClient'
 import { mockShopProfileClient } from './mockShopProfileClient'
@@ -10,6 +11,7 @@ import type { ShopCartLeaseClient } from './ShopCartLeaseClient'
 import type { ShopCategoryClient } from './ShopCategoryClient'
 import type { ShopCouponClient } from './ShopCouponClient'
 import type { ShopDiscoveryClient } from './ShopDiscoveryClient'
+import type { ShopOrderOperationsClient } from './ShopOrderOperationsClient'
 import type { ShopOrdersClient } from './ShopOrdersClient'
 import type { ShopMediaClient } from './ShopMediaClient'
 import type { ShopProfileClient } from './ShopProfileClient'
@@ -27,7 +29,7 @@ export type ShopClients = {
   cartLease: ShopCartLeaseClient // F048 mock -> F058 HTTP
   coupons: ShopCouponClient // F049 mock -> F059 HTTP
   orders: ShopOrdersClient // F050 mock -> F060 HTTP
-  // F051 adds:  orderOperations: ShopOrderOperationsClient -> F061 HTTP
+  orderOperations: ShopOrderOperationsClient // F051 mock -> F061 HTTP
   // F052 adds:  payments: ShopPaymentsClient          -> F062 HTTP
 }
 
@@ -40,6 +42,7 @@ export function createShopClients(): ShopClients {
     cartLease: mockShopCartLeaseClient,
     coupons: mockShopCouponClient,
     orders: mockShopOrdersClient,
+    orderOperations: mockShopOrderOperationsClient,
   }
 }
 
@@ -80,6 +83,7 @@ function DevScenarioToolbar() {
   const [CartLeaseSwitcher, setCartLeaseSwitcher] = useState<ComponentType | null>(null)
   const [CouponSwitcher, setCouponSwitcher] = useState<ComponentType | null>(null)
   const [OrdersSwitcher, setOrdersSwitcher] = useState<ComponentType | null>(null)
+  const [OrderOperationsSwitcher, setOrderOperationsSwitcher] = useState<ComponentType | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -104,6 +108,9 @@ function DevScenarioToolbar() {
     void import('../DevOrdersScenarioSwitcher').then((module) => {
       if (!cancelled) setOrdersSwitcher(() => module.DevOrdersScenarioSwitcher)
     })
+    void import('../DevOrderOperationsScenarioSwitcher').then((module) => {
+      if (!cancelled) setOrderOperationsSwitcher(() => module.DevOrderOperationsScenarioSwitcher)
+    })
     return () => {
       cancelled = true
     }
@@ -118,6 +125,7 @@ function DevScenarioToolbar() {
       {CartLeaseSwitcher ? <CartLeaseSwitcher /> : null}
       {CouponSwitcher ? <CouponSwitcher /> : null}
       {OrdersSwitcher ? <OrdersSwitcher /> : null}
+      {OrderOperationsSwitcher ? <OrderOperationsSwitcher /> : null}
     </>
   )
 }

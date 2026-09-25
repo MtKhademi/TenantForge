@@ -5,42 +5,66 @@ import {
   ChevronLeft,
   Lock,
   MapPin,
+  PackageCheck,
   PackageOpen,
   Receipt,
   RefreshCw,
   TriangleAlert,
   Wallet,
+  XCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DashboardShell } from '@/components/shell/DashboardShell'
-import { SecondaryButton } from '@/components/ui/Button'
+import { Button, SecondaryButton } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { StatePanel } from '@/components/ui/StatePanel'
 import { ApiUnavailableError, SessionExpiredError } from '@/features/auth/authTypes'
 import { useAuth } from '@/features/auth/AuthContext'
 import type { AdminOrderDetail } from '@/features/shop/contracts/adminOrdersContract'
+import type {
+  ChangeOrderStatusRequest,
+  OrderStatusAction,
+  PendingOrderAction,
+} from '@/features/shop/contracts/orderOperationsContract'
 import { ShopClientError } from '@/features/shop/contracts/shopContract'
 import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
-import { SHOP_ORDERS_VIEW_KEY } from '@/features/roles/roleTypes'
+import { SHOP_ORDERS_MANAGE_KEY, SHOP_ORDERS_VIEW_KEY } from '@/features/roles/roleTypes'
 import { useTenantPermissions } from '@/features/roles/tenantPermissions'
 import { cn } from '@/lib/utils'
 import { OrderStatusBadge } from './OrderStatusBadge'
 
 /**
- * S38 (F050): the permission-gated, read-only admin order detail. Consumes the
- * `orders` client slot (`useShopClients()`) — it never imports fixtures and
- * never calls `fetch`.
+ * S38 (F050) + S39 (F051): the permission-gated admin order detail. Consumes
+ * the `orders` and `orderOperations` client slots (`useShopClients()`) — it
+ * never imports fixtures and never calls `fetch`.
  *
  * Every value shown is the order's frozen snapshot (the stored item
  * name/price/variant, customer and address) — never a live join to the current
  * product or customer data. The payment-attempt history is bounded to the 20
  * newest (B042's temporary cap), so the list never grows without bound.
  *
- * This task is read-only: there are NO fulfil/cancel controls here — those
- * belong to F051. States: loading (fixed-footprint skeleton, no layout shift),
- * success, `403`/permission-denied, a non-leaking `404` (malformed, missing or
+ * F051 adds the two irreversible status operations, each behind a confirmation
+ * dialog that names the action as irreversible:
+ * - a `Paid` order offers **Fulfill** (`Paid -> Fulfilled`);
+ * - a `PendingPayment` order offers **Cancel** (`PendingPayment -> Cancelled`);
+ * - the controls are HIDDEN entirely (not disabled) for a member without
+ *   `Shop.Orders.Manage`, and no action exists from a terminal status;
+ * - the new status is rendered only AFTER `orderOperations.changeStatus`
+ *   resolves with the committed detail — never optimistically on click;
+ * - a per-attempt UUID idempotency key is issued once per confirmed action and
+ *   reused only if the SAME unchanged action is retried (e.g. the network
+ *   dropped after the server committed); a different action always gets a
+ *   fresh key, so a key is never reused across two actions;
+ * - the two distinct `409` reasons (`stale_version`, `invalid_order_transition`)
+ *   and the transport/`403`/`404` outcomes each render their own message; a
+ *   stale-version conflict offers "refresh" to re-read the order from the
+ *   `orders` slot. A superseded/aborted mutation never surfaces as an error.
+ *
+ * Read states: loading (fixed-footprint skeleton, no layout shift), success,
+ * `403`/permission-denied, a non-leaking `404` (malformed, missing or
  * other-tenant order id all render the same generic not-found), and unavailable
  * (retryable). A superseded request never lands.
  */
@@ -48,12 +72,49 @@ import { OrderStatusBadge } from './OrderStatusBadge'
 /** B042's temporary cap on the payment-attempt history (newest first). */
 const PAYMENT_ATTEMPT_CAP = 20
 
+/**
+ * The distinct, visible failure an order-status operation can surface. Each
+ * `kind` maps to its own message and recovery. The two `409` reasons the
+ * capability names (`stale_version`, `invalid_order_transition`) are kept
+ * apart — a stale version offers "refresh" (re-read the order), an invalid
+ * transition does not. `unavailable` is the transport failure (retry the same
+ * attempt); `forbidden`/`notFound` mirror the read path's 403/404.
+ *
+ * `idempotency_key_conflict` is a real B043 code but is NOT reachable through
+ * this UI (the idempotency key is stable per (order, action), so the same key
+ * is never sent with a different action). It is handled defensively and folded
+ * into the invalid-transition message rather than given its own invented state.
+ */
+type OrderActionFailure =
+  | { kind: 'stale_version' }
+  | { kind: 'invalid_transition' }
+  | { kind: 'forbidden' }
+  | { kind: 'notFound' }
+  | { kind: 'unavailable' }
+
+/** The two legal operator actions, with their confirmation copy (Persian). */
+const ACTION_COPY: Record<OrderStatusAction, { title: string; confirmLabel: string; description: string }> = {
+  Fulfill: {
+    title: 'تایید تحویل سفارش',
+    confirmLabel: 'تحویل سفارش',
+    description:
+      'این عملیات غیرقابل بازگشت است. وضعیت سفارش از «پرداخت‌شده» به «تحویل‌شده» تغییر می‌کند و نسخهٔ سفارش یک مرتبه ارتقا می‌یابد.',
+  },
+  Cancel: {
+    title: 'تایید لغو سفارش',
+    confirmLabel: 'لغو سفارش',
+    description:
+      'این عملیات غیرقابل بازگشت است. وضعیت سفارش از «در انتظار پرداخت» به «لغو‌شده» تغییر می‌کند و نسخهٔ سفارش یک مرتبه ارتقا می‌یابد.',
+  },
+}
+
 export function OrderDetailPage() {
   const { tenantId = '', orderId = '' } = useParams<{ tenantId: string; orderId: string }>()
-  const { orders } = useShopClients()
+  const { orders, orderOperations } = useShopClients()
   const { session, signOut } = useAuth()
   const { permissions, isResolving } = useTenantPermissions(tenantId || undefined)
   const canView = permissions?.has(SHOP_ORDERS_VIEW_KEY) ?? false
+  const canManage = permissions?.has(SHOP_ORDERS_MANAGE_KEY) ?? false
 
   const [reloadKey, setReloadKey] = useState(0)
   const [detail, setDetail] = useState<AdminOrderDetail | null>(null)
@@ -63,6 +124,31 @@ export function OrderDetailPage() {
   const lastGoodRef = useRef<AdminOrderDetail | null>(null)
   const hasPreviousData = lastGoodRef.current !== null
   const controllerRef = useRef<AbortController | null>(null)
+
+  // --- F051 status-operation (fulfil / cancel) state ---------------------------
+  // `pendingAction` is the single confirmed-but-unresolved action. It is set
+  // exactly once when the user confirms in the dialog and carries that attempt's
+  // idempotency key + body. While it is non-null the dialog is closed, the
+  // trigger buttons are locked, and a duplicate click cannot start a second
+  // mutation. On a retryable failure the SAME key/body is reused; on success or
+  // an irreversible conflict it is cleared and the control re-derives from the
+  // (re-read) status, which then offers the OTHER action a fresh key.
+  const [pendingAction, setPendingAction] = useState<PendingOrderAction | null>(null)
+  const [confirmAction, setConfirmAction] = useState<OrderStatusAction | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [actionFailure, setActionFailure] = useState<OrderActionFailure | null>(null)
+  const [actionSucceeded, setActionSucceeded] = useState(false)
+
+  const mutationControllerRef = useRef<AbortController | null>(null)
+  // Synchronous double-fire guard: `isSubmitting` is React state (async to
+  // reflect), so a rapid second confirm within one frame is stopped here —
+  // combined with the in-flight dialog lock, at most one mutation ever runs.
+  const submittingRef = useRef(false)
+  // Stable idempotency key per (order, action): a retried, unchanged action
+  // reuses its key (the server replays or re-runs the SAME attempt), while a
+  // different action always receives a fresh one — a key is never reused across
+  // two actions. Only set once, when the action is first confirmed.
+  const idempotencyKeysRef = useRef<Map<OrderStatusAction, string>>(new Map())
 
   const signOutRef = useRef(signOut)
   useEffect(() => {
@@ -123,6 +209,126 @@ export function OrderDetailPage() {
     setReloadKey((key) => key + 1)
   }
 
+  // --- F051 status-operation (fulfil / cancel) --------------------------------
+  // Leave the mutation untouched when the route (a different order, or another
+  // tenant) changes: the pending action's key/body belong to the previous order,
+  // so it must never leak into the next one.
+  useEffect(() => {
+    submittingRef.current = false
+    mutationControllerRef.current?.abort()
+    setPendingAction(null)
+    setConfirmAction(null)
+    setIsSubmitting(false)
+    setActionFailure(null)
+    setActionSucceeded(false)
+    idempotencyKeysRef.current = new Map()
+  }, [orderId, tenantId])
+
+  // Abort an in-flight mutation when the page unmounts, so a superseded request
+  // never lands stale state and never surfaces as an error.
+  useEffect(() => () => mutationControllerRef.current?.abort(), [])
+
+  /** Stable per (order, action) — issued once, reused only for the same action. */
+  function idempotencyKeyFor(action: OrderStatusAction): string {
+    const existing = idempotencyKeysRef.current.get(action)
+    if (existing !== undefined) return existing
+    const key = crypto.randomUUID()
+    idempotencyKeysRef.current.set(action, key)
+    return key
+  }
+
+  /**
+   * Opens the confirmation dialog and fixes the attempt's idempotency key + body
+   * (`pendingAction`). `expectedVersion` is the order's version as last read, so
+   * a concurrent edit surfaces as a `stale_version` rather than a silent overwrite.
+   */
+  function openConfirm(action: OrderStatusAction) {
+    if (isSubmitting || actionFailure !== null || confirmAction !== null) return
+    if (detail === null) return
+    mutationControllerRef.current?.abort()
+    const body: ChangeOrderStatusRequest = { action, expectedVersion: detail.version }
+    setPendingAction({ idempotencyKey: idempotencyKeyFor(action), orderId, body })
+    setConfirmAction(action)
+  }
+
+  /** Fires exactly one mutation for the confirmed `pendingAction`. */
+  function runPending() {
+    const pending = pendingAction
+    // Synchronous double-fire guard (state is async); the in-flight dialog also
+    // locks, so a duplicate confirm within one frame cannot start a 2nd mutation.
+    if (pending === null || submittingRef.current) return
+    if (pending.orderId !== orderId) return
+    // A re-confirm of the SAME unchanged action reuses the stored key (the
+    // server replays it, no second mutation); a different action already carries
+    // its own fresh key, so a key never crosses two actions.
+    const key = idempotencyKeysRef.current.get(pending.body.action) ?? pending.idempotencyKey
+
+    submittingRef.current = true
+    const controller = new AbortController()
+    mutationControllerRef.current = controller
+    setIsSubmitting(true)
+    setActionFailure(null)
+    setActionSucceeded(false)
+
+    orderOperations
+      .changeStatus(tenantId, orderId, pending.body, key, controller.signal)
+      .then((committed) => {
+        if (controller.signal.aborted) return
+        setPendingAction(null)
+        setConfirmAction(null)
+        setActionSucceeded(true)
+        // Render the new status only AFTER the committed detail comes back.
+        lastGoodRef.current = committed
+        setDetail(committed)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        if (error instanceof SessionExpiredError) {
+          setConfirmAction(null)
+          setPendingAction(null)
+          void signOutRef.current()
+          return
+        }
+        setConfirmAction(null)
+        if (error instanceof ApiUnavailableError) {
+          // Transport failure: keep the SAME key/body so "تلاش دوباره" is a
+          // safe idempotent retry of this exact attempt.
+          setActionFailure({ kind: 'unavailable' })
+          return
+        }
+        if (error instanceof ShopClientError) {
+          const { status, type } = error.problem
+          if (status === 409 && type === 'stale_version') {
+            setActionFailure({ kind: 'stale_version' })
+            setPendingAction(null)
+          } else if (status === 409) {
+            // `invalid_order_transition` and the (UI-unreachable)
+            // `idempotency_key_conflict` — both "the move is not legal", one
+            // message, no retry.
+            setActionFailure({ kind: 'invalid_transition' })
+            setPendingAction(null)
+          } else if (status === 403) {
+            setActionFailure({ kind: 'forbidden' })
+            setPendingAction(null)
+          } else if (status === 404) {
+            setActionFailure({ kind: 'notFound' })
+            setPendingAction(null)
+          } else {
+            setActionFailure({ kind: 'unavailable' })
+          }
+          return
+        }
+        setActionFailure({ kind: 'unavailable' })
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          submittingRef.current = false
+          setIsSubmitting(false)
+        }
+      })
+  }
+
   if (isResolving) return <DetailResolving />
   if (!canView) return <DetailDenied />
 
@@ -168,12 +374,219 @@ export function OrderDetailPage() {
 
         {failure === null && (
           <div className={cn(isBusy && hasPreviousData && 'opacity-60 transition-opacity')}>
-            {shown === null ? <DetailSkeleton /> : <DetailContent order={shown} />}
+            {shown === null ? (
+              <DetailSkeleton />
+            ) : (
+              <div className="space-y-6">
+                <OrderOperationsPanel
+                  order={shown}
+                  canManage={canManage}
+                  actionSucceeded={actionSucceeded}
+                  actionFailure={actionFailure}
+                  isSubmitting={isSubmitting}
+                  onOpenConfirm={openConfirm}
+                  onRetryAction={() => setReloadKey((k) => k + 1)}
+                  onRetryMutation={runPending}
+                />
+                <DetailContent order={shown} />
+              </div>
+            )}
           </div>
         )}
+
+        <ConfirmDialog
+          open={confirmAction !== null}
+          onOpenChange={(next) => {
+            if (!next && !isSubmitting) setConfirmAction(null)
+          }}
+          title={confirmAction ? ACTION_COPY[confirmAction].title : ''}
+          description={confirmAction ? ACTION_COPY[confirmAction].description : ''}
+          confirmLabel={confirmAction ? ACTION_COPY[confirmAction].confirmLabel : ''}
+          tone={confirmAction === 'Cancel' ? 'destructive' : 'default'}
+          isConfirming={isSubmitting}
+          onConfirm={runPending}
+        />
       </section>
     </DashboardShell>
   )
+}
+
+/**
+ * The fulfil/cancel region for a detail page. It is the ONLY place the
+ * `Shop.Orders.Manage` branch is decided: a View-only member sees nothing here
+ * (not disabled buttons) — the `canManage` flag simply renders an empty
+ * fragment, so the controls are absent from the DOM, not merely hidden.
+ */
+function OrderOperationsPanel({
+  order,
+  canManage,
+  actionSucceeded,
+  actionFailure,
+  isSubmitting,
+  onOpenConfirm,
+  onRetryAction,
+  onRetryMutation,
+}: {
+  order: AdminOrderDetail
+  canManage: boolean
+  actionSucceeded: boolean
+  actionFailure: OrderActionFailure | null
+  isSubmitting: boolean
+  onOpenConfirm: (action: OrderStatusAction) => void
+  onRetryAction: () => void
+  onRetryMutation: () => void
+}) {
+  if (!canManage) return null
+
+  const action = availableActionForPanel(order.status)
+
+  return (
+    <div className="space-y-3" role="region" aria-label="عملیات سفارش">
+      {actionSucceeded && !actionFailure && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-success/30 bg-success/10 p-4 text-sm"
+        >
+          <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
+            <PackageCheck aria-hidden="true" className="size-4" />
+          </span>
+          <div>
+            <p className="font-semibold text-foreground">وضعیت سفارش به‌روزرسانی شد.</p>
+            <p className="mt-0.5 text-muted-foreground">
+              تغییر با موفقیت اعمال و نسخهٔ سفارش ارتقا یافت.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {actionFailure !== null && (
+        <OrderActionFailurePanel
+          failure={actionFailure}
+          onRetry={
+            actionFailure.kind === 'stale_version'
+              ? onRetryAction
+              : actionFailure.kind === 'unavailable'
+                ? onRetryMutation
+                : undefined
+          }
+          retryLabel={
+            actionFailure.kind === 'stale_version'
+              ? 'به‌روزرسانی سفارش'
+              : actionFailure.kind === 'unavailable'
+                ? 'تلاش دوباره'
+                : undefined
+          }
+        />
+      )}
+
+      {action !== null && !isSubmitting && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-4 shadow-soft">
+          <p className="text-sm font-medium text-foreground">عملیات روی این سفارش:</p>
+          {action === 'Fulfill' && (
+            <Button type="button" onClick={() => onOpenConfirm('Fulfill')}>
+              <PackageCheck aria-hidden="true" className="me-2 size-4" />
+              تحویل سفارش
+            </Button>
+          )}
+          {action === 'Cancel' && (
+            <Button
+              type="button"
+              className="bg-destructive hover:brightness-110"
+              onClick={() => onOpenConfirm('Cancel')}
+            >
+              <XCircle aria-hidden="true" className="me-2 size-4" />
+              لغو سفارش
+            </Button>
+          )}
+        </div>
+      )}
+
+      {isSubmitting && (
+        <div
+          role="status"
+          aria-busy="true"
+          className="flex items-center gap-2 rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground shadow-soft"
+        >
+          <RefreshCw aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+          در حال ثبت تغییر وضعیت…
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Derives the action for the panel (kept separate so the page component stays lean). */
+function availableActionForPanel(status: AdminOrderDetail['status']): OrderStatusAction | null {
+  if (status === 'Paid') return 'Fulfill'
+  if (status === 'PendingPayment') return 'Cancel'
+  return null
+}
+
+function OrderActionFailurePanel({
+  failure,
+  onRetry,
+  retryLabel,
+}: {
+  failure: OrderActionFailure
+  /** Provided only for the recoverable kinds (stale version, transport). */
+  onRetry?: () => void
+  retryLabel?: string
+}) {
+  const meta = ACTION_FAILURE_META[failure.kind]
+  return (
+    <div
+      role="alert"
+      className="flex flex-start items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm"
+    >
+      <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
+        <TriangleAlert aria-hidden="true" className="size-4" />
+      </span>
+      <div className="space-y-1">
+        <p className="font-semibold text-foreground">{meta.title}</p>
+        <p className="text-muted-foreground">{meta.description}</p>
+        {onRetry !== undefined && (
+          <SecondaryButton type="button" className="mt-2 min-w-32" onClick={onRetry}>
+            <RefreshCw aria-hidden="true" className="me-2 size-4" />
+            {retryLabel}
+          </SecondaryButton>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The exact, distinct messages per `409` reason (and the other states). Each
+ * reason is named and its recovery differs: stale version → refresh; invalid
+ * transition → nothing to retry; transport → retry the same attempt.
+ */
+const ACTION_FAILURE_META: Record<
+  OrderActionFailure['kind'],
+  { title: string; description: string }
+> = {
+  stale_version: {
+    title: 'نسخهٔ سفارش منقضی شده است',
+    description:
+      'پیش از اعمال این درخواست، سفارش تغییر کرده است. ابتدا سفارش را به‌روزرسانی کنید و دوباره عملیات را تکرار کنید.',
+  },
+  invalid_transition: {
+    title: 'این تغییر وضعیت مجاز نیست',
+    description:
+      'وضعیت فعلی سفارش با عملیات انتخابی سازگار نیست؛ این گذار در وضعیت موجود قابل انجام نیست.',
+  },
+  forbidden: {
+    title: 'تغییر وضعیت سفارش مجاز نیست',
+    description:
+      'حساب فعلی مجوز مدیریت وضعیت سفارش‌های این مستأجر را ندارد. سرور این درخواست را رد کرده است.',
+  },
+  notFound: {
+    title: 'این سفارش پیدا نشد',
+    description: 'سفارشی با این شناسه در دسترس نیست یا دیگر وجود ندارد.',
+  },
+  unavailable: {
+    title: 'درخواست ارسال نشد',
+    description: 'اتصال قطع شد و این عملیات ثبت نشد. دوباره تلاش کنید تا همان درخواست بازمحاوه شود.',
+  },
 }
 
 function DetailContent({ order }: { order: AdminOrderDetail }) {
