@@ -39,6 +39,15 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+  docker-build:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f deploy/Dockerfile.api -t tenantforge-api:ci .
+      - run: docker build -f deploy/Dockerfile.web -t tenantforge-web:ci .
+
   deploy:
     if: startsWith(github.ref, 'refs/tags/release-')
     needs: [backend, frontend]
