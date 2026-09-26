@@ -170,6 +170,7 @@ export function ProductGalleryEditor({
                     busy={isBusy}
                     onMove={handleMove}
                     onRemove={handleRemove}
+                    protectedSource={{ tenantId, productId }}
                   />
                 ))}
               </div>
@@ -237,6 +238,7 @@ function GalleryTile({
   busy,
   onMove,
   onRemove,
+  protectedSource,
 }: {
   image: ProductImage
   index: number
@@ -244,11 +246,13 @@ function GalleryTile({
   busy: boolean
   onMove: (imageId: string, direction: 'earlier' | 'later') => void
   onRemove: (imageId: string) => void
+  /** Admin gallery tiles load bytes through the protected (authenticated) route. */
+  protectedSource?: { tenantId: string; productId: string }
 }) {
   return (
     <article className={cn('relative rounded-lg border border-border bg-background p-2', index === 0 && 'ring-2 ring-primary ring-offset-2 ring-offset-surface')}>
       {index === 0 && <span className="absolute -top-2 start-2 z-10 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">اصلی</span>}
-      <ProductMediaImage image={image} className="aspect-square rounded-md" />
+      <ProductMediaImage image={image} protected={protectedSource} className="aspect-square rounded-md" />
       <p className="mt-2 truncate text-xs text-muted-foreground">{image.altText || 'بدون متن جایگزین'}</p>
       <div className="mt-2 flex items-center justify-between gap-1">
         <div className="flex gap-1">

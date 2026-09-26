@@ -86,7 +86,7 @@ one valid Spec link.
 | F051 | S39 | Build contract-shaped fulfil and cancel mocks | done | F050 | — |
 | F052 | S40 | Build contract-shaped gateway-neutral payment mocks | done | F051 | — |
 | F053 | S42 | Build contract-shaped Shop rate-limit mocks | done | F052 | — |
-| F054 | S32 | Bind product media client to B036 HTTP contract | planned | F053, B036 | [F054 Spec](front/F054-shop-product-media-connect.md) |
+| F054 | S32 | Bind product media client to B036 HTTP contract | in_progress | F053, B036 | [F054 Spec](front/F054-shop-product-media-connect.md) |
 | F055 | S33 | Bind discovery client to B037 HTTP contract | planned | F054, B037 | [F055 Spec](front/F055-shop-discovery-connect.md) |
 | F056 | S34 | Bind category hierarchy client to B038 HTTP contract | planned | F055, B038 | [F056 Spec](front/F056-shop-category-hierarchy-connect.md) |
 | F057 | S35 | Bind storefront profile client to B039 HTTP contract | planned | F056, B039 | [F057 Spec](front/F057-shop-profile-policies-connect.md) |

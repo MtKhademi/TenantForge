@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
+import { httpShopMediaClient } from './httpShopMediaClient'
 import { mockShopCartLeaseClient } from './mockShopCartLeaseClient'
 import { mockShopCategoryClient } from './mockShopCategoryClient'
 import { mockShopCouponClient } from './mockShopCouponClient'
 import { mockShopDiscoveryClient } from './mockShopDiscoveryClient'
 import { mockShopOrderOperationsClient } from './mockShopOrderOperationsClient'
 import { mockShopOrdersClient } from './mockShopOrdersClient'
-import { mockShopMediaClient } from './mockShopMediaClient'
 import { mockShopPaymentsClient } from './mockShopPaymentsClient'
 import { mockShopProfileClient } from './mockShopProfileClient'
 import type { ShopCartLeaseClient } from './ShopCartLeaseClient'
@@ -24,7 +24,7 @@ import type { ShopProfileClient } from './ShopProfileClient'
  * every other slot alone.
  */
 export type ShopClients = {
-  media: ShopMediaClient // F044 mock  -> F054 HTTP
+  media: ShopMediaClient // F044 mock -> F054 HTTP (bound to B036)
   discovery: ShopDiscoveryClient // F045 mock -> F055 HTTP
   categories: ShopCategoryClient // F046 mock -> F056 HTTP
   profile: ShopProfileClient // F047 mock -> F057 HTTP
@@ -37,7 +37,7 @@ export type ShopClients = {
 
 export function createShopClients(): ShopClients {
   return {
-    media: mockShopMediaClient,
+    media: httpShopMediaClient,
     discovery: mockShopDiscoveryClient,
     categories: mockShopCategoryClient,
     profile: mockShopProfileClient,
