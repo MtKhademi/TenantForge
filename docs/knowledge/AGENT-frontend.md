@@ -419,6 +419,10 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
 - `.opencode/skills/tenantforge-ui-system/SKILL.md` — UI workflow and
   mock-first contract parity
 - `src/web/README.md` — running the app locally
+- `docs/user-guide/shop-quickstart.md` — English Shop quickstart; its
+  real-vs-mock table (section 2) is the consolidated, human-readable snapshot of
+  which Shop slot is mock-backed today. When a connect task (F054–F063) flips a
+  slot from mock to HTTP, update that table in the same task.
 
 ## Maintaining this file
 

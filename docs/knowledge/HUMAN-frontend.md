@@ -276,6 +276,10 @@ task policy — the UI role does not run them by default.
 - `docs/design/shop/http-contracts.md` — Shop wire shapes
 - `src/web/README.md` — running the app locally
 - `docs/user-guide/README.md` — the Persian end-user guide
+- `docs/user-guide/shop-quickstart.md` — the English Shop quickstart: how to
+  run the dev environment, view a store's public first page (`/shop/<tenantId>`),
+  and create a store step by step, plus a verified "real API vs mock" map of the
+  Shop frontend for the current (post-F053) mock-first phase
 
 ## Maintaining this file
 
