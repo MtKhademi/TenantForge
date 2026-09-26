@@ -1,15 +1,20 @@
 /**
- * S29 order + sandbox payment (F039): the real adapter for B031's
- * order-creation endpoint and B032's sandbox-payment endpoints — the
- * swap-in replacement for F038's fully mocked review → bank → result flow.
- * Field names mirror B031's `OrderContracts.cs` and B032's
- * `PaymentContracts.cs` camelCased; it mirrors `checkoutAdapter`'s request
- * idiom (8s abort timeout, `ApiUnavailableError` on any network/parse
- * failure) and reads the stored cart id from `cartStorage` (F033), clearing
- * it after a successful order — B031 consumes the cart server-side as part
- * of the order transaction, so the client must not keep pointing at it.
+ * S29 order + sandbox payment (F039), now routed through the single shared Shop
+ * parser (F053). Field names mirror B031's `OrderContracts.cs` and B032's
+ * `PaymentContracts.cs` camelCased; it reads the stored cart id from
+ * `cartStorage` (F033), clearing it after a successful order — B031 consumes the
+ * cart server-side as part of the order transaction, so the client must not keep
+ * pointing at it.
+ *
+ * S42 (B046): order creation is a rate-limited action (`shop-checkout-order`).
+ * A real 429 is rethrown as a `ShopClientError` carrying `retryAfterSeconds`
+ * (read from the `Retry-After` header by the shared parser) so the page drives
+ * its per-action cooldown. Every other non-2xx stays an
+ * `OrderCreationFailedError`, and a network failure is an `ApiUnavailableError`.
  */
 import { ApiUnavailableError } from '@/features/auth/authTypes'
+import { ShopClientError, isRateLimitedProblem } from '@/features/shop/contracts/shopContract'
+import { shopFetchPublic } from '@/features/shop/clients/shopFetch'
 import { clearCartId, getCartId } from './cartStorage'
 import type { OrderDraft } from './orderDraftState'
 
@@ -52,43 +57,11 @@ export class OrderCreationFailedError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 8_000
-
-function createRequestAbortSignal() {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-  return { signal: controller.signal, clear: () => window.clearTimeout(timeoutId) }
-}
-
-async function postJson(path: string, body: unknown): Promise<Response> {
-  const abort = createRequestAbortSignal()
-  try {
-    return await fetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: abort.signal,
-    })
-  } catch {
-    throw new ApiUnavailableError()
-  } finally {
-    abort.clear()
-  }
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    throw new ApiUnavailableError()
-  }
-}
-
 /**
  * Creates the real order from the stored cart id and the draft's address
- * fields, then immediately initiates payment. On success, clears the
- * stored cart id (B031 already consumed the cart server-side — the
- * client must not keep pointing at it, per this task's Scope).
+ * fields, then immediately initiates payment. On success, clears the stored
+ * cart id. A 429 (S42/B046) is rethrown for the caller's cooldown; any other
+ * order-creation failure is an `OrderCreationFailedError`.
  */
 export async function placeOrderAndInitiatePayment(
   tenantId: string,
@@ -108,37 +81,44 @@ export async function placeOrderAndInitiatePayment(
     couponCode: draft.couponCode,
   }
 
-  const orderResponse = await postJson(`/api/shop/${tenantId}/orders`, orderRequest)
-  if (!orderResponse.ok) throw new OrderCreationFailedError()
-  const order = (await readJson(orderResponse)) as OrderCreatedResponse
+  let order: OrderCreatedResponse
+  try {
+    order = (await shopFetchPublic(`/api/shop/${tenantId}/orders`, {
+      method: 'POST',
+      json: orderRequest,
+    })) as OrderCreatedResponse
+  } catch (error) {
+    if (error instanceof ShopClientError && isRateLimitedProblem(error.problem)) throw error
+    if (error instanceof ApiUnavailableError) throw error
+    throw new OrderCreationFailedError()
+  }
 
   clearCartId(tenantId)
 
-  const paymentResponse = await postJson(`/api/shop/${tenantId}/orders/${order.orderId}/payments/initiate`, {})
-  if (!paymentResponse.ok) throw new ApiUnavailableError()
-  const payment = (await readJson(paymentResponse)) as InitiatePaymentResponse
-
+  const payment = await initiatePayment(tenantId, order.orderId)
   return { order, payment }
 }
 
 /**
  * Mints one fresh sandbox payment attempt for an existing order.
  *
- * The Spec's literal flow inlines this call at the end of
- * `placeOrderAndInitiatePayment`, but the sandbox bank page also needs it
- * on its own: B032 resolves each attempt exactly once (`TryResolve`), so a
- * declined reference can never be re-callback'd — "arriving at the bank
- * page again" (the Spec's working-retry acceptance) must mint a new
- * attempt instead. Every bank-page visit is therefore a genuine, live
+ * B032 resolves each attempt exactly once (`TryResolve`), so a declined
+ * reference can never be re-callback'd — "arriving at the bank page again" must
+ * mint a new attempt instead. Every bank-page visit is therefore a genuine, live
  * initiation, exactly like arriving at a real gateway's hosted page.
  */
 export async function initiatePayment(
   tenantId: string,
   orderId: string,
 ): Promise<InitiatePaymentResponse> {
-  const response = await postJson(`/api/shop/${tenantId}/orders/${orderId}/payments/initiate`, {})
-  if (!response.ok) throw new ApiUnavailableError()
-  return (await readJson(response)) as InitiatePaymentResponse
+  try {
+    return (await shopFetchPublic(`/api/shop/${tenantId}/orders/${orderId}/payments/initiate`, {
+      method: 'POST',
+    })) as InitiatePaymentResponse
+  } catch (error) {
+    if (error instanceof ApiUnavailableError) throw error
+    throw new ApiUnavailableError()
+  }
 }
 
 export async function submitPaymentCallback(
@@ -147,10 +127,13 @@ export async function submitPaymentCallback(
   gatewayReference: string,
   approved: boolean,
 ): Promise<PaymentCallbackResponse> {
-  const response = await postJson(`/api/shop/${tenantId}/orders/${orderId}/payments/callback`, {
-    gatewayReference,
-    approved,
-  })
-  if (!response.ok) throw new ApiUnavailableError()
-  return (await readJson(response)) as PaymentCallbackResponse
+  try {
+    return (await shopFetchPublic(`/api/shop/${tenantId}/orders/${orderId}/payments/callback`, {
+      method: 'POST',
+      json: { gatewayReference, approved },
+    })) as PaymentCallbackResponse
+  } catch (error) {
+    if (error instanceof ApiUnavailableError) throw error
+    throw new ApiUnavailableError()
+  }
 }

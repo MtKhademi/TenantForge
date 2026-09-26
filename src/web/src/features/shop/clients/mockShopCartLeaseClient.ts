@@ -9,6 +9,7 @@ import {
   type CartResponse,
 } from '../contracts/cartLeaseContract'
 import { ShopClientError } from '../contracts/shopContract'
+import { assertNotRateLimited } from '../rateLimitScenario'
 import { delay } from './shopFetch'
 import type { ShopCartLeaseClient } from './ShopCartLeaseClient'
 
@@ -303,6 +304,9 @@ export const mockShopCartLeaseClient: ShopCartLeaseClient = {
   async addItem(tenantId, productVariantId, quantity, signal) {
     await delay(WRITE_LATENCY_MS, signal)
     assertNotAborted(signal)
+    // S42/B046: a dev rate-limit scenario on `cart` rejects the mutation with the
+    // one generic 429, independent of the lease scenario (dev-only; a no-op in prod).
+    assertNotRateLimited('cart')
     if (activeScenarioKey === 'unavailable') throw new ApiUnavailableError()
     if (activeScenarioKey === 'notFound') throw notFoundError()
 
@@ -332,6 +336,8 @@ export const mockShopCartLeaseClient: ShopCartLeaseClient = {
   async updateItem(tenantId, itemId, quantity, signal) {
     await delay(WRITE_LATENCY_MS, signal)
     assertNotAborted(signal)
+    // S42/B046: the `cart` rate-limit scenario rejects this mutation with the 429.
+    assertNotRateLimited('cart')
     if (activeScenarioKey === 'unavailable') throw new ApiUnavailableError()
     if (activeScenarioKey === 'notFound') throw notFoundError()
 
@@ -348,6 +354,8 @@ export const mockShopCartLeaseClient: ShopCartLeaseClient = {
   async removeItem(tenantId, itemId, signal) {
     await delay(WRITE_LATENCY_MS, signal)
     assertNotAborted(signal)
+    // S42/B046: the `cart` rate-limit scenario rejects this mutation with the 429.
+    assertNotRateLimited('cart')
     if (activeScenarioKey === 'unavailable') throw new ApiUnavailableError()
     if (activeScenarioKey === 'notFound') throw notFoundError()
 

@@ -7,11 +7,13 @@ import {
   PAYMENT_GATEWAY_HOSTS,
   type PaymentRedirectCheck,
 } from '@/features/shop/contracts/paymentLifecycleContract'
-import { ShopClientError } from '@/features/shop/contracts/shopContract'
+import { ShopClientError, isRateLimitedProblem } from '@/features/shop/contracts/shopContract'
 import { ApiUnavailableError } from '@/features/auth/authTypes'
 import { savePaymentFlow } from '@/features/shop/paymentFlowToken'
 import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
 import { PAYMENT_DEMO_ORDER_ID } from '@/features/shop/clients/mockShopPaymentsClient'
+import { useRateLimitCooldown } from '@/features/shop/useRateLimitCooldown'
+import { RateLimitCountdown } from '@/features/shop/RateLimitCooldown'
 import { ShieldAlert, TriangleAlert, WifiOff } from 'lucide-react'
 
 /**
@@ -50,6 +52,9 @@ type PageState =
   | { kind: 'unsafe'; provider: string; rawUrl: string; check: Extract<PaymentRedirectCheck, { ok: false }> }
   | { kind: 'error'; problem: ShopClientError }
   | { kind: 'unavailable' }
+  // S42/B046: the payment initiation was rate-limited. Only the retry action is
+  // disabled for the countdown; the page never auto-retries when it reaches 0.
+  | { kind: 'rateLimited'; problem: ShopClientError }
 
 /**
  * The reason the redirect check rejected the URL, rendered as a precise
@@ -84,6 +89,10 @@ export function PaymentRedirectPage() {
   const orderId = searchParams.get('order') ?? PAYMENT_DEMO_ORDER_ID
 
   const [state, setState] = useState<PageState>({ kind: 'idle' })
+  // S42/B046: payment initiation is a rate-limited action. On a 429 only the
+  // retry control is disabled for `retryAfterSeconds` (with a visible countdown)
+  // and is never auto-fired when the countdown ends.
+  const { coolingDown, remainingSeconds, start: startCooldown } = useRateLimitCooldown()
 
   // One stable idempotency key per logical initiation (per mount).
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID())
@@ -144,6 +153,13 @@ export function PaymentRedirectPage() {
       // the page, so the older one silently drops out.
       if (error instanceof DOMException && error.name === 'AbortError') return
       if (controller.signal.aborted) return
+      // S42/B046: a 429 cools down only the retry action — distinct from a
+      // generic payment error, and never auto-retried.
+      if (error instanceof ShopClientError && isRateLimitedProblem(error.problem)) {
+        startCooldown(error.problem.retryAfterSeconds)
+        setState({ kind: 'rateLimited', problem: error })
+        return
+      }
       if (error instanceof ApiUnavailableError) {
         setState({ kind: 'unavailable' })
         return
@@ -154,7 +170,7 @@ export function PaymentRedirectPage() {
       }
       setState({ kind: 'error', problem: new ShopClientError({ status: 500, title: 'خطا' }) })
     }
-  }, [tenantId, orderId, payments, dryRun])
+  }, [tenantId, orderId, payments, dryRun, startCooldown])
 
   // Run once on mount; abort whatever is in flight on unmount.
   useEffect(() => {
@@ -266,6 +282,28 @@ export function PaymentRedirectPage() {
             </div>
           }
         />
+      )}
+
+      {state.kind === 'rateLimited' && (
+        <div className="space-y-3 rounded-xl border border-warning/40 bg-warning/10 p-6">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-lg bg-warning/20 text-warning">
+              <TriangleAlert aria-hidden="true" className="size-6" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">درخواست‌های خیلی زیاد</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {state.problem.problem.detail ?? 'درخواست‌های شما زیاد بود. لطفاً کمی بعد دوباره تلاش کنید.'}
+              </p>
+            </div>
+          </div>
+          <RateLimitCountdown remainingSeconds={remainingSeconds} actionLabel="پرداخت" />
+          <div className="pt-1">
+            <Button type="button" disabled={coolingDown} onClick={() => void run()}>
+              تلاش دوباره
+            </Button>
+          </div>
+        </div>
       )}
     </section>
   )

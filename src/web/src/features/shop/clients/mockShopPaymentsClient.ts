@@ -7,6 +7,7 @@ import {
   type PaymentResult,
 } from '../contracts/paymentLifecycleContract'
 import { ShopClientError } from '../contracts/shopContract'
+import { assertNotRateLimited } from '../rateLimitScenario'
 import { delay } from './shopFetch'
 import type { ShopPaymentsClient } from './ShopPaymentsClient'
 
@@ -408,6 +409,12 @@ export const mockShopPaymentsClient: ShopPaymentsClient = {
   async initiate(tenantId, orderId, idempotencyKey, signal) {
     await delay(READ_LATENCY_MS, signal)
     assertNotAborted(signal)
+
+    // S42/B046: the `payment` rate-limit scenario rejects initiation with the one
+    // generic 429 (the `shop-payment` policy covers exactly this route). Dev-only
+    // gate; a no-op in production, and it wins over the payments scenarios so a
+    // reviewer can always force the 429.
+    assertNotRateLimited('payment')
 
     if (activeScenarioKey === 'unavailable') throw new ApiUnavailableError()
     if (activeScenarioKey === 'forbidden') throw forbiddenError()

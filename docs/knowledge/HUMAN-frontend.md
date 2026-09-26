@@ -129,8 +129,26 @@ adapter, not rewriting the screen.
     order is still pending, re-checks a bounded number of times before stopping
     and offering a manual "check again" — it never polls forever. Because the
     result is read from the opaque payment token alone, refreshing the page
-    after the redirect still shows the correct state. This is still backed by
-    the F052 mock (connected in F062).
+     after the redirect still shows the correct state. This is still backed by
+     the F052 mock (connected in F062).
+   - shop rate-limit cooldown: the five sensitive storefront actions — order
+     tracking lookup, cart changes, continuing checkout, placing the order, and
+     starting a payment — all handle a "too many requests" (429) the same way.
+     When one of them is rate-limited, only that one action is disabled for the
+     server's wait time, with a small live countdown chip next to it; the rest
+     of the page stays usable and anything you already typed (a tracking code
+     and phone, the checkout address form, the cart contents) is never cleared.
+     When the countdown reaches zero the button simply becomes clickable again —
+     it never submits by itself, so you decide when to try again. A found and
+     an unfound order tracking result look the same apart from their content,
+     so the layout does not leak whether an order exists. In development a
+     "request limit" toolbar lets you force the 429 on any one of the five
+     actions on demand; it is part of the dev-only scenario tooling and never
+     appears in a production build. The 429 body and its `Retry-After` wait are
+     parsed by the one shared Shop error parser every storefront request already
+     flows through, so once the backend's real B046 rate-limit policies are
+     enabled the same cooldown runs on genuine 429 responses with no further
+     screen changes.
 
 Live status for everything else is in `tasks/TASKS.md`.
 

@@ -20,6 +20,10 @@ import { useCartLease } from '@/features/shop/useCartLease'
 import { saveOrderDraft } from '@/features/shop/orderDraftState'
 import { CartLeaseCountdown, CartLeaseRecovery } from '@/features/shop/CartLeaseUi'
 import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
+import { ShopClientError, isRateLimitedProblem } from '@/features/shop/contracts/shopContract'
+import { assertNotRateLimited } from '@/features/shop/rateLimitScenario'
+import { useRateLimitCooldown } from '@/features/shop/useRateLimitCooldown'
+import { RateLimitCountdown } from '@/features/shop/RateLimitCooldown'
 
 /**
  * S28 checkout (F037) + S36 reservation lease (F048, mock phase).
@@ -76,6 +80,10 @@ export function CheckoutPage() {
 
   const [summary, setSummary] = useState<CheckoutSummaryResponse | null>(null)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+  // S42/B046: the "continue to order review" action is the `checkout` action.
+  // On a 429 it is disabled for `retryAfterSeconds` with a visible countdown and
+  // is never auto-submitted; the address/coupon form fields are all preserved.
+  const { coolingDown, remainingSeconds, start: startCooldown } = useRateLimitCooldown()
 
   // S37 coupon preview (F049, mock phase): the typed code is evaluated against
   // the mock `coupons` list and the live cart subtotal using B041's pure
@@ -204,6 +212,48 @@ export function CheckoutPage() {
     }
   }, [couponPreview])
 
+  // The "continue to order review" action. S42/B046: a 429 (from the dev gate,
+  // or a real one from the shared parser once the summary is wired) cools down
+  // only THIS action — the entered form fields are never cleared.
+  const handleContinue = useCallback(() => {
+    // The continue button is only enabled on the `ok` lease state; this guard
+    // keeps the callback type-safe (it is defined before the render guards).
+    if (state.kind !== 'ok') return
+    const values = getValues()
+    const couponCodeValue = values.couponCode || null
+    if (couponPreview.kind === 'applied') {
+      const sub = state.cart.subTotal
+      saveOrderDraft(tenantId, {
+        customerName: values.customerName,
+        customerPhone: values.customerPhone,
+        shippingProvince: values.shippingProvince,
+        shippingCity: values.shippingCity,
+        shippingAddressLine: values.shippingAddressLine,
+        shippingPostalCode: values.shippingPostalCode,
+        couponCode: couponCodeValue,
+        subTotal: sub,
+        discountAmount: couponPreview.discountAmount,
+        shippingCost: 0,
+        grandTotal: Math.max(0, sub - couponPreview.discountAmount),
+      })
+      navigate(`/shop/${tenantId}/order-review`)
+      return
+    }
+    const summaryNow = summary
+    if (!summaryNow) return
+    saveOrderDraft(tenantId, {
+      customerName: values.customerName,
+      customerPhone: values.customerPhone,
+      shippingProvince: values.shippingProvince,
+      shippingCity: values.shippingCity,
+      shippingAddressLine: values.shippingAddressLine,
+      shippingPostalCode: values.shippingPostalCode,
+      couponCode: couponCodeValue,
+      ...summaryNow,
+    })
+    navigate(`/shop/${tenantId}/order-review`)
+  }, [getValues, couponPreview, state, tenantId, navigate, summary])
+
   // ---- lease-gated render ----
 
   if (state.kind === 'expired') {
@@ -322,43 +372,24 @@ export function CheckoutPage() {
             <div className="flex justify-between border-t border-border pt-2 font-semibold"><dt>مجموع نهایی</dt><dd>{summary.grandTotal.toLocaleString('fa-IR')}</dd></div>
           </dl>
         )}
+        {/* S42/B046: visible per-action cooldown while the continue action is disabled. */}
+        {coolingDown && <RateLimitCountdown remainingSeconds={remainingSeconds} actionLabel="ادامه تسویه" />}
         <Button
           type="button"
           className="w-full"
-          disabled={!summary && couponPreview.kind !== 'applied'}
+          disabled={!summary && couponPreview.kind !== 'applied' || coolingDown}
           onClick={() => {
-            const values = getValues()
-            const couponCodeValue = values.couponCode || null
-            if (couponPreview.kind === 'applied') {
-              const sub = state.cart.subTotal
-              saveOrderDraft(tenantId, {
-                customerName: values.customerName,
-                customerPhone: values.customerPhone,
-                shippingProvince: values.shippingProvince,
-                shippingCity: values.shippingCity,
-                shippingAddressLine: values.shippingAddressLine,
-                shippingPostalCode: values.shippingPostalCode,
-                couponCode: couponCodeValue,
-                subTotal: sub,
-                discountAmount: couponPreview.discountAmount,
-                shippingCost: 0,
-                grandTotal: Math.max(0, sub - couponPreview.discountAmount),
-              })
-              navigate(`/shop/${tenantId}/order-review`)
-              return
+            try {
+              // S42/B046: the dev throttle gate (dev-only; a no-op in production)
+              // throws the one generic 429 for the `checkout` action so the
+              // cooldown is reviewable — before the draft is saved/navigated.
+              assertNotRateLimited('checkout')
+              handleContinue()
+            } catch (error) {
+              if (error instanceof ShopClientError && isRateLimitedProblem(error.problem)) {
+                startCooldown(error.problem.retryAfterSeconds)
+              }
             }
-            if (!summary) return
-            saveOrderDraft(tenantId, {
-              customerName: values.customerName,
-              customerPhone: values.customerPhone,
-              shippingProvince: values.shippingProvince,
-              shippingCity: values.shippingCity,
-              shippingAddressLine: values.shippingAddressLine,
-              shippingPostalCode: values.shippingPostalCode,
-              couponCode: couponCodeValue,
-              ...summary,
-            })
-            navigate(`/shop/${tenantId}/order-review`)
           }}
         >
           ادامه به بررسی سفارش

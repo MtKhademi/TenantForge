@@ -118,7 +118,7 @@ switcher's fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
 categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`,
 cartLease: `bottom-[12.25rem] start-4`, coupons: `bottom-[16rem] start-4`,
 orders: `bottom-[19.75rem] start-4`, orderOperations: `bottom-[23.5rem] start-4`,
-payments: `bottom-[27.25rem] start-4`).
+payments: `bottom-[27.25rem] start-4`, rateLimit: `bottom-[31rem] start-4`).
 See `docs/design/shop/frontend-contract-boundary.md`.
 
 The `orders` slot (B042/F050) feeds the permission-gated admin `OrdersPage`
@@ -171,6 +171,27 @@ order, a same-key replay is byte-identical, and EVERY status miss (blank / wrong
 separate "empty" shape. `resolveSandbox` is optional on the port
 (Development-only). F062 swaps the binding for HTTP and lifts the redirect
 helper into a shared `assertAllowedPaymentRedirect`.
+
+### Shop 429 cooldown (S42/B046, F053)
+
+`features/shop/rateLimitScenario.ts` is the ONE dev-only rate-limit scenario
+module (sessionStorage `tfRateLimitScenario`; scenarios `off` | `lookup` |
+`cart` | `checkout` | `order` | `payment`). Everything is gated on
+`import.meta.env.DEV` and is a no-op in production: the page-level throttle gate
+`assertNotRateLimited(action)` throws the B046 429 (`buildRateLimitedError`,
+type `shop_rate_limit`, `retryAfterSeconds: 1`) BEFORE the request when the
+scenario targets that action, and `mockShopCartLeaseClient` (add/update/remove)
+and `mockShopPaymentsClient.initiate` throw it from the mock. The five pages
+(OrderTracking/Cart/Checkout/OrderReview/PaymentRedirect) catch a 429 from
+either source with `isRateLimitedProblem(error.problem)` and drive the shared
+`useRateLimitCooldown` hook: it disables ONLY the triggering action for
+`retryAfterSeconds`, shows the `RateLimitCountdown` chip (warning tone,
+`dir="ltr"` tabular number, renders nothing at 0), never auto-submits at 0, and
+cleans its interval on unmount. Contract: `rateLimitedProblemSchema` in
+`shopContract.ts` extends `shopProblemSchema` (`shopProblemSchema`/
+`ShopClientError` untouched); the ONE shared parser
+(`shopFetch.ts` `failed()`) folds the `Retry-After` response header into
+`retryAfterSeconds` — do not add a second parser.
 
 The `coupons` slot (B041/F049) feeds the admin `CouponsPage` (create/edit/
 deactivate, null-rendered-as-«نامحدود», usage `redeemedCount`/`redemptionLimit`,
@@ -362,7 +383,21 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
      wrongly 200'd.) A **non-member** tenant is a different path: the page's
      `useTenantPermissions` gate renders the denied panel before any fetch, so a
      foreign-tenant *route* shows denied while a foreign order id *within* the
-     current tenant's scope shows the 404.
+      current tenant's scope shows the 404.
+ 16. Browser evidence that walks the storefront cart → checkout → order-review
+     flow must pin the cart-lease scenario to `normalLease`
+     (sessionStorage `tfCartLeaseScenario`) in a context init script BEFORE any
+     document loads: the mock's module-level default is the 30-second
+     `shortLease` (the F048 expiry demo), which expires the seeded cart
+     mid-flow and turns order review into the 410 recovery panel. The cart
+     seed itself is keyed by the stored localStorage cart id
+     (`tenantforge:shop:cartId`), so evidence must seed ONE stable id and never
+     replace it (a fresh id per call reads back as a non-leaking 404).
+ 17. The guest order-tracking route is `track-order` (App.tsx), not
+     `order-tracking`. The storefront 429 pages have no loading/empty states of
+     their own beyond what F039–F052 built; F053 only adds the per-action
+     cooldown, so its evidence asserts the 429 behaviors plus the existing
+     states.
 
 
 ## Decisions future tasks must preserve

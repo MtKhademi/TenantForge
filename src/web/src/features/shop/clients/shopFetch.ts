@@ -10,7 +10,26 @@ const SESSION_STORAGE_KEY = 'tenantforge:auth:session'
 async function failed(response: Response): Promise<never> {
   const raw: unknown = await response.json().catch(() => ({}))
   const body = typeof raw === 'object' && raw !== null ? raw : {}
-  throw new ShopClientError(shopProblemSchema.parse({ ...body, status: response.status }))
+  throw new ShopClientError(
+    shopProblemSchema.parse({ ...body, status: response.status, ...retryAfterFromHeader(response) }),
+  )
+}
+
+/**
+ * B046 (S42): the `Retry-After` header is the authoritative cooldown source.
+ * When a failed response carries it as a positive integer, mirror it into the
+ * parsed problem's `retryAfterSeconds` so the ONE shared parser populates the
+ * B046 cooldown for every Shop client. Returns an empty object when the header
+ * is absent or not a positive integer, so a response without it is parsed
+ * exactly as before (the wire body names it `retryAfter`; the header is what
+ * the browser reliably receives, so it wins).
+ */
+function retryAfterFromHeader(response: Response): { retryAfterSeconds?: number } {
+  const header = response.headers.get('Retry-After')
+  if (header === null) return {}
+  const seconds = Number(header)
+  if (!Number.isInteger(seconds) || seconds <= 0) return {}
+  return { retryAfterSeconds: seconds }
 }
 
 function currentAccessToken(): string | null {

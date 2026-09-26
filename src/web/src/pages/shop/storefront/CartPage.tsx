@@ -6,6 +6,9 @@ import { useCartLease } from '@/features/shop/useCartLease'
 import { CartLeaseCountdown, CartLeaseRecovery } from '@/features/shop/CartLeaseUi'
 import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
 import type { CartItem, CartResponse } from '@/features/shop/contracts/cartLeaseContract'
+import { ShopClientError, isRateLimitedProblem } from '@/features/shop/contracts/shopContract'
+import { useRateLimitCooldown } from '@/features/shop/useRateLimitCooldown'
+import { RateLimitCountdown } from '@/features/shop/RateLimitCooldown'
 import { cn } from '@/lib/utils'
 
 /**
@@ -44,6 +47,11 @@ export function CartPage() {
 
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [busyItemId, setBusyItemId] = useState<string | null>(null)
+  // S42/B046: a 429 on a cart mutation disables ONLY the cart mutations for
+  // `retryAfterSeconds` with a visible countdown. The cart contents, the
+  // subtotal and the "continue to checkout" action are all left untouched —
+  // only the triggering action cools down, and it is never auto-submitted.
+  const { coolingDown, remainingSeconds, start: startCooldown } = useRateLimitCooldown()
 
   const runMutation = useCallback(
     (operation: (signal: AbortSignal) => Promise<CartResponse>, itemId: string) => {
@@ -58,6 +66,10 @@ export function CartPage() {
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return
+          if (error instanceof ShopClientError && isRateLimitedProblem(error.problem)) {
+            startCooldown(error.problem.retryAfterSeconds)
+            return
+          }
           setMutationError(cartMutationMessage(error))
         })
         .finally(() => {
@@ -65,7 +77,7 @@ export function CartPage() {
           setBusyItemId((current) => (current === itemId ? null : current))
         })
     },
-    [applyMutation, setBusy],
+    [applyMutation, setBusy, startCooldown],
   )
 
   // ---- render ----
@@ -128,12 +140,22 @@ export function CartPage() {
         </p>
       )}
 
+      {/* S42/B046: while a cart mutation is in cooldown, the mutation controls
+          below are disabled for the countdown; the cart contents and the
+          continue-to-checkout action are intentionally NOT disabled. */}
+      {coolingDown && (
+        <div className="flex justify-end">
+          <RateLimitCountdown remainingSeconds={remainingSeconds} actionLabel="تغییر سبد خرید" />
+        </div>
+      )}
+
       <div className="divide-y divide-border rounded-xl border border-border bg-surface shadow-soft">
         {cart.items.map((item) => (
           <CartItemRow
             key={item.id}
             item={item}
             busy={busyItemId === item.id}
+            cooldown={coolingDown}
             onQuantityCommit={(quantity) =>
               runMutation((s) => cartLease.updateItem(tenantId, item.id, quantity, s), item.id)
             }
@@ -206,11 +228,14 @@ function LeaseErrorPanel({
 function CartItemRow({
   item,
   busy,
+  cooldown,
   onQuantityCommit,
   onRemove,
 }: {
   item: CartItem
   busy: boolean
+  /** S42/B046: a 429 on a cart mutation disables every mutation control. */
+  cooldown: boolean
   onQuantityCommit: (quantity: number) => void
   onRemove: () => void
 }) {
@@ -243,7 +268,7 @@ function CartItemRow({
           type="button"
           aria-label={`کاهش تعداد ${item.productName}`}
           className="px-2.5"
-          disabled={busy || quantity <= 1}
+          disabled={busy || cooldown || quantity <= 1}
           onClick={() => commit(quantity - 1)}
         >
           <Minus aria-hidden="true" className="size-3.5" />
@@ -253,7 +278,7 @@ function CartItemRow({
           min={1}
           max={99}
           value={quantity}
-          disabled={busy}
+          disabled={busy || cooldown}
           aria-label={`تعداد ${item.productName}`}
           onChange={(event) => {
             const value = Number(event.target.value)
@@ -269,7 +294,7 @@ function CartItemRow({
           type="button"
           aria-label={`افزایش تعداد ${item.productName}`}
           className="px-2.5"
-          disabled={busy || quantity >= 99}
+          disabled={busy || cooldown || quantity >= 99}
           onClick={() => commit(quantity + 1)}
         >
           <Plus aria-hidden="true" className="size-3.5" />
@@ -280,12 +305,12 @@ function CartItemRow({
         {(item.unitPrice * item.quantity).toLocaleString('fa-IR')} تومان
       </p>
 
-      <SecondaryButton
-        type="button"
-        aria-label={`حذف ${item.productName}`}
-        disabled={busy}
-        onClick={() => onRemove()}
-      >
+        <SecondaryButton
+          type="button"
+          aria-label={`حذف ${item.productName}`}
+          disabled={busy || cooldown}
+          onClick={() => onRemove()}
+        >
         <Trash2 aria-hidden="true" className="size-4" />
       </SecondaryButton>
     </div>
