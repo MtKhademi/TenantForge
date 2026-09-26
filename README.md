@@ -4,7 +4,7 @@ TenantForge is an open-source, production-minded starter kit for building multi-
 
 The project grows through small, visible vertical slices. Each delivered capability has a browser-visible consumer, an explicit API contract, and learning notes for backend slices.
 
-**راهنمای استفاده از برنامه:** اگر می‌خواهید با مسیرهای واقعی ادمین پلتفرم یا کار داخل یک مستأجر شروع کنید، [راهنمای فارسی کار با TenantForge](docs/user-guide/README.md) را باز کنید.
+**راهنمای استفاده از برنامه:** اگر می‌خواهید با مسیرهای واقعی ادمین پلتفرم یا کار داخل یک مستأجر شروع کنید، [راهنمای فارسی کار با TenantForge](docs/user-guide/README.md) را باز کنید. For the Shop module — running the dev environment, seeing a store's public first page, and creating a store step by step — see the [Shop quickstart (English)](docs/user-guide/shop-quickstart.md).
 
 Implementing a task? Read the knowledge base first: [agent knowledge](docs/knowledge/README.md) is the short operational memory for the backend and frontend agents; the matching human-facing explanations live beside it.
 
