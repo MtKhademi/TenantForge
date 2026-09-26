@@ -101,13 +101,15 @@ Read the nearest existing adapter before writing a new one.
 `src/web/src/features/shop/clients/` holds mock/HTTP-ready client ports. The app
 mounts one `ShopClientsProvider` around all routes; each bound slot is replaced
 individually by its connect task (F054 → `media`, F055 → `discovery`,
-F056 → `categories`, F057 → `profile`, F058 → `cartLease`, F059 → `coupons`).
+F056 → `categories`, F057 → `profile`, F058 → `cartLease`, F059 → `coupons`,
+F060 → `orders`, F061 → `orderOperations`, F062 → `payments`).
 Bound so far: `media` → `mockShopMediaClient` (F044), `discovery` →
 `mockShopDiscoveryClient` (F045), `categories` → `mockShopCategoryClient`
 (F046), `profile` → `mockShopProfileClient` (F047), `cartLease` →
 `mockShopCartLeaseClient` (F048), `coupons` → `mockShopCouponClient` (F049),
-`orders` → `mockShopOrdersClient` (F050) and `orderOperations` →
-`mockShopOrderOperationsClient` (F051). Mock Shop scenario controls are
+`orders` → `mockShopOrdersClient` (F050), `orderOperations` →
+`mockShopOrderOperationsClient` (F051) and `payments` →
+`mockShopPaymentsClient` (F052). Mock Shop scenario controls are
 development-only and selected through the provider, never by importing fixtures
 into pages. Each capability's dev switcher is a separate `Dev…ScenarioSwitcher.tsx`
 that the provider's dev-only `DevScenarioToolbar` loads independently; new
@@ -115,7 +117,8 @@ capabilities add their own switcher and position it so it does not overlap anoth
 switcher's fixed corner (media: `bottom-4 end-4`, discovery: `bottom-4 start-4`,
 categories: `bottom-[4.75rem] start-4`, profile: `bottom-[8.5rem] start-4`,
 cartLease: `bottom-[12.25rem] start-4`, coupons: `bottom-[16rem] start-4`,
-orders: `bottom-[19.75rem] start-4`, orderOperations: `bottom-[23.5rem] start-4`).
+orders: `bottom-[19.75rem] start-4`, orderOperations: `bottom-[23.5rem] start-4`,
+payments: `bottom-[27.25rem] start-4`).
 See `docs/design/shop/frontend-contract-boundary.md`.
 
 The `orders` slot (B042/F050) feeds the permission-gated admin `OrdersPage`
@@ -147,6 +150,27 @@ dev-only `DevOrderOperationsScenarioSwitcher` (sessionStorage
 unavailable, and a `view-only` evidence pass strips `Shop.Orders.Manage` from
 `/me/permissions` by route interception because no seeded non-owner member
 resolves it.
+
+The `payments` slot (B044/F052) is the gateway-neutral payment lifecycle. It
+feeds three storefront routes: `PaymentRedirectPage` (`payment-redirect` — calls
+`initiate` with a mount-stable idempotency key, vets the returned `redirectUrl`
+via `assertAllowedPaymentRedirect` in `contracts/paymentLifecycleContract.ts`,
+then navigates only if the check passes), `SandboxBankPage` (`bank` — the in-app
+Sandbox, gated on `import.meta.env.DEV` so it is absent from production) and
+`PaymentResultPage` (`payment-result` — resolves PURELY from the opaque
+`resultToken` in the URL, so a refresh is safe; `PendingPayment` is bounded
+polling, not an error). The token + order travel between the redirect and bank
+pages through the per-tenant `paymentFlowToken` sessionStorage carrier
+(`tenantforge:shop:paymentFlow`), which the bank clears after handing the token
+to the result page. The mock (`mockShopPaymentsClient`) seeds its own 4 demo
+orders for `0RN590ZYXKNZ2` only (foreign tenant → same non-leaking `404`),
+persists attempt/idempotency state to sessionStorage (`tfPaymentsMockStore`) so
+a same-tab refresh still resolves, and models B044 exactly: one live attempt per
+order, a same-key replay is byte-identical, and EVERY status miss (blank / wrong
+/ foreign / no-attempt) is the one identical generic `404` — there is no
+separate "empty" shape. `resolveSandbox` is optional on the port
+(Development-only). F062 swaps the binding for HTTP and lifts the redirect
+helper into a shared `assertAllowedPaymentRedirect`.
 
 The `coupons` slot (B041/F049) feeds the admin `CouponsPage` (create/edit/
 deactivate, null-rendered-as-«نامحدود», usage `redeemedCount`/`redemptionLimit`,
@@ -284,11 +308,17 @@ Windows gateway IP automatically; override with `VITE_API_PROXY_TARGET`.
 8. On WSL/NTFS the Vite dev server can serve stale code after edits (HMR misses
    the change): if a page does not reflect a change you know is on disk, restart
    the dev server before debugging the code.
-9. In the mock-first Shop batch, the dev-only scenario toolbars are `position:
-   fixed` at the viewport bottom. On short pages they hit-test over content, so
-   Playwright pointer clicks (even `force: true`) are intercepted; browser
-   evidence scripts dispatch a DOM `el.click()` inside `evaluate()` instead.
-   Production builds never contain the toolbars (`import.meta.env.DEV`).
+ 9. In the mock-first Shop batch, the dev-only scenario toolbars are `position:
+    fixed` (each a `z-50` fixed overlay at the viewport bottom). On narrow
+    viewports (390px mobile) they stack up and hit-test over content, so
+    Playwright pointer clicks — even `force: true` — are reported as "intercepts
+    pointer events" because `force` skips the stability check but NOT the
+    hit-target check. A hide that runs once on the PREVIOUS page does not stick:
+    the overlay remounts on the next page load and re-asserts. The reliable
+    fixes are to (a) set `display:none` on the `[aria-label*="فقط توسعه"]`
+    overlays in the SAME document, immediately before the click, or (b) dispatch
+    a DOM `el.click()` inside `evaluate()` (bypasses hit-testing entirely).
+    Production builds never contain the toolbars (`import.meta.env.DEV`).
 10. The Vite dev server resolves its `/api` proxy target (WSL gateway IP) ONCE
    at startup. When that gateway IP changes, `/api/*` through the port returns
    connection failure while `curl` to `:5000` still works — the app then looks

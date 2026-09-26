@@ -116,7 +116,21 @@ adapter, not rewriting the screen.
     with a "reload" action appears; if the order is no longer in a state that
     allows the action, a separate message explains the invalid transition.
     Members who can only view orders see no action controls at all. This is
-    still backed by the F051 mock (connected in F061).
+     still backed by the F051 mock (connected in F061).
+  - shop payment lifecycle: the gateway-neutral payment flow. After an order is
+    placed the checkout hands off to a "prepare payment" page that starts one
+    payment attempt and — only after vetting the gateway's redirect target for
+    an unsafe scheme (http), an unexpected host, or a protocol-relative
+    `//host` — navigates to it. Each unsafe shape gets its own clear message and
+    never navigates. In development a sandbox "bank" page stands in for the real
+    gateway: approve or decline, and the outcome is driven by the server's
+    resolved status, not by which button you pressed (the server can reject an
+    approval). A payment result page then shows the outcome and, while the
+    order is still pending, re-checks a bounded number of times before stopping
+    and offering a manual "check again" — it never polls forever. Because the
+    result is read from the opaque payment token alone, refreshing the page
+    after the redirect still shows the correct state. This is still backed by
+    the F052 mock (connected in F062).
 
 Live status for everything else is in `tasks/TASKS.md`.
 
@@ -137,9 +151,9 @@ client interface that its mock and later HTTP implementation both satisfy. The
 provider binds one slot per capability — `media` (product galleries),
 `discovery` (the all-products catalog), `categories` (the category hierarchy),
 `profile` (store identity and policies), `cartLease` (cart reservation expiry),
-`coupons` (advanced coupon rules), `orders` (order review) and
-`orderOperations` (fulfil and cancel an order) are bound today, each to its
-mock client.
+`coupons` (advanced coupon rules), `orders` (order review),
+`orderOperations` (fulfil and cancel an order) and `payments` (the gateway-
+neutral payment lifecycle) are bound today, each to its mock client.
 Screens consume `useShopClients()`; connecting a real API later
 replaces exactly one provider slot and never touches the screen. The order list's filter state
 lives in the URL, so a filtered view is refreshable and back/forward-
@@ -232,7 +246,8 @@ task policy — the UI role does not run them by default.
 - Invitation acceptance, registration from an invitation, and resend/revoke are
   not implemented; the invitation screen shows pending records only.
 - There is no long-lived session management or refresh-token handling.
-- Payment screens currently exercise the sandbox gateway.
+- The payment screens run against a deterministic mock that models the sandbox
+  gateway; no real provider is wired up yet.
 - Parts of the Shop experience are still delivered against mocks; the ledger
   records which capability is mock-backed and which is connected.
 

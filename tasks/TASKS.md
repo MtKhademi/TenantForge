@@ -84,7 +84,7 @@ one valid Spec link.
 | F049 | S37 | Build contract-shaped advanced coupon mocks | done | F048 | — |
 | F050 | S38 | Build contract-shaped admin order list and detail mocks | done | F049 | — |
 | F051 | S39 | Build contract-shaped fulfil and cancel mocks | done | F050 | — |
-| F052 | S40 | Build contract-shaped gateway-neutral payment mocks | planned | F051 | [F052 Spec](front/F052-shop-payment-lifecycle-mock.md) |
+| F052 | S40 | Build contract-shaped gateway-neutral payment mocks | done | F051 | — |
 | F053 | S42 | Build contract-shaped Shop rate-limit mocks | planned | F052 | [F053 Spec](front/F053-shop-rate-limit-mock.md) |
 | F054 | S32 | Bind product media client to B036 HTTP contract | planned | F053, B036 | [F054 Spec](front/F054-shop-product-media-connect.md) |
 | F055 | S33 | Bind discovery client to B037 HTTP contract | planned | F054, B037 | [F055 Spec](front/F055-shop-discovery-connect.md) |
