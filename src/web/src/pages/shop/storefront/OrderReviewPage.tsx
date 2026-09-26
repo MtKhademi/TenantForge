@@ -11,6 +11,10 @@ import { useCartLease } from '@/features/shop/useCartLease'
 import { CartLeaseCountdown, CartLeaseRecovery } from '@/features/shop/CartLeaseUi'
 import { useShopClients } from '@/features/shop/clients/ShopClientsProvider'
 import { CartLeaseExpired } from '@/features/shop/contracts/cartLeaseContract'
+import { ShopClientError, isRateLimitedProblem } from '@/features/shop/contracts/shopContract'
+import { assertNotRateLimited } from '@/features/shop/rateLimitScenario'
+import { useRateLimitCooldown } from '@/features/shop/useRateLimitCooldown'
+import { RateLimitCountdown } from '@/features/shop/RateLimitCooldown'
 
 /**
  * S29 order review (F039, connected) + S36 reservation lease (F048, mock
@@ -43,6 +47,10 @@ export function OrderReviewPage() {
   const [draft, setDraft] = useState<OrderDraft | null | undefined>(undefined)
   const [isPlacing, setIsPlacing] = useState(false)
   const [placeError, setPlaceError] = useState<string | null>(null)
+  // S42/B046: a 429 on order creation disables ONLY the place-order action for
+  // `retryAfterSeconds` with a visible countdown; the review content (address,
+  // totals, the stored draft) is preserved and never auto-submitted.
+  const { coolingDown, remainingSeconds, start: startCooldown } = useRateLimitCooldown()
 
   useEffect(() => {
     setDraft(loadOrderDraft(tenantId))
@@ -53,6 +61,9 @@ export function OrderReviewPage() {
     setIsPlacing(true)
     setPlaceError(null)
     try {
+      // S42/B046: the dev throttle gate (dev-only; a no-op in production) throws
+      // the one generic 429 for the `order` action so the cooldown is reviewable.
+      assertNotRateLimited('order')
       const { order, payment } = await placeOrderAndInitiatePayment(tenantId, draft)
       savePlacedOrder(tenantId, {
         orderId: order.orderId,
@@ -62,6 +73,11 @@ export function OrderReviewPage() {
       })
       navigate(`/shop/${tenantId}/bank`)
     } catch (error) {
+      // S42/B046: a real (or simulated) 429 cools down only this action.
+      if (error instanceof ShopClientError && isRateLimitedProblem(error.problem)) {
+        startCooldown(error.problem.retryAfterSeconds)
+        return
+      }
       if (error instanceof CartLeaseExpired) {
         // The lease died between the review load and order creation: the
         // server is authoritative here, so flip to recovery unconditionally
@@ -73,7 +89,7 @@ export function OrderReviewPage() {
     } finally {
       setIsPlacing(false)
     }
-  }, [draft, tenantId, navigate, forceExpired])
+  }, [draft, tenantId, navigate, forceExpired, startCooldown])
 
   // ---- draft / lease gated render ----
 
@@ -157,7 +173,15 @@ export function OrderReviewPage() {
 
       {placeError && <p role="alert" className="text-sm font-semibold text-destructive">{placeError}</p>}
 
-      <Button type="button" className="w-full" disabled={isPlacing} onClick={() => void handlePlaceOrder()}>
+      {/* S42/B046: visible per-action cooldown while order creation is disabled. */}
+      {coolingDown && <RateLimitCountdown remainingSeconds={remainingSeconds} actionLabel="ثبت سفارش" />}
+
+      <Button
+        type="button"
+        className="w-full"
+        disabled={isPlacing || coolingDown}
+        onClick={() => void handlePlaceOrder()}
+      >
         {isPlacing ? 'در حال ثبت…' : 'ثبت سفارش و پرداخت'}
       </Button>
     </section>

@@ -1,13 +1,20 @@
 /**
- * S28 checkout (F037): the real, thin adapter for B030's compute-only
- * checkout-summary endpoint — the swap-in replacement for F036's
- * `mockCheckoutSummary`. Field names mirror B030's `CheckoutContracts.cs`
- * camelCased; it mirrors `cartAdapter`'s request idiom (8s abort timeout,
- * `ApiUnavailableError` on any network/parse failure) and reads the stored
- * cart id from `cartStorage` (F033) rather than accepting one, since the
- * shopper's cart is already the browser's.
+ * S28 checkout (F037): the thin adapter for B030's compute-only
+ * checkout-summary endpoint, now routed through the single shared Shop parser
+ * (F053). It mirrors `cartAdapter`'s request idiom and reads the stored cart id
+ * from `cartStorage` (F033) rather than accepting one, since the shopper's cart
+ * is already the browser's.
+ *
+ * Outcomes are unchanged, EXCEPT the S42/B046 addition: a real 429 (from the
+ * `shop-checkout-order` policy on this route) is rethrown as a `ShopClientError`
+ * carrying `retryAfterSeconds` (read from the `Retry-After` header by the shared
+ * parser) so the page drives its per-action cooldown. `400` is still a
+ * `CheckoutValidationError`, `404`/no-cart is still an `EmptyCartError`, and any
+ * other failure is still an `ApiUnavailableError`.
  */
 import { ApiUnavailableError } from '@/features/auth/authTypes'
+import { ShopClientError, isRateLimitedProblem } from '@/features/shop/contracts/shopContract'
+import { shopFetchPublic } from '@/features/shop/clients/shopFetch'
 import { getCartId } from './cartStorage'
 
 export type CheckoutSummaryRequest = {
@@ -43,18 +50,10 @@ export class EmptyCartError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 8_000
-
-function createRequestAbortSignal() {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-  return { signal: controller.signal, clear: () => window.clearTimeout(timeoutId) }
-}
-
-function mapServerValidation(payload: unknown): Record<string, string> {
+function mapServerValidation(problem: unknown): Record<string, string> {
   const fallback = { _: 'مقدار واردشده معتبر نیست.' }
-  if (typeof payload !== 'object' || payload === null) return fallback
-  const errors = (payload as Record<string, unknown>).errors
+  if (typeof problem !== 'object' || problem === null) return fallback
+  const errors = (problem as { errors?: unknown }).errors
   if (typeof errors !== 'object' || errors === null) return fallback
   const mapped: Record<string, string> = {}
   for (const [field, value] of Object.entries(errors as Record<string, unknown>)) {
@@ -70,36 +69,22 @@ export async function fetchCheckoutSummary(
   const cartId = getCartId(tenantId)
   if (!cartId) throw new EmptyCartError()
 
-  const abort = createRequestAbortSignal()
-  let response: Response
   try {
-    response = await fetch(`/api/shop/${tenantId}/checkout/summary`, {
+    return (await shopFetchPublic(`/api/shop/${tenantId}/checkout/summary`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cartId, ...fields }),
-      signal: abort.signal,
-    })
-  } catch {
-    throw new ApiUnavailableError()
-  } finally {
-    abort.clear()
-  }
-
-  if (response.status === 404) throw new EmptyCartError()
-  if (response.status === 400) {
-    let payload: unknown
-    try {
-      payload = await response.json()
-    } catch {
+      json: { cartId, ...fields },
+    })) as CheckoutSummaryResponse
+  } catch (error) {
+    if (error instanceof ShopClientError) {
+      if (error.problem.status === 404) throw new EmptyCartError()
+      if (error.problem.status === 400) {
+        throw new CheckoutValidationError(mapServerValidation(error.problem))
+      }
+      // S42/B046: a real 429 is rethrown for the per-action cooldown.
+      if (isRateLimitedProblem(error.problem)) throw error
       throw new ApiUnavailableError()
     }
-    throw new CheckoutValidationError(mapServerValidation(payload))
-  }
-  if (!response.ok) throw new ApiUnavailableError()
-
-  try {
-    return (await response.json()) as CheckoutSummaryResponse
-  } catch {
-    throw new ApiUnavailableError()
+    // ApiUnavailableError (network) or an AbortError from the shared fetch.
+    throw error
   }
 }

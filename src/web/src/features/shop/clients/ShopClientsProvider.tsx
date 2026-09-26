@@ -88,6 +88,7 @@ function DevScenarioToolbar() {
   const [OrdersSwitcher, setOrdersSwitcher] = useState<ComponentType | null>(null)
   const [OrderOperationsSwitcher, setOrderOperationsSwitcher] = useState<ComponentType | null>(null)
   const [PaymentsSwitcher, setPaymentsSwitcher] = useState<ComponentType | null>(null)
+  const [RateLimitSwitcher, setRateLimitSwitcher] = useState<ComponentType | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -118,6 +119,9 @@ function DevScenarioToolbar() {
     void import('../DevPaymentsScenarioSwitcher').then((module) => {
       if (!cancelled) setPaymentsSwitcher(() => module.DevPaymentsScenarioSwitcher)
     })
+    void import('../DevRateLimitScenarioSwitcher').then((module) => {
+      if (!cancelled) setRateLimitSwitcher(() => module.DevRateLimitScenarioSwitcher)
+    })
     return () => {
       cancelled = true
     }
@@ -134,6 +138,7 @@ function DevScenarioToolbar() {
       {OrdersSwitcher ? <OrdersSwitcher /> : null}
       {OrderOperationsSwitcher ? <OrderOperationsSwitcher /> : null}
       {PaymentsSwitcher ? <PaymentsSwitcher /> : null}
+      {RateLimitSwitcher ? <RateLimitSwitcher /> : null}
     </>
   )
 }
