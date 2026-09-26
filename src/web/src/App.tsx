@@ -25,6 +25,7 @@ import { CheckoutPage } from './pages/shop/storefront/CheckoutPage'
 import { PolicyPage } from './pages/shop/storefront/PolicyPage'
 import { OrderReviewPage } from './pages/shop/storefront/OrderReviewPage'
 import { OrderTrackingPage } from './pages/shop/storefront/OrderTrackingPage'
+import { PaymentRedirectPage } from './pages/shop/storefront/PaymentRedirectPage'
 import { PaymentResultPage } from './pages/shop/storefront/PaymentResultPage'
 import { ProductDetailPage } from './pages/shop/storefront/ProductDetailPage'
 import { SandboxBankPage } from './pages/shop/storefront/SandboxBankPage'
@@ -142,7 +143,13 @@ export default function App() {
           <Route path="cart" element={<CartPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
           <Route path="order-review" element={<OrderReviewPage />} />
-          <Route path="bank" element={<SandboxBankPage />} />
+          {/* S40 (F052): the gateway-neutral payment redirect entry. The `bank`
+              route is the in-app Sandbox simulation and is mapped ONLY in
+              Development — in a production build the route is not registered
+              at all, so SandboxBankPage is unreachable (the browser-driven
+              payment simulation can never be enabled in production). */}
+          <Route path="payment-redirect" element={<PaymentRedirectPage />} />
+          {import.meta.env.DEV && <Route path="bank" element={<SandboxBankPage />} />}
           <Route path="payment-result" element={<PaymentResultPage />} />
           <Route path="track-order" element={<OrderTrackingPage />} />
           {/* S35 (F047): the five plain-text policy/about pages. One reusable
